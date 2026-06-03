@@ -1,0 +1,12 @@
+{
+  "name": "@directory-builder/core",
+  "version": "0.1.0",
+  "description": "Use-case-agnostic engine for config-driven federation pipelines",
+  "author": "Civic Data Lab",
+  "repository": "github:foederierter-datenpool/directory-builder-core",
+  "license": "MIT",
+  "type": "module",
+  "publishConfig": {
+    "access": "public"
+  }
+}
