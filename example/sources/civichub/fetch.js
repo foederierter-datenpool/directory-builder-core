@@ -3,7 +3,7 @@ import fs from "fs"
 
 // Static-file source: copy the committed JSON straight into the ingest area.
 // A live source would instead call an API here and write the responses out.
-// argv: [outDir, sourceDir, plzCsv]  — plzCsv is unused for this static example.
+// argv: [outDir, sourceDir, runParamsJson] — params unused for this static example.
 const OUT_DIR = process.argv[2]
 const SRC_DIR = process.argv[3]
 

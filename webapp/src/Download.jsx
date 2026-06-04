@@ -9,18 +9,10 @@ import { datasetToTurtleWriter, storeFromTurtles } from "@foerderfunke/sem-ops-u
 import { turtleToJsonLdObj } from "@foerderfunke/sem-ops-utils/jsonld"
 import { sparqlSelect } from "@foerderfunke/sem-ops-utils/sparql"
 import { CDP, groupBySubject, localName, objectsOf, parseTtl, PATHS, shrink, subjectsOfType } from "@directory-builder/core/utils"
-import { federationTtl, finalTtl } from "./instanceData.js"
+import { displayPrefixes, federationTtl, finalTtl } from "./instanceData.js"
 import React, { useState } from "react"
 
 const SCHEMA_IDENTIFIER = "http://schema.org/identifier"
-
-const PREFIXES = {
-    schema: "http://schema.org/",
-    foaf:   "http://xmlns.com/foaf/0.1/",
-    dct:    "http://purl.org/dc/terms/",
-    cdf:    "https://civic-data.de/federated-directory#",
-}
-
 
 function readTargetFields() {
     const quads = parseTtl(federationTtl)
@@ -37,7 +29,7 @@ function readTargetFields() {
     }
     return fieldOrder
         .filter((iri) => isTargetField.has(iri) && predicateOf.has(iri))
-        .map((iri) => ({ predicate: predicateOf.get(iri), label: shrink(predicateOf.get(iri), PREFIXES) }))
+        .map((iri) => ({ predicate: predicateOf.get(iri), label: shrink(predicateOf.get(iri), displayPrefixes) }))
         .filter((f) => f.predicate !== SCHEMA_IDENTIFIER)
 }
 
@@ -86,7 +78,7 @@ async function buildFile(selectedFields, format) {
     const filtered = FINAL_QUADS.filter((q) => allowed.has(q.predicate.value))
     if (format === "csv")  return buildCsv(filtered, selectedFields)
     if (format === "json") return buildJson(filtered, selectedFields)
-    const ttl = await datasetToTurtleWriter(filtered, PREFIXES)
+    const ttl = await datasetToTurtleWriter(filtered, displayPrefixes)
     if (format === "ttl") return ttl
     const jsonld = await turtleToJsonLdObj(ttl)
     return JSON.stringify(jsonld, null, 2)

@@ -29,7 +29,8 @@
     :hasTargetField :t-identifier, :t-name, :t-streetAddress, :t-postalCode,
                     :t-locality, :t-telephone, :t-email, :t-homepage .
 
-:t-identifier    a :TargetField ; :targetPredicate schema:identifier .
+# :multiValued - one value per contributing source is expected; the Merge view doesn't flag these as conflicts
+:t-identifier    a :TargetField ; :targetPredicate schema:identifier ; :multiValued true .
 :t-name          a :TargetField ; :targetPredicate schema:name .
 :t-streetAddress a :TargetField ; :targetPredicate schema:streetAddress .
 :t-postalCode    a :TargetField ; :targetPredicate schema:postalCode .

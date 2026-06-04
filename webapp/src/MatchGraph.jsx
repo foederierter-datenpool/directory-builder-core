@@ -6,7 +6,7 @@
 // Reads:  data/pipeline/{matches,merged,mapped}.ttl, config/{federation,match-knowledge}.ttl
 // Does:   renders the Match page (<ColumnGraph> + per-cluster details modal)
 
-import { federationTtl, matchKnowledgeTtl, mappedTtl, matchesTtl, mergedTtl } from "./instanceData.js"
+import { displayPrefixes, federationTtl, matchKnowledgeTtl, mappedTtl, matchesTtl, mergedTtl } from "./instanceData.js"
 import { loadSourceMeta, loadSourceOfRecord } from "./sourceMeta.js"
 import { CDP, groupBySubject, parseTtl, shrink } from "@directory-builder/core/utils"
 import React, { useMemo, useState } from "react"
@@ -20,13 +20,7 @@ const WEIGHTED_CRITERION = `${CDP}hasWeightedCriterion`
 const ON = `${CDP}on`
 const OWL_SAME_AS = "http://www.w3.org/2002/07/owl#sameAs"
 
-const PREFIXES = {
-    schema: "http://schema.org/",
-    dct:    "http://purl.org/dc/terms/",
-    foaf:   "http://xmlns.com/foaf/0.1/",
-    cdp:    CDP,
-}
-const prefixed = (iri) => shrink(iri, PREFIXES)
+const prefixed = (iri) => shrink(iri, displayPrefixes)
 
 // Label each source member with its :Source notation, resolved via cdp:fromSource.
 const sourceMeta = loadSourceMeta(federationTtl)

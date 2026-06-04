@@ -3,22 +3,11 @@
 // Reads:  TTL strings passed by MapGraph.jsx (federation, mapped, cleaned source TTL)
 // Does:   returns { nodes, edges } plus per-source / per-org value maps
 
-import { CDP as NS, localName, parseTtl, shrink, sourceName, subjectsOfType, typesOf } from "@directory-builder/core/utils"
+import { CDP as NS, localName, parseTtl, prefixesOf, shrink, sourceName, subjectsOfType, typesOf } from "@directory-builder/core/utils"
 
 const RDFS_LABEL = "http://www.w3.org/2000/01/rdf-schema#label"
 const NODE_TYPES = [`${NS}Source`, `${NS}SourceField`, `${NS}TargetField`, `${NS}TargetSchema`]
 const SUB_FIELD = `${NS}SubField`
-
-// Prefix map used to render target-predicate IRIs like `schema:identifier`
-// instead of their local TargetField name (`t-identifier`).
-const PREFIXES = {
-    schema: "http://schema.org/",
-    dct:    "http://purl.org/dc/terms/",
-    foaf:   "http://xmlns.com/foaf/0.1/",
-    prov:   "http://www.w3.org/ns/prov#",
-}
-
-const prefixedIri = (iri) => shrink(iri, PREFIXES)
 
 // Group orgs by source. Each org carries a cdp:fromSource triple in mapped.ttl
 // pointing at its Source IRI, so this is a single-pass scan with no prefix
@@ -154,6 +143,10 @@ export function loadSources(ttl) {
 }
 
 export function loadMap(ttl, { hideUnmappedFields = true, hideUnmappedTargetFields = true, hiddenSources } = {}) {
+    // Render target-predicate IRIs like `schema:identifier` (instead of the
+    // local TargetField name) using the federation's own @prefix declarations.
+    const prefixes = { cdp: NS, ...prefixesOf(ttl) }
+    const prefixedIri = (iri) => shrink(iri, prefixes)
     const quads = parseTtl(ttl)
 
     const typeOf = typesOf(quads)

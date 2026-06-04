@@ -6,7 +6,7 @@
 // artifact resolves to "" (pages render empty). Top-level await — importing
 // modules stay synchronous.
 
-import { CDP, objectsOf, parseTtl, PATHS, sourceName } from "@directory-builder/core/utils"
+import { CDP, objectsOf, parseTtl, PATHS, prefixesOf, sourceName } from "@directory-builder/core/utils"
 
 const fetchText = async (path) => {
     const res = await fetch(`${import.meta.env.BASE_URL}${path}`).catch(() => null)
@@ -20,6 +20,9 @@ const cleanedPaths = objectsOf(fedQuads, `${CDP}hasSource`).map((iri) => PATHS.c
 // The instance's repo URL (:federation :repository …) — undefined when not
 // declared; pages hide their GitHub links then.
 export const repositoryUrl = objectsOf(fedQuads, `${CDP}repository`)[0]
+// Display prefixes = the federation's own @prefix declarations; cdp pinned
+// first so cdp:… wins over the empty ":" prefix bound to the same namespace.
+export const displayPrefixes = { cdp: CDP, ...prefixesOf(federationTtl) }
 
 const FIXED = [PATHS.matchKnowledge, PATHS.ingestLog, PATHS.federateLog, PATHS.mapped,
                PATHS.matches, PATHS.merged, PATHS.provenance, PATHS.final, PATHS.about]

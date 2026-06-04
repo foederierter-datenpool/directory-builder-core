@@ -66,9 +66,15 @@ export async function ingest(root = process.cwd()) {
 
     // ---- Run steps ----------------------------------------------------------
 
-    const PLZS = (await sparqlSelect(`
+    // All :hasRunParam values grouped by name, handed to every fetcher as one
+    // JSON argument — each fetcher picks the parameters it needs.
+    const runParams = {}
+    for (const r of await sparqlSelect(`
         PREFIX : <${CDP}>
-        SELECT ?plz WHERE { :federation :hasRunParam [ :name "plz" ; :value ?plz ] } ORDER BY ?plz`, [defStore])).map(r => r.plz)
+        SELECT ?name ?value WHERE { :federation :hasRunParam [ :name ?name ; :value ?value ] } ORDER BY ?name ?value`, [defStore])) {
+        (runParams[r.name] ??= []).push(r.value)
+    }
+    const paramsJson = JSON.stringify(runParams)
 
     const runStart = new Date()
     const harvests = []
@@ -82,9 +88,9 @@ export async function ingest(root = process.cwd()) {
             // Live sources pass their :fetchUrl; static-file sources pass the
             // absolute static dir instead. The script gets whichever applies.
             const origin = s.fetchUrl ?? abs(PATHS.staticDir(name))
-            console.log(`fetch  ${s.fetchUrl ?? PATHS.staticDir(name)} (PLZs ${PLZS.join(", ")}) → ${outDir}`)
+            console.log(`fetch  ${s.fetchUrl ?? PATHS.staticDir(name)} (params ${paramsJson}) → ${outDir}`)
             fs.mkdirSync(abs(outDir), { recursive: true })
-            run("node", [abs(PATHS.fetchScript(name)), abs(outDir), origin, PLZS.join(",")])
+            run("node", [abs(PATHS.fetchScript(name)), abs(outDir), origin, paramsJson])
             const harvest = { source: iri, time: new Date().toISOString() }
             // Static sources have no live harvest — record the files' git commit
             // time instead (the freshness the Sources page shows for them).

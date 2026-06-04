@@ -8,7 +8,7 @@
 //         matches.ttl (clusters + hasMember), merged.ttl (rdf:type, name, links)
 // Does:   returns everything <ColumnGraph> needs + a per-lane nodeY layout.
 
-import { CDP as NS, localName, parseTtl, shrink, subjectsOfType } from "@directory-builder/core/utils"
+import { CDP as NS, localName, parseTtl, prefixesOf, shrink, subjectsOfType } from "@directory-builder/core/utils"
 
 const CDF = "https://civic-data.de/federated-directory#"
 const S   = "http://schema.org/"
@@ -26,7 +26,6 @@ const HAS_MEMBER    = `${NS}hasMember`
 const NAME = `${S}name`
 const CATEGORY = `${S}category`   // label fallback for entities with no name (e.g. AWO services)
 
-const CLASS_PREFIXES = { schema: S, cdf: CDF }
 // Lane colours, assigned by hierarchy position; cycles if there are more lanes.
 const PALETTE = ["#cdddff", "#f7d2e3", "#cfe9d4", "#ffe2b8", "#e3d4f7", "#cfeef0", "#f3d9c0"]
 const SRC_COLOR = "#e9e9ee"
@@ -47,6 +46,7 @@ const lighten = (hex, t) => {
 
 function readSchemas(federationTtl) {
     const q = parseTtl(federationTtl)
+    const classPrefixes = prefixesOf(federationTtl)
     const order = []                  // schema IRIs in document order
     const targetClass = new Map()
     const label = new Map()           // any subject → its rdfs:label
@@ -105,7 +105,7 @@ function readSchemas(federationTtl) {
             schema, cls,
             key: localName(schema).replace(/Schema$/, ""),
             label: name,
-            title: `${name}\n${cls ? shrink(cls, CLASS_PREFIXES) : ""}`,
+            title: `${name}\n${cls ? shrink(cls, classPrefixes) : ""}`,
             color: PALETTE[i % PALETTE.length],
         }
     })

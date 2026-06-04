@@ -7,7 +7,7 @@
 import { federationTtl, ingestLogTtl as logTtl } from "./instanceData.js"
 import Card, { KeyValueTable } from "./Card.jsx"
 import { loadHarvestBySource, loadSourceMeta } from "./sourceMeta.js"
-import { CDP } from "@directory-builder/core/utils"
+import { CDP, parseTtl } from "@directory-builder/core/utils"
 import React, { useState } from "react"
 
 // org.columns are one entry per contributing record (resolved in loadMerge); look
@@ -21,7 +21,13 @@ const tagTitle = (iri) => {
     return t ? `${label}\n\nharvested ${t.slice(0, 19).replace("T", " ")}` : label
 }
 
-export const EXPECTED_MULTI = new Set(["http://schema.org/identifier", `${CDP}fromSource`])
+// Predicates where one value per contributing source is expected, not a merge
+// conflict: target fields the federation declares :multiValued, plus the
+// engine's own cdp:fromSource.
+const fedQuads = parseTtl(federationTtl)
+const multiFields = new Set(fedQuads.filter((q) => q.predicate.value === `${CDP}multiValued` && q.object.value === "true").map((q) => q.subject.value))
+export const EXPECTED_MULTI = new Set([`${CDP}fromSource`,
+    ...fedQuads.filter((q) => multiFields.has(q.subject.value) && q.predicate.value === `${CDP}targetPredicate`).map((q) => q.object.value)])
 export const isConflict = (f) => !EXPECTED_MULTI.has(f.predicate) && f.values.length > 1
 
 const CONFLICT_LEVELS = [

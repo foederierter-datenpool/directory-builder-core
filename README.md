@@ -58,6 +58,10 @@ await pipeline.run()              // ingest + federate
 than the cwd — e.g. for driving several instances from one process or a test
 fixture.
 
+Each source's `fetch.js` is invoked as `node fetch.js <outDir> <fetchUrl-or-staticDir>
+<runParamsJson>` — the JSON holds all `:hasRunParam` values grouped by name;
+each fetcher picks the parameters it needs.
+
 Engines journal their executed steps as p-plan RDF (`data/ingest/ingest-log.ttl`,
 `data/pipeline/federate-log.ttl`) — evidence of what ran, not a plan.
 

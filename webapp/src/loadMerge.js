@@ -3,7 +3,7 @@
 // Reads:  TTL strings passed by mergeOrgs.js; resolves sources via sourceMeta.js
 // Does:   returns org[] (each {iri, label, type, fields[], sources[]})
 
-import { CDP as NS, parseTtl, shrink } from "@directory-builder/core/utils"
+import { CDP as NS, parseTtl, parseTtlStar, prefixesOf, shrink } from "@directory-builder/core/utils"
 import { compareSources, loadSourceMeta } from "./sourceMeta.js"
 
 const PROV_DERIVED_FROM = "http://www.w3.org/ns/prov#wasDerivedFrom"
@@ -11,18 +11,12 @@ const RDF_TYPE = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type"
 const RDF_REIFIES = "http://www.w3.org/1999/02/22-rdf-syntax-ns#reifies"
 const FROM_SOURCE = `${NS}fromSource`
 
-const PREFIXES = {
-    schema: "http://schema.org/",
-    dct:    "http://purl.org/dc/terms/",
-    foaf:   "http://xmlns.com/foaf/0.1/",
-    cdp:    NS,
-    cdf:    "https://civic-data.de/federated-directory#",
-}
-const prefixedIri = (iri) => shrink(iri, PREFIXES)
-
 export function loadMerge(mergedTtl, provTtl, federationTtl = "") {
+    // IRIs render shortened against the federation's own @prefix declarations.
+    const prefixes = { cdp: NS, ...prefixesOf(federationTtl) }
+    const prefixedIri = (iri) => shrink(iri, prefixes)
     const mergedQuads = parseTtl(mergedTtl)
-    const provQuads = parseTtl(provTtl)
+    const provQuads = parseTtlStar(provTtl)
     const sourceMeta = federationTtl ? loadSourceMeta(federationTtl) : new Map()
 
     // Each prov:wasDerivedFrom in provenance.ttl annotates a merged triple
