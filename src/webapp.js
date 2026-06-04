@@ -21,20 +21,21 @@ export async function webappDev(root = process.cwd()) {
 export async function webappBuild(root = process.cwd(), { base } = {}) {
     const { build } = await import("vite")
     process.env.INSTANCE = root
-    const outDir = path.join(root, "dist")
+    const outDir = path.join(root, "webapp/dist")
     await build({
         configFile: CONFIG,
         root: WEBAPP,
         ...(base ? { base } : {}),
         build: { outDir, emptyOutDir: true },
     })
-    // The bundle fetches the instance's config, data, exporters and content at
-    // runtime — they are part of the deployable, so stage them next to it.
-    const staged = ["config", "data", "exporters", "content"].filter((dir) => {
+    // The bundle fetches the instance's config, data and webapp/{content,
+    // exporters} at runtime — they are part of the deployable, so stage them
+    // next to it (URL paths mirror the repo paths).
+    const staged = ["config", "data", "webapp/content", "webapp/exporters"].filter((dir) => {
         const from = path.join(root, dir)
         if (!fs.existsSync(from)) return false
         fs.cpSync(from, path.join(outDir, dir), { recursive: true })
         return true
     })
-    console.log(`staged ${staged.join(", ")} → dist/`)
+    console.log(`staged ${staged.join(", ")} → webapp/dist/`)
 }

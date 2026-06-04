@@ -6,4 +6,5 @@ _local/
 
 example/data/
 example/tools/
+example/webapp/
 webapp/dist/

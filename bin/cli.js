@@ -6,7 +6,7 @@
 //   directory-builder ingest                   fetch + lift only
 //   directory-builder federate                 clean → map → match → merge → resolve only
 //   directory-builder webapp                   dev server for the instance's webapp
-//   directory-builder webapp build [--base /x/]  build the webapp → <instance>/dist/
+//   directory-builder webapp build [--base /x/]  build the webapp → <instance>/webapp/dist/
 
 import { webappBuild, webappDev } from "../src/webapp.js"
 import { Pipeline } from "../src/pipeline.js"

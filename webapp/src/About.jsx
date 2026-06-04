@@ -1,4 +1,4 @@
-// About page: instances own the content by providing content/about.md
+// About page: instances own the content by providing webapp/content/about.md
 // (fetched at runtime like config and data); without one, a generic default
 // renders. Markdown, single newlines = line breaks.
 

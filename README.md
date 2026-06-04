@@ -16,9 +16,13 @@ sources/<name>/
   fetch.js              # how to fetch this source
   clean.sparql          # how to clean its lifted RDF
   static/               # the data itself, for static-file sources
-content/about.md        # optional: the webapp's About page prose
-exporters/<name>.js     # optional: output adapters the webapp loads at runtime
+webapp/
+  content/about.md      # optional: the webapp's About page prose
+  exporters/<name>.js   # optional: output adapters the webapp loads at runtime
 ```
+
+The `webapp/` half is entirely optional — a pipeline-only instance is just
+`config/` + `sources/`, producing `data/` for downstream use.
 
 Everything else follows by convention from the source names. The discovery
 rule: a named open set (sources, exporters) is declared in federation.ttl and
@@ -73,12 +77,12 @@ webapp code. From an instance directory:
 
 ```sh
 npx directory-builder webapp                         # dev server
-npx directory-builder webapp build --base /repo/     # production build → dist/
+npx directory-builder webapp build --base /repo/     # production build → webapp/dist/
 ```
 
-`webapp build` stages the instance's `config/`, `data/`, `exporters/` and
-`content/` into `dist/` next to the bundle — `dist/` is the complete site,
-ready to publish as-is.
+`webapp build` stages the instance's `config/`, `data/` and
+`webapp/{content,exporters}/` into `webapp/dist/` next to the bundle —
+`webapp/dist/` is the complete site, ready to publish as-is.
 
 For webapp development in this repo:
 
@@ -87,14 +91,14 @@ npm run webapp                                       # dev server on example/
 INSTANCE=../sosuse-directory-builder npm run webapp  # any other instance dir
 ```
 
-Instances own the About page by providing `content/about.md` (markdown,
+Instances own the About page by providing `webapp/content/about.md` (markdown,
 served and deployed like config and data); without one, a generic default
 renders. Declaring `:federation :repository "https://github.com/…"` adds the
 GitHub links (nav, static-source folders); without it they stay hidden.
 
 Instances can inject **exporters** — output adapters mapping the directory
 into an external schema. The federation declares them (`:federation
-:hasExporter "x"`), the module lives at `exporters/x.js` in the instance
+:hasExporter "x"`), the module lives at `webapp/exporters/x.js` in the instance
 (served and deployed like config and data), and the Download page loads it at
 runtime: it exports `label` / `filename` / `mime` and
 `build(finalTtl, toolkit)`, where the toolkit passes in helpers like

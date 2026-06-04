@@ -1,7 +1,7 @@
 // Download view: choose target fields + format, or an external-schema export.
 // Reads:  config/federation.ttl, data/pipeline/final.ttl, and the exporters
 //         the federation declares via :hasExporter (instance-owned modules at
-//         exporters/<name>.js, dynamic-imported at runtime like config/data)
+//         webapp/exporters/<name>.js, dynamic-imported at runtime like config/data)
 // Does:   triggers a browser download (.ttl / .jsonld / .json / .csv, or an
 //         exporter's external-schema file)
 
@@ -94,7 +94,7 @@ function triggerDownload(content, mime, filename) {
 }
 
 // Exporters are instance code, not part of this app: the federation declares
-// them by name (:hasExporter "x" → exporters/x.js next to config/ and data/),
+// them by name (:hasExporter "x" → webapp/exporters/x.js in the instance),
 // and each module exports { label, filename, mime, build }. Bare imports can't
 // resolve in a runtime-loaded module, so build() receives a toolkit instead.
 const TOOLKIT = { sparqlSelect, storeFromTurtles, parseTtl, localName, shrink, groupBySubject }

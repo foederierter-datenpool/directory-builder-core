@@ -56,9 +56,9 @@ export const LIFTED_FORMAT = "http://publications.europa.eu/resource/authority/f
 export const PATHS = {
     federation:     "config/federation.ttl",
     matchKnowledge: "config/match-knowledge.ttl",
-    about:          "content/about.md",
+    about:          "webapp/content/about.md",
     fetchScript: (name) => `sources/${name}/fetch.js`,
-    exporter:    (name) => `exporters/${name}.js`,
+    exporter:    (name) => `webapp/exporters/${name}.js`,
     staticDir:   (name) => `sources/${name}/static/`,
     cleanQuery:  (name) => `sources/${name}/clean.sparql`,
     transform:   (name, t) => `sources/${name}/transform-${t}.sparql`,
