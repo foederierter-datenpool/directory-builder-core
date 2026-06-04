@@ -15,7 +15,11 @@ const fetchText = async (path) => {
 
 export const federationTtl = await fetchText(PATHS.federation)
 
-const cleanedPaths = objectsOf(parseTtl(federationTtl), `${CDP}hasSource`).map((iri) => PATHS.cleaned(sourceName(iri)))
+const fedQuads = parseTtl(federationTtl)
+const cleanedPaths = objectsOf(fedQuads, `${CDP}hasSource`).map((iri) => PATHS.cleaned(sourceName(iri)))
+// The instance's repo URL (:federation :repository …) — undefined when not
+// declared; pages hide their GitHub links then.
+export const repositoryUrl = objectsOf(fedQuads, `${CDP}repository`)[0]
 
 const FIXED = [PATHS.matchKnowledge, PATHS.ingestLog, PATHS.federateLog, PATHS.mapped,
                PATHS.matches, PATHS.merged, PATHS.provenance, PATHS.final, PATHS.about]

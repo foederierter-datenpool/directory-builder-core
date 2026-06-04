@@ -16,10 +16,15 @@ sources/<name>/
   fetch.js              # how to fetch this source
   clean.sparql          # how to clean its lifted RDF
   static/               # the data itself, for static-file sources
+content/about.md        # optional: the webapp's About page prose
+exporters/<name>.js     # optional: output adapters the webapp loads at runtime
 ```
 
-Everything else follows by convention from the source names. See
-[`example/`](example/) for a runnable instance and the full data flow.
+Everything else follows by convention from the source names. The discovery
+rule: a named open set (sources, exporters) is declared in federation.ttl and
+its files follow by convention; a single well-known slot (the About page)
+works by file presence alone. See [`example/`](example/) for a runnable
+instance and the full data flow.
 
 ## Prerequisites
 
@@ -67,6 +72,10 @@ npx directory-builder webapp                         # dev server
 npx directory-builder webapp build --base /repo/     # production build → dist/
 ```
 
+`webapp build` stages the instance's `config/`, `data/`, `exporters/` and
+`content/` into `dist/` next to the bundle — `dist/` is the complete site,
+ready to publish as-is.
+
 For webapp development in this repo:
 
 ```sh
@@ -76,7 +85,8 @@ INSTANCE=../sosuse-directory-builder npm run webapp  # any other instance dir
 
 Instances own the About page by providing `content/about.md` (markdown,
 served and deployed like config and data); without one, a generic default
-renders.
+renders. Declaring `:federation :repository "https://github.com/…"` adds the
+GitHub links (nav, static-source folders); without it they stay hidden.
 
 Instances can inject **exporters** — output adapters mapping the directory
 into an external schema. The federation declares them (`:federation

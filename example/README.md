@@ -31,6 +31,8 @@ npm install
 npm run example
 ```
 
+To browse the result, `npm run webapp` serves the webapp against this example.
+
 Or programmatically:
 
 ```js

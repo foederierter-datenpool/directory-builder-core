@@ -3,15 +3,16 @@
 //         data/ingest/ingest-log.ttl (via loadSources.js)
 // Does:   renders the Sources page (list of <Card>)
 
-import { federationTtl, mappedTtl, ingestLogTtl } from "./instanceData.js"
+import { federationTtl, mappedTtl, ingestLogTtl, repositoryUrl } from "./instanceData.js"
 import Card, { KeyValueTable } from "./Card.jsx"
 import { loadSources } from "./loadSources.js"
 import React from "react"
 
 const sources = loadSources(federationTtl, mappedTtl, ingestLogTtl)
 
-// Static-file sources have no live URL; link to their committed folder on GitHub.
-const REPO_TREE = "https://github.com/foederierter-datenpool/directory-builder/tree/main"
+// Static-file sources have no live URL; link to their committed folder in the
+// instance's declared :repository (plain path when none is declared).
+const REPO_TREE = repositoryUrl && `${repositoryUrl}/tree/main`
 
 const formatTime = (iso) => iso
     ? new Date(iso).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" })
@@ -19,9 +20,9 @@ const formatTime = (iso) => iso
 
 const sourceUrl = (s) => {
     if (s.fetchUrl) return <a href={s.fetchUrl} target="_blank" rel="noreferrer">{s.fetchUrl}</a>
-    if (s.staticSource) return (
-        <a href={`${REPO_TREE}/${s.staticSource.replace(/\/$/, "")}`} target="_blank" rel="noreferrer">static sources</a>
-    )
+    if (s.staticSource) return REPO_TREE
+        ? <a href={`${REPO_TREE}/${s.staticSource.replace(/\/$/, "")}`} target="_blank" rel="noreferrer">static sources</a>
+        : s.staticSource
     return "—"
 }
 

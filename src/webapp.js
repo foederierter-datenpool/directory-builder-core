@@ -1,4 +1,5 @@
 import path from "path"
+import fs from "fs"
 
 // The webapp ships with this package as source; these run it through vite's
 // JS API for an instance directory — dev server or dist build. The vite
@@ -20,10 +21,20 @@ export async function webappDev(root = process.cwd()) {
 export async function webappBuild(root = process.cwd(), { base } = {}) {
     const { build } = await import("vite")
     process.env.INSTANCE = root
+    const outDir = path.join(root, "dist")
     await build({
         configFile: CONFIG,
         root: WEBAPP,
         ...(base ? { base } : {}),
-        build: { outDir: path.join(root, "dist"), emptyOutDir: true },
+        build: { outDir, emptyOutDir: true },
     })
+    // The bundle fetches the instance's config, data, exporters and content at
+    // runtime — they are part of the deployable, so stage them next to it.
+    const staged = ["config", "data", "exporters", "content"].filter((dir) => {
+        const from = path.join(root, dir)
+        if (!fs.existsSync(from)) return false
+        fs.cpSync(from, path.join(outDir, dir), { recursive: true })
+        return true
+    })
+    console.log(`staged ${staged.join(", ")} → dist/`)
 }

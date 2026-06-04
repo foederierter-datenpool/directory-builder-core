@@ -22,7 +22,13 @@ const commands = {
     run:      () => pipeline.run(),
     ingest:   () => pipeline.ingest(),
     federate: () => pipeline.federate(),
-    webapp:   () => rest[0] === "build" ? webappBuild(undefined, { base: flag("base") }) : webappDev(),
+    webapp:   () => {
+        if (rest[0] && rest[0] !== "build") {
+            console.error(`Unknown webapp subcommand "${rest[0]}" — expected "build" or nothing (dev server)`)
+            process.exit(1)
+        }
+        return rest[0] === "build" ? webappBuild(process.cwd(), { base: flag("base") }) : webappDev()
+    },
 }
 
 if (!commands[cmd]) {

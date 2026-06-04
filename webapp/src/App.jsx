@@ -1,5 +1,6 @@
 import { HashRouter, Routes, Route, NavLink } from "react-router-dom"
 import "./styles.css"
+import { repositoryUrl } from "./instanceData.js"
 import About from "./About.jsx"
 import React, { lazy, Suspense, useState } from "react"
 
@@ -50,7 +51,7 @@ function Nav() {
                     <input type="checkbox" checked={showFed} onChange={(e) => update(e.target.checked)} />
                     Show federation process
                 </label>
-                <a href="https://github.com/foederierter-datenpool/directory-builder" target="_blank" rel="noreferrer">GitHub</a>
+                {repositoryUrl && <a href={repositoryUrl} target="_blank" rel="noreferrer">GitHub</a>}
             </div>
         </nav>
     )

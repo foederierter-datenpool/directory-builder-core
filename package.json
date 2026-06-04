@@ -16,9 +16,7 @@
   },
   "exports": {
     ".": "./src/index.js",
-    "./utils": "./src/utils.js",
-    "./webapp/App": "./webapp/src/App.jsx",
-    "./webapp/vite": "./webapp/vite.js"
+    "./utils": "./src/utils.js"
   },
   "publishConfig": {
     "access": "public"
