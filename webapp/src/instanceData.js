@@ -17,12 +17,12 @@ export const federationTtl = await fetchText(PATHS.federation)
 
 const cleanedPaths = objectsOf(parseTtl(federationTtl), `${CDP}hasSource`).map((iri) => PATHS.cleaned(sourceName(iri)))
 
-const FIXED = [PATHS.matchKnowledge, PATHS.ingestLog, PATHS.federateLog,
-               PATHS.mapped, PATHS.matches, PATHS.merged, PATHS.provenance, PATHS.final]
+const FIXED = [PATHS.matchKnowledge, PATHS.ingestLog, PATHS.federateLog, PATHS.mapped,
+               PATHS.matches, PATHS.merged, PATHS.provenance, PATHS.final, PATHS.about]
 const [fixedTexts, cleanedTexts] = await Promise.all([
     Promise.all(FIXED.map(fetchText)),
     Promise.all(cleanedPaths.map(fetchText)),
 ])
 
-export const [matchKnowledgeTtl, ingestLogTtl, federateLogTtl, mappedTtl, matchesTtl, mergedTtl, provenanceTtl, finalTtl] = fixedTexts
+export const [matchKnowledgeTtl, ingestLogTtl, federateLogTtl, mappedTtl, matchesTtl, mergedTtl, provenanceTtl, finalTtl, aboutMd] = fixedTexts
 export const cleanedByPath = Object.fromEntries(cleanedPaths.map((p, i) => [p, cleanedTexts[i]]))

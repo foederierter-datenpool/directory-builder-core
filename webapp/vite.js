@@ -5,18 +5,18 @@ import path from "path"
 // and Download.jsx dynamic-imports declared exporters/ the same way. A deploy
 // publishes them next to the bundle; in dev (and preview) this middleware
 // serves them from the instance directory instead. `root` is the instance dir
-// holding config/, data/ and (optionally) exporters/.
+// holding config/, data/ and (optionally) exporters/ and content/.
 export function serveInstanceData({ root = process.cwd() } = {}) {
     let base = "/"
     const middleware = (req, res, next) => {
         const url = req.url.split("?")[0]
         const rel = url.startsWith(base) ? url.slice(base.length) : null
-        if (!rel || !/^(config|data|exporters)\//.test(rel)) return next()
+        if (!rel || !/^(config|data|exporters|content)\//.test(rel)) return next()
         const file = path.join(root, rel)
         // Own the 404: falling through would hit the SPA fallback, which
         // serves index.html with 200 — instanceData would parse HTML as TTL.
         if (!existsSync(file)) { res.statusCode = 404; return res.end() }
-        res.setHeader("Content-Type", rel.endsWith(".js") ? "text/javascript" : "text/turtle")
+        res.setHeader("Content-Type", { js: "text/javascript", md: "text/markdown" }[rel.split(".").pop()] ?? "text/turtle")
         res.end(readFileSync(file))
     }
     return {

@@ -30,6 +30,7 @@
     "@zazuko/yasgui": "^4.6.1",
     "fuzzball": "^2.2.6",
     "lucide-react": "^1.14.0",
+    "marked": "^18.0.5",
     "n3": "^1.26.0 || ^2.0.0",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",

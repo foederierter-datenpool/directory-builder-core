@@ -74,6 +74,10 @@ npm run webapp                                       # dev server on example/
 INSTANCE=../sosuse-directory-builder npm run webapp  # any other instance dir
 ```
 
+Instances own the About page by providing `content/about.md` (markdown,
+served and deployed like config and data); without one, a generic default
+renders.
+
 Instances can inject **exporters** — output adapters mapping the directory
 into an external schema. The federation declares them (`:federation
 :hasExporter "x"`), the module lives at `exporters/x.js` in the instance
