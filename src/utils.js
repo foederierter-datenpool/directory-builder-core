@@ -57,6 +57,7 @@ export const PATHS = {
     federation:     "config/federation.ttl",
     matchKnowledge: "config/match-knowledge.ttl",
     fetchScript: (name) => `sources/${name}/fetch.js`,
+    exporter:    (name) => `exporters/${name}.js`,
     staticDir:   (name) => `sources/${name}/static/`,
     cleanQuery:  (name) => `sources/${name}/clean.sparql`,
     transform:   (name, t) => `sources/${name}/transform-${t}.sparql`,

@@ -1,11 +1,14 @@
 // Download view: choose target fields + format, or an external-schema export.
-// Reads:  config/federation.ttl, data/pipeline/final.ttl (+ exporters/sozialplattform.js)
-// Does:   triggers a browser download (.ttl / .jsonld / .json / .csv, or Sozialplattform JSON)
+// Reads:  config/federation.ttl, data/pipeline/final.ttl, and the exporters
+//         the federation declares via :hasExporter (instance-owned modules at
+//         exporters/<name>.js, dynamic-imported at runtime like config/data)
+// Does:   triggers a browser download (.ttl / .jsonld / .json / .csv, or an
+//         exporter's external-schema file)
 
-import { datasetToTurtleWriter } from "@foerderfunke/sem-ops-utils/core"
+import { datasetToTurtleWriter, storeFromTurtles } from "@foerderfunke/sem-ops-utils/core"
 import { turtleToJsonLdObj } from "@foerderfunke/sem-ops-utils/jsonld"
-import { CDP, groupBySubject, parseTtl, shrink, subjectsOfType } from "@directory-builder/core/utils"
-import { toSozialplattformJson } from "./exporters/sozialplattform.js"
+import { sparqlSelect } from "@foerderfunke/sem-ops-utils/sparql"
+import { CDP, groupBySubject, localName, objectsOf, parseTtl, PATHS, shrink, subjectsOfType } from "@directory-builder/core/utils"
 import { federationTtl, finalTtl } from "./instanceData.js"
 import React, { useState } from "react"
 
@@ -98,20 +101,30 @@ function triggerDownload(content, mime, filename) {
     URL.revokeObjectURL(url)
 }
 
-const EXTERNAL_TARGETS = [
-    {
-        value: "sozialplattform",
-        label: "Sozialplattform JSON",
-        filename: "sozialplattform.json",
-        mime: "application/json",
-        build: async () => JSON.stringify(await toSozialplattformJson(finalTtl), null, 2),
-    },
-]
+// Exporters are instance code, not part of this app: the federation declares
+// them by name (:hasExporter "x" → exporters/x.js next to config/ and data/),
+// and each module exports { label, filename, mime, build }. Bare imports can't
+// resolve in a runtime-loaded module, so build() receives a toolkit instead.
+const TOOLKIT = { sparqlSelect, storeFromTurtles, parseTtl, localName, shrink, groupBySubject }
+
+const EXTERNAL_TARGETS = (await Promise.all(
+    objectsOf(parseTtl(federationTtl), `${CDP}hasExporter`).map(async (name) => {
+        const mod = await import(/* @vite-ignore */ `${import.meta.env.BASE_URL}${PATHS.exporter(name)}`)
+            .catch((e) => { console.error(`exporter ${name} failed to load`, e); return null })
+        return mod && {
+            value:    name,
+            label:    mod.label ?? name,
+            filename: mod.filename ?? `${name}.json`,
+            mime:     mod.mime ?? "application/json",
+            build:    () => mod.build(finalTtl, TOOLKIT),
+        }
+    }),
+)).filter(Boolean)
 
 export default function Download() {
     const [selected, setSelected] = useState(() => new Set(TARGET_FIELDS.map((f) => f.predicate)))
     const [format, setFormat] = useState("ttl")
-    const [externalTarget, setExternalTarget] = useState(EXTERNAL_TARGETS[0].value)
+    const [externalTarget, setExternalTarget] = useState(EXTERNAL_TARGETS[0]?.value)
 
     const toggle = (pred) => {
         const next = new Set(selected)
@@ -153,15 +166,17 @@ export default function Download() {
                 <button onClick={onDownload} disabled={selected.size === 0}>Download</button>
             </div>
 
-            <hr style={{ margin: "1.5rem 0", border: 0, borderTop: "1px solid #ddd" }} />
+            {EXTERNAL_TARGETS.length > 0 && <>
+                <hr style={{ margin: "1.5rem 0", border: 0, borderTop: "1px solid #ddd" }} />
 
-            <h3 style={{ margin: "0 0 0.75rem" }}>Map to other schema</h3>
-            <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
-                <select value={externalTarget} onChange={(e) => setExternalTarget(e.target.value)}>
-                    {EXTERNAL_TARGETS.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
-                </select>
-                <button onClick={onDownloadExternal}>Download</button>
-            </div>
+                <h3 style={{ margin: "0 0 0.75rem" }}>Map to other schema</h3>
+                <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+                    <select value={externalTarget} onChange={(e) => setExternalTarget(e.target.value)}>
+                        {EXTERNAL_TARGETS.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+                    </select>
+                    <button onClick={onDownloadExternal}>Download</button>
+                </div>
+            </>}
         </div>
     )
 }

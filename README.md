@@ -74,6 +74,14 @@ npm run webapp                                       # dev server on example/
 INSTANCE=../sosuse-directory-builder npm run webapp  # any other instance dir
 ```
 
+Instances can inject **exporters** — output adapters mapping the directory
+into an external schema. The federation declares them (`:federation
+:hasExporter "x"`), the module lives at `exporters/x.js` in the instance
+(served and deployed like config and data), and the Download page loads it at
+runtime: it exports `label` / `filename` / `mime` and
+`build(finalTtl, toolkit)`, where the toolkit passes in helpers like
+`sparqlSelect`, since a runtime-loaded module cannot resolve bare imports.
+
 Browser-safe helpers (TTL parsing, path conventions, journal vocabulary) are
 exported separately so bundlers never see the engines' Node imports:
 
