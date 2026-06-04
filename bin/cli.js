@@ -2,20 +2,29 @@
 // Config-only entry: a default Pipeline rooted at the invoking instance
 // (npm runs scripts with cwd = the instance's package dir, so a downstream
 // repo needs nothing but config/ + sources/ and this on its PATH).
-//   directory-builder            run the full pipeline (ingest + federate)
-//   directory-builder ingest     fetch + lift only
-//   directory-builder federate   clean → map → match → merge → resolve only
+//   directory-builder                          run the full pipeline (ingest + federate)
+//   directory-builder ingest                   fetch + lift only
+//   directory-builder federate                 clean → map → match → merge → resolve only
+//   directory-builder webapp                   dev server for the instance's webapp
+//   directory-builder webapp build [--base /x/]  build the webapp → <instance>/dist/
 
+import { webappBuild, webappDev } from "../src/webapp.js"
 import { Pipeline } from "../src/pipeline.js"
+
+const [cmd = "run", ...rest] = process.argv.slice(2)
+const flag = (name) => {
+    const i = rest.indexOf(`--${name}`)
+    return i >= 0 ? rest[i + 1] : rest.find((a) => a.startsWith(`--${name}=`))?.split("=")[1]
+}
 
 const pipeline = new Pipeline()
 const commands = {
     run:      () => pipeline.run(),
     ingest:   () => pipeline.ingest(),
     federate: () => pipeline.federate(),
+    webapp:   () => rest[0] === "build" ? webappBuild(undefined, { base: flag("base") }) : webappDev(),
 }
 
-const cmd = process.argv[2] ?? "run"
 if (!commands[cmd]) {
     console.error(`Unknown command "${cmd}" — expected one of: ${Object.keys(commands).join(", ")}`)
     process.exit(1)

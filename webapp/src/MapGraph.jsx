@@ -1,0 +1,244 @@
+// Map view: the source-schema → target-schema mapping graph, optionally animated
+// with one org's field values flowing through the transform nodes.
+// Reads:  config/federation.ttl, data/pipeline/mapped.ttl,
+//         data/pipeline/cleaned/*.ttl (via loadMap.js + sourceMeta.js)
+// Does:   renders the Map page (horizontal <ColumnGraph>)
+
+import { federationTtl as ttl, mappedTtl, cleanedByPath } from "./instanceData.js"
+import { loadMap, loadSources, loadOrgsBySource, loadFieldValuesByOrg } from "./loadMap.js"
+import React, { useEffect, useMemo, useRef, useState } from "react"
+import { loadCleanedBySource } from "./sourceMeta.js"
+import { SkipBack, SkipForward } from "lucide-react"
+import ColumnGraph from "./ColumnGraph.jsx"
+
+const COLUMNS = ["Source", "SourceField", "TransformNode", "TargetField", "TargetSchema"]
+const COLORS = {
+    Source: "#d4e7ff",
+    SourceField: "#e6f3d8",
+    TransformNode: "#fff1a8",
+    TargetField: "#fde2c7",
+    TargetSchema: "#f4cfe0",
+}
+// Lighter tints than the node fills so labels read as belonging to the same
+// column/moment without competing for attention against the nodes themselves.
+const VALUE_LABEL_BG = {
+    SourceField:   "#f0f8e0",
+    TransformNode: "#fff8c8",
+}
+
+const SOURCES = loadSources(ttl)
+const ORGS_BY_SOURCE = loadOrgsBySource(ttl, mappedTtl)
+// Source-to-file mapping is resolved from config: instanceData enumerates the
+// cleaned TTLs from :hasSource, so a new source needs no edit here.
+const FIELD_VALUES = loadFieldValuesByOrg(ttl, mappedTtl, loadCleanedBySource(ttl, cleanedByPath))
+
+function SourcesDropdown({ visible, onChange }) {
+    const [open, setOpen] = useState(false)
+    const ref = useRef(null)
+
+    useEffect(() => {
+        if (!open) return
+        const onDown = (e) => { if (!ref.current?.contains(e.target)) setOpen(false) }
+        document.addEventListener("mousedown", onDown)
+        return () => document.removeEventListener("mousedown", onDown)
+    }, [open])
+
+    const summary = visible.size === SOURCES.length
+        ? "All sources"
+        : visible.size === 0
+            ? "No sources"
+            : `${visible.size} of ${SOURCES.length} sources`
+
+    const toggle = (iri) => {
+        const next = new Set(visible)
+        if (next.has(iri)) next.delete(iri); else next.add(iri)
+        onChange(next)
+    }
+    const setAll = (on) => onChange(on ? new Set(SOURCES.map(s => s.iri)) : new Set())
+
+    const linkBtn = { background: "none", border: "none", color: "#06c", cursor: "pointer", padding: 0, fontSize: 12 }
+
+    return (
+        <div ref={ref} style={{ position: "relative", display: "inline-block" }}>
+            <button onClick={() => setOpen(!open)} style={{ padding: "0.25rem 0.6rem", border: "1px solid #aaa", borderRadius: 4, background: "white", cursor: "pointer", fontSize: 13 }}>
+                {summary} ▾
+            </button>
+            {open && (
+                <div style={{ position: "absolute", top: "calc(100% + 4px)", left: 0, zIndex: 10, background: "white", border: "1px solid #aaa", borderRadius: 4, padding: 6, minWidth: 200, boxShadow: "0 2px 6px rgba(0,0,0,0.12)" }}>
+                    <div style={{ display: "flex", gap: 12, paddingBottom: 4, marginBottom: 4, borderBottom: "1px solid #eee" }}>
+                        <button onClick={() => setAll(true)} style={linkBtn}>Select all</button>
+                        <button onClick={() => setAll(false)} style={linkBtn}>Unselect all</button>
+                    </div>
+                    {SOURCES.map(s => (
+                        <label key={s.iri} style={{ display: "flex", alignItems: "center", gap: 6, padding: "2px 0" }}>
+                            <input type="checkbox" checked={visible.has(s.iri)} onChange={() => toggle(s.iri)} />
+                            {s.label}
+                        </label>
+                    ))}
+                </div>
+            )}
+        </div>
+    )
+}
+
+function OrgCombobox({ orgs, value, onChange, disabled }) {
+    const [open, setOpen] = useState(false)
+    const [filter, setFilter] = useState("")
+    const ref = useRef(null)
+
+    useEffect(() => {
+        if (!open) return
+        const onDown = (e) => { if (!ref.current?.contains(e.target)) setOpen(false) }
+        document.addEventListener("mousedown", onDown)
+        return () => document.removeEventListener("mousedown", onDown)
+    }, [open])
+
+    const selected = orgs.find(o => o.iri === value)
+    const f = filter.toLowerCase()
+    const filtered = f ? orgs.filter(o => o.id.toLowerCase().includes(f) || o.name.toLowerCase().includes(f)) : orgs
+
+    return (
+        <div ref={ref} style={{ position: "relative" }}>
+            <input
+                type="text"
+                disabled={disabled}
+                value={open ? filter : (selected?.name || selected?.id || "")}
+                placeholder={disabled ? "" : "Pick organisation…"}
+                onChange={(e) => { setFilter(e.target.value); if (!open) setOpen(true) }}
+                onFocus={() => { setFilter(""); setOpen(true) }}
+                style={{
+                    padding: "0.25rem 0.5rem",
+                    border: "1px solid #aaa",
+                    borderRadius: 4,
+                    fontSize: 13,
+                    width: 250,
+                    background: disabled ? "#f4f4f4" : "white",
+                    color: disabled ? "#bbb" : "#000",
+                }}
+            />
+            {open && filtered.length > 0 && (
+                <div style={{ position: "absolute", top: "calc(100% + 4px)", left: 0, zIndex: 10, background: "white", border: "1px solid #aaa", borderRadius: 4, maxHeight: 280, overflowY: "auto", minWidth: "100%", boxShadow: "0 2px 6px rgba(0,0,0,0.12)" }}>
+                    {filtered.slice(0, 200).map(o => (
+                        <div
+                            key={o.iri}
+                            onClick={() => { onChange(o.iri); setOpen(false); setFilter("") }}
+                            title={o.name}
+                            style={{ padding: "4px 8px", cursor: "pointer", borderBottom: "1px solid #eee" }}
+                        >
+                            <div style={{ fontSize: 13, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 320 }}>{o.name || <span style={{ color: "#999" }}>(no name)</span>}</div>
+                            <div style={{ fontFamily: "monospace", fontSize: 11, color: "#666" }}>{o.id}</div>
+                        </div>
+                    ))}
+                </div>
+            )}
+        </div>
+    )
+}
+
+export default function MapGraph() {
+    const [visible, setVisible] = useState(() => new Set(SOURCES.map(s => s.iri)))
+    const [selectedOrg, setSelectedOrg] = useState(null)
+    const [dataFlow, setDataFlow] = useState(false)
+    const [showUnmapped, setShowUnmapped] = useState(false)
+    const [showAllTargets, setShowAllTargets] = useState(false)
+    const [showDirectFlows, setShowDirectFlows] = useState(false)
+
+    const { nodes, edges: rawEdges } = useMemo(() => {
+        const hiddenSources = new Set(SOURCES.filter(s => !visible.has(s.iri)).map(s => s.iri))
+        return loadMap(ttl, { hiddenSources, hideUnmappedFields: !showUnmapped, hideUnmappedTargetFields: !showAllTargets })
+    }, [visible, showUnmapped, showAllTargets])
+
+    const oneActive = visible.size === 1
+    const enabled = dataFlow && oneActive
+    const valueByField = enabled && selectedOrg ? FIELD_VALUES.get(selectedOrg) : null
+    const edges = useMemo(() => {
+        if (!valueByField) return rawEdges
+        const typeOf = new Map(nodes.map(n => [n.id, n.type]))
+        return rawEdges.map(e => {
+            // Source-field outgoing: source literal. Transform outgoing: the
+            // post-transform target field value (the value that lands in `to`).
+            // The label tints with the from-node's column color so labels read
+            // as belonging to the same "moment" in the transformation.
+            // Direct (no-:via) source-field → target-field edges are gated
+            // behind the "Also show 1:1 flows" toggle.
+            if (e.direct && !showDirectFlows) return e
+            const fromType = typeOf.get(e.from)
+            const v = fromType === "TransformNode" ? valueByField.get(e.to)
+                : fromType === "SourceField"       ? valueByField.get(e.from)
+                : undefined
+            return v ? { ...e, value: v, valueBg: VALUE_LABEL_BG[fromType] } : e
+        })
+    }, [rawEdges, nodes, valueByField, showDirectFlows])
+
+    // Remount when the visible node set changes (sources or unmapped-fields
+    // toggle). Org / data-flow changes only update edge labels in place.
+    const graphKey = useMemo(() => `${[...visible].sort().join("|")}::${showUnmapped ? "all" : "mapped"}::${showAllTargets ? "allT" : "mappedT"}`, [visible, showUnmapped, showAllTargets])
+
+    const activeSource = oneActive ? [...visible][0] : null
+    const orgs = activeSource ? (ORGS_BY_SOURCE.get(activeSource) ?? []) : []
+
+    useEffect(() => {
+        if (orgs.length > 0) {
+            if (!orgs.find(o => o.iri === selectedOrg)) setSelectedOrg(orgs[0].iri)
+        } else if (selectedOrg !== null) {
+            setSelectedOrg(null)
+        }
+    }, [orgs])
+
+    useEffect(() => {
+        if (!oneActive && dataFlow) setDataFlow(false)
+    }, [oneActive])
+
+    const cycle = (delta) => {
+        if (orgs.length === 0) return
+        const idx = orgs.findIndex(o => o.iri === selectedOrg)
+        const next = ((idx < 0 ? 0 : idx + delta) + orgs.length) % orgs.length
+        setSelectedOrg(orgs[next].iri)
+    }
+
+    const disabledHint = !dataFlow
+        ? "Enable Show data flow to use these controls"
+        : "Active only when exactly one source is selected"
+    const iconBtnStyle = {
+        display: "inline-flex",
+        alignItems: "center",
+        background: "none",
+        border: "1px solid #aaa",
+        borderRadius: 4,
+        padding: "0.25rem 0.5rem",
+        cursor: enabled ? "pointer" : "not-allowed",
+        color: enabled ? "#000" : "#bbb",
+    }
+
+    return (
+        <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", padding: "0.5rem 1rem", fontSize: 13, borderBottom: "1px solid #ddd" }}>
+                <SourcesDropdown visible={visible} onChange={setVisible} />
+                <label style={{ display: "inline-flex", alignItems: "center", gap: "0.3rem" }}>
+                    <input type="checkbox" checked={showUnmapped} onChange={(e) => setShowUnmapped(e.target.checked)} />
+                    Show all source fields
+                </label>
+                <label style={{ display: "inline-flex", alignItems: "center", gap: "0.3rem" }}>
+                    <input type="checkbox" checked={showAllTargets} onChange={(e) => setShowAllTargets(e.target.checked)} />
+                    Show all target fields
+                </label>
+                <label style={{ display: "inline-flex", alignItems: "center", gap: "0.3rem", color: oneActive ? "#000" : "#bbb", cursor: oneActive ? "pointer" : "not-allowed" }} title={oneActive ? "" : "Active only when exactly one source is selected"}>
+                    <input type="checkbox" disabled={!oneActive} checked={dataFlow} onChange={(e) => setDataFlow(e.target.checked)} />
+                    Show data flow
+                </label>
+                <label style={{ display: "inline-flex", alignItems: "center", gap: "0.3rem", color: enabled ? "#000" : "#bbb", cursor: enabled ? "pointer" : "not-allowed" }} title={enabled ? "" : "Enable Show data flow first"}>
+                    <input type="checkbox" disabled={!enabled} checked={showDirectFlows} onChange={(e) => setShowDirectFlows(e.target.checked)} />
+                    Also show 1:1 flows
+                </label>
+                <div style={{ display: "flex", alignItems: "center", gap: "0.25rem" }}>
+                    <button disabled={!enabled} onClick={() => cycle(-1)} title={enabled ? "Previous" : disabledHint} style={iconBtnStyle}><SkipBack size={13} fill="currentColor" /></button>
+                    <OrgCombobox orgs={orgs} value={selectedOrg} onChange={setSelectedOrg} disabled={!enabled} />
+                    <button disabled={!enabled} onClick={() => cycle(1)} title={enabled ? "Next" : disabledHint} style={iconBtnStyle}><SkipForward size={13} fill="currentColor" /></button>
+                </div>
+            </div>
+            <div style={{ flex: 1, minHeight: 0 }}>
+                <ColumnGraph key={graphKey} nodes={nodes} edges={edges} columns={COLUMNS} colors={COLORS} />
+            </div>
+        </div>
+    )
+}

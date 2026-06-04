@@ -56,6 +56,24 @@ fixture.
 Engines journal their executed steps as p-plan RDF (`data/ingest/ingest-log.ttl`,
 `data/pipeline/federate-log.ttl`) — evidence of what ran, not a plan.
 
+## Run the webapp
+
+The webapp ships with the package; it fetches an instance's `config/` +
+`data/` at runtime, so one app serves every use case and instances hold no
+webapp code. From an instance directory:
+
+```sh
+npx directory-builder webapp                         # dev server
+npx directory-builder webapp build --base /repo/     # production build → dist/
+```
+
+For webapp development in this repo:
+
+```sh
+npm run webapp                                       # dev server on example/
+INSTANCE=../sosuse-directory-builder npm run webapp  # any other instance dir
+```
+
 Browser-safe helpers (TTL parsing, path conventions, journal vocabulary) are
 exported separately so bundlers never see the engines' Node imports:
 

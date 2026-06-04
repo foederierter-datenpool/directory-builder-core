@@ -7,21 +7,33 @@
   "license": "MIT",
   "type": "module",
   "scripts": {
-    "example": "cd example && node ../bin/cli.js"
+    "example": "cd example && node ../bin/cli.js",
+    "webapp": "vite webapp",
+    "webapp:build": "vite build webapp"
   },
   "bin": {
     "directory-builder": "bin/cli.js"
   },
   "exports": {
     ".": "./src/index.js",
-    "./utils": "./src/utils.js"
+    "./utils": "./src/utils.js",
+    "./webapp/App": "./webapp/src/App.jsx",
+    "./webapp/vite": "./webapp/vite.js"
   },
   "publishConfig": {
     "access": "public"
   },
   "dependencies": {
     "@foerderfunke/sem-ops-utils": "^0.5.1",
+    "@vitejs/plugin-react": "^6.0.1",
+    "@xyflow/react": "^12.10.2",
+    "@zazuko/yasgui": "^4.6.1",
     "fuzzball": "^2.2.6",
-    "n3": "^1.26.0 || ^2.0.0"
+    "lucide-react": "^1.14.0",
+    "n3": "^1.26.0 || ^2.0.0",
+    "react": "^19.2.5",
+    "react-dom": "^19.2.5",
+    "react-router-dom": "^7.14.1",
+    "vite": "^8.0.9"
   }
 }
