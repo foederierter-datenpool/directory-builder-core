@@ -1,0 +1,135 @@
+@prefix :       <https://civic-data.de/pipeline#> .
+@prefix rdfs:   <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix schema: <http://schema.org/> .
+@prefix foaf:   <http://xmlns.com/foaf/0.1/> .
+@prefix prov:   <http://www.w3.org/ns/prov#> .
+@prefix skos:   <http://www.w3.org/2004/02/skos/core#> .
+@prefix ft:     <http://publications.europa.eu/resource/authority/file-type/> .
+
+# A minimal single-entity federation: two directories of libraries, merged into
+# one set of schema:Organization records. Config declares decisions only —
+# sources and their facts, target schema, mappings, match/merge/resolve rules.
+# The engines own the step shape (fetch → lift, clean → map → match → merge →
+# resolve) and resolve all file paths by convention from the source names.
+# Add target schemas / mappings / match rules to model more entity types
+# (e.g. a Service tier) and their relationships.
+
+:federation a :Federation ;
+    :hasSource       :cityopenSource, :civichubSource ;
+    :hasTargetSchema :organisationSchema ;
+    :hasMatchRule    :organisationMatch ;
+    :hasMergeRule    :merge ;
+    :hasResolveRule  :resolve .
+
+# ---- Target schema ------------------------------------------------------
+
+:organisationSchema a :TargetSchema ;
+    :targetClass schema:Organization ;
+    rdfs:label "Organisation"@en ;
+    :hasTargetField :t-identifier, :t-name, :t-streetAddress, :t-postalCode,
+                    :t-locality, :t-telephone, :t-email, :t-homepage .
+
+:t-identifier    a :TargetField ; :targetPredicate schema:identifier .
+:t-name          a :TargetField ; :targetPredicate schema:name .
+:t-streetAddress a :TargetField ; :targetPredicate schema:streetAddress .
+:t-postalCode    a :TargetField ; :targetPredicate schema:postalCode .
+:t-locality      a :TargetField ; :targetPredicate schema:addressLocality .
+:t-telephone     a :TargetField ; :targetPredicate schema:telephone .
+:t-email         a :TargetField ; :targetPredicate schema:email .
+:t-homepage      a :TargetField ; :targetPredicate foaf:homepage .
+
+# ---- Sources ------------------------------------------------------------
+# Both are static-file sources: no :fetchUrl, so the engine hands their
+# fetch.js the sources/<name>/static/ dir instead of a URL. :format drives
+# which bundled lift query applies. :fieldPath is the JSON key as it appears
+# after lifting (xyz:<fieldPath>).
+
+:cityopenSource a :Source ;
+    rdfs:label    "CityOpen Data" ;
+    skos:notation "co" ;
+    :retrieval    "Files" ;
+    :format       ft:JSON ;
+    :hasField :co-id, :co-name, :co-street, :co-postalCode, :co-city, :co-phone, :co-email, :co-website .
+
+:co-id         a :SourceField ; :fieldPath "id"         .
+:co-name       a :SourceField ; :fieldPath "name"       .
+:co-street     a :SourceField ; :fieldPath "street"     .
+:co-postalCode a :SourceField ; :fieldPath "postalCode" .
+:co-city       a :SourceField ; :fieldPath "city"       .
+:co-phone      a :SourceField ; :fieldPath "phone"      .
+:co-email      a :SourceField ; :fieldPath "email"      .
+:co-website    a :SourceField ; :fieldPath "website"    .
+
+# A deliberately different shape from cityopen: German keys and a nested
+# `anschrift` (address) object whose parts are reached via :hasSubField.
+:civichubSource a :Source ;
+    rdfs:label    "CivicHub Directory" ;
+    skos:notation "ch" ;
+    :retrieval    "Files" ;
+    :format       ft:JSON ;
+    :hasField :ch-uid, :ch-bezeichnung, :ch-telefon, :ch-email, :ch-webseite, :ch-anschrift .
+
+:ch-uid         a :SourceField ; :fieldPath "uid"         .
+:ch-bezeichnung a :SourceField ; :fieldPath "bezeichnung" .
+:ch-telefon     a :SourceField ; :fieldPath "telefon"     .
+:ch-email       a :SourceField ; :fieldPath "email"       .
+:ch-webseite    a :SourceField ; :fieldPath "webseite"    .
+
+:ch-anschrift a :SourceField ; :fieldPath "anschrift" ;
+    :hasSubField :ch-strasse, :ch-plz, :ch-ort .
+:ch-strasse a :SubField ; :fieldPath "strasse" .
+:ch-plz     a :SubField ; :fieldPath "plz"     .
+:ch-ort     a :SubField ; :fieldPath "ort"     .
+
+# ---- Mappings -----------------------------------------------------------
+
+:cityopen-mapping a :Mapping ;
+    :fromSource  :cityopenSource ;
+    :toTarget    :organisationSchema ;
+    :sourceGraph <urn:source:cityopen> ;
+    :hasFieldMapping
+        [ :from :co-id         ; :to :t-identifier    ] ,
+        [ :from :co-name       ; :to :t-name          ] ,
+        [ :from :co-street     ; :to :t-streetAddress ] ,
+        [ :from :co-postalCode ; :to :t-postalCode    ] ,
+        [ :from :co-city       ; :to :t-locality      ] ,
+        [ :from :co-phone      ; :to :t-telephone     ] ,
+        [ :from :co-email      ; :to :t-email         ] ,
+        [ :from :co-website    ; :to :t-homepage      ] .
+
+:civichub-mapping a :Mapping ;
+    :fromSource  :civichubSource ;
+    :toTarget    :organisationSchema ;
+    :sourceGraph <urn:source:civichub> ;
+    :hasFieldMapping
+        [ :from :ch-uid         ; :to :t-identifier    ] ,
+        [ :from :ch-bezeichnung ; :to :t-name          ] ,
+        [ :from :ch-strasse     ; :to :t-streetAddress ] ,
+        [ :from :ch-plz         ; :to :t-postalCode    ] ,
+        [ :from :ch-ort         ; :to :t-locality      ] ,
+        [ :from :ch-telefon     ; :to :t-telephone     ] ,
+        [ :from :ch-email       ; :to :t-email         ] ,
+        [ :from :ch-webseite    ; :to :t-homepage      ] .
+
+# ---- Match --------------------------------------------------------------
+# Records match when their postal code is identical (hard gate) and their names
+# are fuzzily similar enough that the weighted score clears :minScore.
+
+:organisationMatch a :MatchRule ;
+    :forTarget           :organisationSchema ;
+    :targetNamespace     "https://example.org/directory#" ;
+    :mintedSubjectPrefix "org-" ;
+    :hasHardCriterion     [ :on schema:postalCode ] ;
+    :minScore             0.5 ;
+    :hasWeightedCriterion [ :on schema:name ; :weight 1.0 ] .
+
+# ---- Merge --------------------------------------------------------------
+
+:merge a :MergeRule ;
+    :originPredicate prov:wasDerivedFrom .
+
+# ---- Resolve ------------------------------------------------------------
+# One value per predicate per merged record; alphabeticFirst is deterministic.
+
+:resolve a :ResolveRule ;
+    :defaultStrategy :alphabeticFirst .

@@ -1,0 +1,32 @@
+[
+  {
+    "id": "co-1",
+    "name": "Central City Library",
+    "street": "Main Street 1",
+    "postalCode": "10115",
+    "city": "Berlin",
+    "phone": "+49 30 1110001",
+    "email": "info@central-library.example",
+    "website": "https://central-library.example"
+  },
+  {
+    "id": "co-2",
+    "name": "Riverside Branch Library",
+    "street": "River Road 22",
+    "postalCode": "10243",
+    "city": "Berlin",
+    "phone": "+49 30 1110002",
+    "email": "hello@riverside.example",
+    "website": "https://riverside.example"
+  },
+  {
+    "id": "co-3",
+    "name": "Old Town Reading Room",
+    "street": "Market Square 5",
+    "postalCode": "10178",
+    "city": "Berlin",
+    "phone": "+49 30 1110003",
+    "email": "kontakt@oldtown.example",
+    "website": "https://oldtown.example"
+  }
+]

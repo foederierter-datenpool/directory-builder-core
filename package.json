@@ -6,7 +6,22 @@
   "repository": "github:foederierter-datenpool/directory-builder-core",
   "license": "MIT",
   "type": "module",
+  "scripts": {
+    "example": "cd example && node ../bin/cli.js"
+  },
+  "bin": {
+    "directory-builder": "bin/cli.js"
+  },
+  "exports": {
+    ".": "./src/index.js",
+    "./utils": "./src/utils.js"
+  },
   "publishConfig": {
     "access": "public"
+  },
+  "dependencies": {
+    "@foerderfunke/sem-ops-utils": "^0.5.1",
+    "fuzzball": "^2.2.6",
+    "n3": "^1.26.0 || ^2.0.0"
   }
 }

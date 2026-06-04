@@ -1,0 +1,17 @@
+# Skolemise each library object from its JSON `id` into a stable
+# cdp:cityopen-<id> IRI, copy its scalar fields verbatim, and tag the source.
+# The lift produced one blank node per array element, all in xyz:/fx: vocabulary;
+# clean stays in xyz:/cdp: — schema: vocabulary only enters at the map step.
+
+PREFIX xyz: <http://sparql.xyz/facade-x/data/>
+PREFIX cdp: <https://civic-data.de/pipeline#>
+
+CONSTRUCT {
+    ?org cdp:fromSource cdp:cityopenSource ;
+         ?p ?o .
+} WHERE {
+    ?node xyz:id ?id ;
+          ?p ?o .
+    FILTER(isLiteral(?o))
+    BIND(IRI(CONCAT(STR(cdp:), "cityopen-", STR(?id))) AS ?org)
+}

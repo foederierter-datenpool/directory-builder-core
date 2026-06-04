@@ -1,0 +1,8 @@
+@prefix :    <https://civic-data.de/pipeline#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+
+# Curated match knowledge for the example. Empty — the two sources match on
+# postal code + fuzzy name alone. This is where hand-curated owl:sameAs pairs
+# would go, forcing two records into one cluster regardless of score:
+#
+#   :cityopen-co-3 owl:sameAs :civichub-ch-102 .

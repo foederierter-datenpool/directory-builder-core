@@ -1,0 +1,12 @@
+PREFIX xyz: <http://sparql.xyz/facade-x/data/>
+PREFIX fx: <http://sparql.xyz/facade-x/ns/>
+PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+CONSTRUCT {
+    ?s ?p ?o
+} WHERE {
+    SERVICE <x-sparql-anything:> {
+        fx:properties fx:location ?_location ;
+            fx:html.selector ?_selector .
+        ?s ?p ?o .
+    }
+}

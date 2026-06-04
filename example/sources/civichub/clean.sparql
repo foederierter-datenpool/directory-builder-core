@@ -1,0 +1,34 @@
+# Skolemise each entry from its JSON `uid` into a stable cdp:civichub-<id> IRI.
+# This source has a different shape from cityopen: German keys and a nested
+# `anschrift` (address) object. Clean copies the top-level scalars and carries
+# the address node through unflattened (as xyz:anschrift) — the map reads its
+# parts via :hasSubField. Clean stays in xyz:/cdp:; schema: enters at the map.
+
+PREFIX xyz: <http://sparql.xyz/facade-x/data/>
+PREFIX cdp: <https://civic-data.de/pipeline#>
+
+CONSTRUCT {
+    ?org cdp:fromSource cdp:civichubSource ;
+         xyz:uid         ?uid ;
+         xyz:bezeichnung ?bezeichnung ;
+         xyz:telefon     ?telefon ;
+         xyz:email       ?email ;
+         xyz:webseite    ?webseite ;
+         xyz:anschrift   ?addr .
+    ?addr xyz:strasse ?strasse ;
+          xyz:plz     ?plz ;
+          xyz:ort     ?ort .
+} WHERE {
+    ?node xyz:uid ?uid .
+    BIND(IRI(CONCAT(STR(cdp:), "civichub-", STR(?uid))) AS ?org)
+    OPTIONAL { ?node xyz:bezeichnung ?bezeichnung }
+    OPTIONAL { ?node xyz:telefon     ?telefon }
+    OPTIONAL { ?node xyz:email       ?email }
+    OPTIONAL { ?node xyz:webseite    ?webseite }
+    OPTIONAL {
+        ?node xyz:anschrift ?addr .
+        OPTIONAL { ?addr xyz:strasse ?strasse }
+        OPTIONAL { ?addr xyz:plz     ?plz }
+        OPTIONAL { ?addr xyz:ort     ?ort }
+    }
+}

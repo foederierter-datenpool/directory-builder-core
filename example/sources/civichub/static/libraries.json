@@ -1,0 +1,38 @@
+[
+  {
+    "uid": "ch-100",
+    "bezeichnung": "Central City Library (Main Branch)",
+    "anschrift": {
+      "strasse": "Main Street 1",
+      "plz": "10115",
+      "ort": "Berlin"
+    },
+    "telefon": "030 / 111 0001",
+    "email": "info@central-library.example",
+    "webseite": "http://www.central-library.example"
+  },
+  {
+    "uid": "ch-101",
+    "bezeichnung": "Riverside Library",
+    "anschrift": {
+      "strasse": "River Rd. 22",
+      "plz": "10243",
+      "ort": "Berlin"
+    },
+    "telefon": "030 111 0002",
+    "email": "team@riverside.example",
+    "webseite": "https://riverside.example"
+  },
+  {
+    "uid": "ch-102",
+    "bezeichnung": "Northside Community Library",
+    "anschrift": {
+      "strasse": "North Avenue 9",
+      "plz": "13347",
+      "ort": "Berlin"
+    },
+    "telefon": "+49 30 1110102",
+    "email": "mail@northside.example",
+    "webseite": "https://northside.example"
+  }
+]
