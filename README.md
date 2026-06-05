@@ -112,3 +112,12 @@ exported separately so bundlers never see the engines' Node imports:
 ```js
 import { CDP, parseTtl, PATHS } from "@directory-builder/core/utils"
 ```
+
+## Roadmap
+
+- Testing
+- Periodic harvesting
+- `@directory-builder/create`: an npm initializer scaffolding a new use
+  case, plus a `validate` command checking an instance setup
+- `@directory-builder/ui`: extract the webapp into its own package
+- ...
