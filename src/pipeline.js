@@ -1,5 +1,5 @@
-import { ingest } from "./ingest.js"
-import { federate } from "./federate.js"
+import { ingest } from "./pipeline/ingest.js"
+import { federate } from "./pipeline/federate.js"
 
 // Programmatic entry: hold the instance root once, run the engines against it.
 // The CLI (bin/cli.js) is this same class with defaults — root = cwd.
