@@ -3,7 +3,7 @@
 // Reads:  TTL strings passed by mergeEntities.js; resolves sources via sourceMeta.js
 // Does:   returns entity[] (each {iri, label, type, fields[], sources[]})
 
-import { CDP as NS, parseTtl, parseTtlStar, prefixesOf, shrink } from "@directory-builder/core/utils"
+import { CDP as NS, parseTtl, prefixesOf, shrink } from "@directory-builder/core/utils"
 import { compareSources, loadSourceMeta } from "./sourceMeta.js"
 
 const PROV_DERIVED_FROM = "http://www.w3.org/ns/prov#wasDerivedFrom"
@@ -16,13 +16,11 @@ export function loadMerge(mergedTtl, provTtl, federationTtl = "") {
     const prefixes = { cdp: NS, ...prefixesOf(federationTtl) }
     const prefixedIri = (iri) => shrink(iri, prefixes)
     const mergedQuads = parseTtl(mergedTtl)
-    const provQuads = parseTtlStar(provTtl)
+    const provQuads = parseTtl(provTtl)
     const sourceMeta = federationTtl ? loadSourceMeta(federationTtl) : new Map()
 
-    // Each prov:wasDerivedFrom in provenance.ttl annotates a merged triple
-    // `<<s p o>>` with the source record IRI it came from. n3.js exposes the
-    // quoted-triple subject either directly as a Quad term, or via an
-    // auto-generated reifier bnode + rdf:reifies triple — accept both shapes.
+    // provenance.ttl is RDF 1.2 reification: one reifier per derivation
+    // (`_:r rdf:reifies <<( s p o )>> ; prov:wasDerivedFrom record`).
     const reifies = new Map()
     for (const q of provQuads) {
         if (q.predicate.value === RDF_REIFIES && q.object.termType === "Quad") reifies.set(q.subject.value, q.object)
@@ -30,7 +28,7 @@ export function loadMerge(mergedTtl, provTtl, federationTtl = "") {
     const annotations = []
     for (const q of provQuads) {
         if (q.predicate.value !== PROV_DERIVED_FROM) continue
-        const t = q.subject.termType === "Quad" ? q.subject : reifies.get(q.subject.value)
+        const t = reifies.get(q.subject.value)
         if (t) annotations.push({ s: t.subject.value, p: t.predicate.value, o: t.object.value, rec: q.object.value })
     }
     // Resolve each record to its :Source via cdp:fromSource (reified in

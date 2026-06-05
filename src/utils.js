@@ -88,11 +88,6 @@ export const parseTtl = (turtle) => new Parser().parse(turtle)
 export const prefixesOf = (turtle) =>
     Object.fromEntries([...turtle.matchAll(/^\s*@?prefix\s+([\w-]*):\s*<([^>]*)>/gim)].map(([, p, ns]) => [p, ns]))
 
-// Turtle with RDF-star triple terms in subject position (the engine's
-// provenance annotations) — plain Turtle parsing disallows those, N3 mode
-// accepts them.
-export const parseTtlStar = (turtle) => new Parser({ format: "text/n3" }).parse(turtle)
-
 // {prefix: namespace} → "PREFIX p1: <ns1>\nPREFIX p2: <ns2>"
 export const buildPrefixBlock = (prefixMap) =>
     Object.entries(prefixMap).map(([p, ns]) => `PREFIX ${p}: <${ns}>`).join("\n")

@@ -9,6 +9,8 @@ const df = DataFactory
 
 export const MERGED_GRAPH = df.namedNode("urn:merged")
 
+const RDF_REIFIES = df.namedNode("http://www.w3.org/1999/02/22-rdf-syntax-ns#reifies")
+
 export const runMerge = async ({ store, defStore, abs }, outPath, provOutPath) => {
     const [cfg] = await sparqlSelect(`
         PREFIX : <${CDP}>
@@ -36,8 +38,12 @@ export const runMerge = async ({ store, defStore, abs }, outPath, provOutPath) =
             ? mintedFor.get(qu.object.value)
             : qu.object
         store.addQuad(df.quad(minted, qu.predicate, object, MERGED_GRAPH))
-        const triple = df.quad(minted, qu.predicate, object)
-        provQuads.push(df.quad(triple, originPredNode, qu.subject))
+        // One reifier per derivation occurrence (RDF 1.2: triple terms are only
+        // legal as objects, via rdf:reifies) — the provenance hangs off it, and
+        // per-derivation metadata (time, confidence) has a home when needed.
+        const reifier = df.blankNode()
+        provQuads.push(df.quad(reifier, RDF_REIFIES, df.quad(minted, qu.predicate, object)))
+        provQuads.push(df.quad(reifier, originPredNode, qu.subject))
     }
 
     const mergedQuads = store.getQuads(null, null, null, MERGED_GRAPH)
@@ -47,6 +53,7 @@ export const runMerge = async ({ store, defStore, abs }, outPath, provOutPath) =
 
     await writeTurtleFile(abs(provOutPath), provQuads, {
         ...COMMON_PREFIXES, cdp: CDP, cdf: namespace, prov: "http://www.w3.org/ns/prov#",
+        rdf: "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
     })
-    console.log(`merge: wrote ${provQuads.length} provenance annotations → ${provOutPath}`)
+    console.log(`merge: wrote ${provQuads.length / 2} provenance annotations → ${provOutPath}`)
 }
