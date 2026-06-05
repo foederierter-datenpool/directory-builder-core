@@ -1,6 +1,6 @@
 import { HashRouter, Routes, Route, NavLink } from "react-router-dom"
 import "./styles.css"
-import { repositoryUrl } from "./instanceData.js"
+import { federationLabel, repositoryUrl } from "./instanceData.js"
 import About from "./About.jsx"
 import React, { lazy, Suspense, useState } from "react"
 
@@ -15,6 +15,8 @@ const MatchGraph  = lazy(() => import("./MatchGraph.jsx"))
 const MergeTables = lazy(() => import("./MergeTables.jsx"))
 const Query       = lazy(() => import("./Query.jsx"))
 const Sources     = lazy(() => import("./Sources.jsx"))
+
+if (federationLabel) document.title = federationLabel
 
 const STORAGE_KEY = "showFederation"
 

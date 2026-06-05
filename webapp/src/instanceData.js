@@ -23,13 +23,17 @@ export const repositoryUrl = objectsOf(fedQuads, `${CDP}repository`)[0]
 // Display prefixes = the federation's own @prefix declarations; cdp pinned
 // first so cdp:… wins over the empty ":" prefix bound to the same namespace.
 export const displayPrefixes = { cdp: CDP, ...prefixesOf(federationTtl) }
+// The federation's display name (:federation rdfs:label) — optional; the
+// webapp keeps its generic title without one.
+export const federationLabel = fedQuads.find((q) =>
+    q.subject.value === `${CDP}federation` && q.predicate.value === "http://www.w3.org/2000/01/rdf-schema#label")?.object.value
 
 const FIXED = [PATHS.matchKnowledge, PATHS.ingestLog, PATHS.federateLog, PATHS.mapped,
-               PATHS.matches, PATHS.merged, PATHS.provenance, PATHS.final, PATHS.about]
+               PATHS.matches, PATHS.merged, PATHS.provenance, PATHS.final, PATHS.about, PATHS.query]
 const [fixedTexts, cleanedTexts] = await Promise.all([
     Promise.all(FIXED.map(fetchText)),
     Promise.all(cleanedPaths.map(fetchText)),
 ])
 
-export const [matchKnowledgeTtl, ingestLogTtl, federateLogTtl, mappedTtl, matchesTtl, mergedTtl, provenanceTtl, finalTtl, aboutMd] = fixedTexts
+export const [matchKnowledgeTtl, ingestLogTtl, federateLogTtl, mappedTtl, matchesTtl, mergedTtl, provenanceTtl, finalTtl, aboutMd, querySparql] = fixedTexts
 export const cleanedByPath = Object.fromEntries(cleanedPaths.map((p, i) => [p, cleanedTexts[i]]))

@@ -57,6 +57,7 @@ export const PATHS = {
     federation:     "config/federation.ttl",
     matchKnowledge: "config/match-knowledge.ttl",
     about:          "webapp/content/about.md",
+    query:          "webapp/content/query.sparql",
     fetchScript: (name) => `sources/${name}/fetch.js`,
     exporter:    (name) => `webapp/exporters/${name}.js`,
     staticDir:   (name) => `sources/${name}/static/`,

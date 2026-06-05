@@ -1,7 +1,7 @@
-// Helpers for the Map view: build the schema-mapping graph and resolve per-org
+// Helpers for the Map view: build the schema-mapping graph and resolve per-entity
 // source/target field values. Pure (ttl in → data out).
 // Reads:  TTL strings passed by MapGraph.jsx (federation, mapped, cleaned source TTL)
-// Does:   returns { nodes, edges } plus per-source / per-org value maps
+// Does:   returns { nodes, edges } plus per-source / per-entity value maps
 
 import { CDP as NS, localName, parseTtl, prefixesOf, shrink, sourceName, subjectsOfType, typesOf } from "@directory-builder/core/utils"
 
@@ -9,26 +9,26 @@ const RDFS_LABEL = "http://www.w3.org/2000/01/rdf-schema#label"
 const NODE_TYPES = [`${NS}Source`, `${NS}SourceField`, `${NS}TargetField`, `${NS}TargetSchema`]
 const SUB_FIELD = `${NS}SubField`
 
-// Group orgs by source. Each org carries a cdp:fromSource triple in mapped.ttl
+// Group entities by source. Each entity carries a cdp:fromSource triple in mapped.ttl
 // pointing at its Source IRI, so this is a single-pass scan with no prefix
 // matching.
-export function loadOrgsBySource(_federationTtl, mappedTtl) {
+export function loadEntitiesBySource(_federationTtl, mappedTtl) {
     const SCHEMA_NAME       = "http://schema.org/name"
     const SCHEMA_IDENTIFIER = "http://schema.org/identifier"
     const FROM_SOURCE       = `${NS}fromSource`
 
-    const orgSource = new Map()  // orgIri -> sourceIri
+    const entitySource = new Map()  // entityIri -> sourceIri
     const ids       = new Map()
     const names     = new Map()
     for (const q of parseTtl(mappedTtl)) {
         const p = q.predicate.value
-        if      (p === FROM_SOURCE)       orgSource.set(q.subject.value, q.object.value)
+        if      (p === FROM_SOURCE)       entitySource.set(q.subject.value, q.object.value)
         else if (p === SCHEMA_IDENTIFIER) ids.set(q.subject.value, q.object.value)
         else if (p === SCHEMA_NAME)       names.set(q.subject.value, q.object.value)
     }
 
     const result = new Map()
-    for (const [iri, src] of orgSource) {
+    for (const [iri, src] of entitySource) {
         if (!result.has(src)) result.set(src, [])
         result.get(src).push({
             iri,
@@ -40,11 +40,11 @@ export function loadOrgsBySource(_federationTtl, mappedTtl) {
     return result
 }
 
-// For each org in mapped.ttl, resolve the literal value of each of its
+// For each entity in mapped.ttl, resolve the literal value of each of its
 // source fields/sub-fields (from the source's lifted/cleaned TTL) AND each
 // target field (from mapped.ttl, indirected via the field's :targetPredicate).
-// Returns Map<orgIri, Map<fieldIri, string>>.
-export function loadFieldValuesByOrg(federationTtl, mappedTtl, liftedBySource) {
+// Returns Map<entityIri, Map<fieldIri, string>>.
+export function loadFieldValuesByEntity(federationTtl, mappedTtl, liftedBySource) {
     const fedQuads = parseTtl(federationTtl)
     const fieldPathOf       = new Map()
     const fieldsBySource    = new Map()
@@ -64,13 +64,13 @@ export function loadFieldValuesByOrg(federationTtl, mappedTtl, liftedBySource) {
     }
 
     const FROM_SOURCE = `${NS}fromSource`
-    const orgSource     = new Map() // orgIri -> sourceIri
-    const literalsByOrg = new Map() // orgIri -> Map<predicateIri, string>
+    const entitySource     = new Map() // entityIri -> sourceIri
+    const literalsByEntity = new Map() // entityIri -> Map<predicateIri, string>
     for (const q of parseTtl(mappedTtl)) {
-        if (q.predicate.value === FROM_SOURCE) orgSource.set(q.subject.value, q.object.value)
+        if (q.predicate.value === FROM_SOURCE) entitySource.set(q.subject.value, q.object.value)
         if (q.object.termType === "Literal") {
-            if (!literalsByOrg.has(q.subject.value)) literalsByOrg.set(q.subject.value, new Map())
-            literalsByOrg.get(q.subject.value).set(q.predicate.value, q.object.value)
+            if (!literalsByEntity.has(q.subject.value)) literalsByEntity.set(q.subject.value, new Map())
+            literalsByEntity.get(q.subject.value).set(q.predicate.value, q.object.value)
         }
     }
 
@@ -88,10 +88,10 @@ export function loadFieldValuesByOrg(federationTtl, mappedTtl, liftedBySource) {
         }
 
         const fields = fieldsBySource.get(sourceIri) ?? []
-        for (const [orgIri, src] of orgSource) {
+        for (const [entityIri, src] of entitySource) {
             if (src !== sourceIri) continue
             // Source subject IS the federation IRI post-clean — no lookup needed.
-            const subjectPreds = graph.get(orgIri)
+            const subjectPreds = graph.get(entityIri)
             if (!subjectPreds) continue
 
             const valueMap = new Map()
@@ -115,17 +115,17 @@ export function loadFieldValuesByOrg(federationTtl, mappedTtl, liftedBySource) {
                     }
                 }
             }
-            result.set(orgIri, valueMap)
+            result.set(entityIri, valueMap)
         }
     }
 
     // Layer in target-field values: indirect each :targetPredicate through the
-    // org's literal predicate->value map from mapped.ttl. These are the values
+    // entity's literal predicate->value map from mapped.ttl. These are the values
     // that flow OUT of transform nodes (and equal the source value for direct
     // 1:1 mappings).
-    for (const [orgIri, preds] of literalsByOrg) {
-        if (!result.has(orgIri)) result.set(orgIri, new Map())
-        const valueMap = result.get(orgIri)
+    for (const [entityIri, preds] of literalsByEntity) {
+        if (!result.has(entityIri)) result.set(entityIri, new Map())
+        const valueMap = result.get(entityIri)
         for (const [tfIri, predIri] of targetPredicateOf) {
             const v = preds.get(predIri)
             if (v) valueMap.set(tfIri, v)

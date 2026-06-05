@@ -1,11 +1,11 @@
 // Map view: the source-schema → target-schema mapping graph, optionally animated
-// with one org's field values flowing through the transform nodes.
+// with one entity's field values flowing through the transform nodes.
 // Reads:  config/federation.ttl, data/pipeline/mapped.ttl,
 //         data/pipeline/cleaned/*.ttl (via loadMap.js + sourceMeta.js)
 // Does:   renders the Map page (horizontal <ColumnGraph>)
 
 import { federationTtl as ttl, mappedTtl, cleanedByPath } from "./instanceData.js"
-import { loadMap, loadSources, loadOrgsBySource, loadFieldValuesByOrg } from "./loadMap.js"
+import { loadMap, loadSources, loadEntitiesBySource, loadFieldValuesByEntity } from "./loadMap.js"
 import React, { useEffect, useMemo, useRef, useState } from "react"
 import { loadCleanedBySource } from "./sourceMeta.js"
 import { SkipBack, SkipForward } from "lucide-react"
@@ -27,10 +27,10 @@ const VALUE_LABEL_BG = {
 }
 
 const SOURCES = loadSources(ttl)
-const ORGS_BY_SOURCE = loadOrgsBySource(ttl, mappedTtl)
+const ENTITIES_BY_SOURCE = loadEntitiesBySource(ttl, mappedTtl)
 // Source-to-file mapping is resolved from config: instanceData enumerates the
 // cleaned TTLs from :hasSource, so a new source needs no edit here.
-const FIELD_VALUES = loadFieldValuesByOrg(ttl, mappedTtl, loadCleanedBySource(ttl, cleanedByPath))
+const FIELD_VALUES = loadFieldValuesByEntity(ttl, mappedTtl, loadCleanedBySource(ttl, cleanedByPath))
 
 function SourcesDropdown({ visible, onChange }) {
     const [open, setOpen] = useState(false)
@@ -81,7 +81,7 @@ function SourcesDropdown({ visible, onChange }) {
     )
 }
 
-function OrgCombobox({ orgs, value, onChange, disabled }) {
+function EntityCombobox({ entities, value, onChange, disabled }) {
     const [open, setOpen] = useState(false)
     const [filter, setFilter] = useState("")
     const ref = useRef(null)
@@ -93,9 +93,9 @@ function OrgCombobox({ orgs, value, onChange, disabled }) {
         return () => document.removeEventListener("mousedown", onDown)
     }, [open])
 
-    const selected = orgs.find(o => o.iri === value)
+    const selected = entities.find(o => o.iri === value)
     const f = filter.toLowerCase()
-    const filtered = f ? orgs.filter(o => o.id.toLowerCase().includes(f) || o.name.toLowerCase().includes(f)) : orgs
+    const filtered = f ? entities.filter(o => o.id.toLowerCase().includes(f) || o.name.toLowerCase().includes(f)) : entities
 
     return (
         <div ref={ref} style={{ position: "relative" }}>
@@ -103,7 +103,7 @@ function OrgCombobox({ orgs, value, onChange, disabled }) {
                 type="text"
                 disabled={disabled}
                 value={open ? filter : (selected?.name || selected?.id || "")}
-                placeholder={disabled ? "" : "Pick organisation…"}
+                placeholder={disabled ? "" : "Pick entity…"}
                 onChange={(e) => { setFilter(e.target.value); if (!open) setOpen(true) }}
                 onFocus={() => { setFilter(""); setOpen(true) }}
                 style={{
@@ -137,7 +137,7 @@ function OrgCombobox({ orgs, value, onChange, disabled }) {
 
 export default function MapGraph() {
     const [visible, setVisible] = useState(() => new Set(SOURCES.map(s => s.iri)))
-    const [selectedOrg, setSelectedOrg] = useState(null)
+    const [selectedEntity, setSelectedEntity] = useState(null)
     const [dataFlow, setDataFlow] = useState(false)
     const [showUnmapped, setShowUnmapped] = useState(false)
     const [showAllTargets, setShowAllTargets] = useState(false)
@@ -150,7 +150,7 @@ export default function MapGraph() {
 
     const oneActive = visible.size === 1
     const enabled = dataFlow && oneActive
-    const valueByField = enabled && selectedOrg ? FIELD_VALUES.get(selectedOrg) : null
+    const valueByField = enabled && selectedEntity ? FIELD_VALUES.get(selectedEntity) : null
     const edges = useMemo(() => {
         if (!valueByField) return rawEdges
         const typeOf = new Map(nodes.map(n => [n.id, n.type]))
@@ -171,29 +171,29 @@ export default function MapGraph() {
     }, [rawEdges, nodes, valueByField, showDirectFlows])
 
     // Remount when the visible node set changes (sources or unmapped-fields
-    // toggle). Org / data-flow changes only update edge labels in place.
+    // toggle). Entity / data-flow changes only update edge labels in place.
     const graphKey = useMemo(() => `${[...visible].sort().join("|")}::${showUnmapped ? "all" : "mapped"}::${showAllTargets ? "allT" : "mappedT"}`, [visible, showUnmapped, showAllTargets])
 
     const activeSource = oneActive ? [...visible][0] : null
-    const orgs = activeSource ? (ORGS_BY_SOURCE.get(activeSource) ?? []) : []
+    const entities = activeSource ? (ENTITIES_BY_SOURCE.get(activeSource) ?? []) : []
 
     useEffect(() => {
-        if (orgs.length > 0) {
-            if (!orgs.find(o => o.iri === selectedOrg)) setSelectedOrg(orgs[0].iri)
-        } else if (selectedOrg !== null) {
-            setSelectedOrg(null)
+        if (entities.length > 0) {
+            if (!entities.find(o => o.iri === selectedEntity)) setSelectedEntity(entities[0].iri)
+        } else if (selectedEntity !== null) {
+            setSelectedEntity(null)
         }
-    }, [orgs])
+    }, [entities])
 
     useEffect(() => {
         if (!oneActive && dataFlow) setDataFlow(false)
     }, [oneActive])
 
     const cycle = (delta) => {
-        if (orgs.length === 0) return
-        const idx = orgs.findIndex(o => o.iri === selectedOrg)
-        const next = ((idx < 0 ? 0 : idx + delta) + orgs.length) % orgs.length
-        setSelectedOrg(orgs[next].iri)
+        if (entities.length === 0) return
+        const idx = entities.findIndex(o => o.iri === selectedEntity)
+        const next = ((idx < 0 ? 0 : idx + delta) + entities.length) % entities.length
+        setSelectedEntity(entities[next].iri)
     }
 
     const disabledHint = !dataFlow
@@ -232,7 +232,7 @@ export default function MapGraph() {
                 </label>
                 <div style={{ display: "flex", alignItems: "center", gap: "0.25rem" }}>
                     <button disabled={!enabled} onClick={() => cycle(-1)} title={enabled ? "Previous" : disabledHint} style={iconBtnStyle}><SkipBack size={13} fill="currentColor" /></button>
-                    <OrgCombobox orgs={orgs} value={selectedOrg} onChange={setSelectedOrg} disabled={!enabled} />
+                    <EntityCombobox entities={entities} value={selectedEntity} onChange={setSelectedEntity} disabled={!enabled} />
                     <button disabled={!enabled} onClick={() => cycle(1)} title={enabled ? "Next" : disabledHint} style={iconBtnStyle}><SkipForward size={13} fill="currentColor" /></button>
                 </div>
             </div>

@@ -1,8 +1,8 @@
-// Renders one organisation as a card (narrow key/value, or wide per-source table)
+// Renders one entity as a card (narrow key/value, or wide per-source table)
 // with source tags and conflict highlighting. Also exports the conflict helpers.
 // Reads:  config/federation.ttl, data/ingest/ingest-log.ttl (via sourceMeta.js);
-//         org objects from loadMerge.js
-// Does:   renders <OrgCard>; exports EXPECTED_MULTI, isConflict (used by mergeOrgs, MergeTables)
+//         entity objects from loadMerge.js
+// Does:   renders <EntityCard>; exports EXPECTED_MULTI, isConflict (used by mergeEntities, MergeTables)
 
 import { federationTtl, ingestLogTtl as logTtl } from "./instanceData.js"
 import Card, { KeyValueTable } from "./Card.jsx"
@@ -10,7 +10,7 @@ import { loadHarvestBySource, loadSourceMeta } from "./sourceMeta.js"
 import { CDP, parseTtl } from "@directory-builder/core/utils"
 import React, { useState } from "react"
 
-// org.columns are one entry per contributing record (resolved in loadMerge); look
+// entity.columns are one entry per contributing record (resolved in loadMerge); look
 // up source display data in config (notation, label) and the harvest log (time).
 const sourceMeta = loadSourceMeta(federationTtl)
 const harvestBySource = loadHarvestBySource(logTtl)
@@ -81,12 +81,12 @@ function ValueCell({ values, highlight }) {
     )
 }
 
-function OrgCardNarrow({ org, highlight }) {
-    return <KeyValueTable rows={org.fields.map((f) => ({ key: f.predicate, label: f.predLabel, value: <ValueCell values={f.values} highlight={highlight && isConflict(f)} /> }))} />
+function EntityCardNarrow({ entity, highlight }) {
+    return <KeyValueTable rows={entity.fields.map((f) => ({ key: f.predicate, label: f.predLabel, value: <ValueCell values={f.values} highlight={highlight && isConflict(f)} /> }))} />
 }
 
-function OrgCardWide({ org, highlight }) {
-    const columns = org.columns
+function EntityCardWide({ entity, highlight }) {
+    const columns = entity.columns
     return (
         <table>
             <thead>
@@ -100,7 +100,7 @@ function OrgCardWide({ org, highlight }) {
                 </tr>
             </thead>
             <tbody>
-                {org.fields.map((f) => {
+                {entity.fields.map((f) => {
                     const conflict = highlight && isConflict(f) ? conflictStyle(f.values.length) : undefined
                     return (
                         <tr key={f.predicate}>
@@ -117,10 +117,10 @@ function OrgCardWide({ org, highlight }) {
     )
 }
 
-export default function OrgCard({ org, compact, highlight }) {
+export default function EntityCard({ entity, compact, highlight }) {
     return (
-        <Card title={org.label} tag={org.type}>
-            {compact ? <OrgCardNarrow org={org} highlight={highlight} /> : <OrgCardWide org={org} highlight={highlight} />}
+        <Card title={entity.label} tag={entity.type}>
+            {compact ? <EntityCardNarrow entity={entity} highlight={highlight} /> : <EntityCardWide entity={entity} highlight={highlight} />}
         </Card>
     )
 }

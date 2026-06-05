@@ -93,8 +93,10 @@ INSTANCE=../sosuse-directory-builder npm run webapp  # any other instance dir
 
 Instances own the About page by providing `webapp/content/about.md` (markdown,
 served and deployed like config and data); without one, a generic default
-renders. Declaring `:federation :repository "https://github.com/…"` adds the
-GitHub links (nav, static-source folders); without it they stay hidden.
+renders — and the Query page's starting query the same way, via
+`webapp/content/query.sparql`. On the `:federation` node, `rdfs:label` sets
+the page title and `:repository "https://github.com/…"` adds the GitHub links
+(nav, static-source folders); both stay generic/hidden when absent.
 
 Instances can inject **exporters** — output adapters mapping the directory
 into an external schema. The federation declares them (`:federation

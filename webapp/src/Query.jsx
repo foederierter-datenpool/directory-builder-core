@@ -5,7 +5,7 @@
 
 import { storeFromTurtles } from "@foerderfunke/sem-ops-utils/core"
 import { queryEngine } from "@foerderfunke/sem-ops-utils/sparql"
-import { finalTtl } from "./instanceData.js"
+import { finalTtl, querySparql } from "./instanceData.js"
 import React, { useEffect, useRef } from "react"
 import "@zazuko/yasgui/build/yasgui.min.css"
 import Yasgui from "@zazuko/yasgui"
@@ -18,14 +18,9 @@ const ENDPOINT = "http://local/sparql"
 
 const store = storeFromTurtles([finalTtl])
 
-const INITIAL_QUERY = `PREFIX schema: <http://schema.org/>
-PREFIX cdf: <https://civic-data.de/federated-directory#>
-
-SELECT ?org (SAMPLE(?name) AS ?title) WHERE {
-    ?org schema:name ?name .
-}
-GROUP BY ?org
-ORDER BY ?title`
+// Instances own the editor's starting query via webapp/content/query.sparql
+// (fetched at runtime like the About prose); plain select-all without one.
+const INITIAL_QUERY = querySparql || "SELECT * WHERE { ?s ?p ?o } LIMIT 100"
 
 Yasgui.Yasqe.defaults.value = INITIAL_QUERY
 

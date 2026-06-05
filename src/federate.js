@@ -54,7 +54,7 @@ const buildDirectInsert = ({ sourceGraph, source, targetClass, target }, fields)
         `FILTER(isLiteral(${v(path)}) && STR(${v(path)}) != "") }`
 
     const insertBlock = fields
-        .map(f => `        ?org ${short(f.predicate)} ${v(f.fieldPath)} .`)
+        .map(f => `        ?entity ${short(f.predicate)} ${v(f.fieldPath)} .`)
         .join("\n")
 
     const topLevel  = fields.filter(f => !f.parentPath)
@@ -65,12 +65,12 @@ const buildDirectInsert = ({ sourceGraph, source, targetClass, target }, fields)
     // source into several entity kinds it tags each subject with cdp:targetSchema;
     // select only those for this mapping's schema. Subjects with no marker
     // (single-entity sources like caritas/dhs) match unconditionally.
-    const bgp = [`?org cdp:fromSource ${short(source)} .`]
+    const bgp = [`?entity cdp:fromSource ${short(source)} .`]
     if (target) {
-        bgp.push(`OPTIONAL { ?org cdp:targetSchema ?_ts }`)
+        bgp.push(`OPTIONAL { ?entity cdp:targetSchema ?_ts }`)
         bgp.push(`FILTER(!bound(?_ts) || ?_ts = ${short(target)})`)
     }
-    for (const f of topLevel) bgp.push(optLit("?org", f.fieldPath))
+    for (const f of topLevel) bgp.push(optLit("?entity", f.fieldPath))
 
     const byParent = new Map()
     for (const f of subFields) {
@@ -81,7 +81,7 @@ const buildDirectInsert = ({ sourceGraph, source, targetClass, target }, fields)
     for (const [parent, subs] of byParent) {
         const pv    = `?_p${parentIdx++}`
         const inner = subs.map(s => `    ${optLit(pv, s.fieldPath)}`).join("\n")
-        bgp.push(`OPTIONAL {\n    ?org xyz:${parent} ${pv} .\n${inner}\n  }`)
+        bgp.push(`OPTIONAL {\n    ?entity xyz:${parent} ${pv} .\n${inner}\n  }`)
     }
 
     // The target schema's :targetClass becomes the record's rdf:type here in the
@@ -93,7 +93,7 @@ const buildDirectInsert = ({ sourceGraph, source, targetClass, target }, fields)
 
 INSERT {
     GRAPH <urn:mapped> {
-        ?org ${typeClause}cdp:fromSource ${short(source)} .
+        ?entity ${typeClause}cdp:fromSource ${short(source)} .
 ${insertBlock}
     }
 } WHERE {

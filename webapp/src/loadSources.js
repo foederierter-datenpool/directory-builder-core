@@ -68,7 +68,7 @@ export function loadSources(federationTtl, mappedTtl, ingestLogTtl) {
         if (!get(sourceIri).fetchUrl) get(sourceIri).staticSource = PATHS.staticDir(sourceName(sourceIri))
     }
 
-    // Records: count distinct orgs in mapped.ttl per source via cdp:fromSource.
+    // Records: count distinct entities in mapped.ttl per source via cdp:fromSource.
     const FROM_SOURCE = `${NS}fromSource`
     const subjectsBySource = new Map()
     for (const q of mappedQuads) {

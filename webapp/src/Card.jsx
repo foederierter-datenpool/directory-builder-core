@@ -1,13 +1,13 @@
 // Presentational building blocks: <Card> (titled box) and <KeyValueTable>.
 // Reads:  props (title, children, rows)
-// Does:   renders DOM; used by OrgCard and Sources
+// Does:   renders DOM; used by EntityCard and Sources
 
 import React from "react"
 
 export default function Card({ title, tag, children }) {
     return (
-        <div className="org-card">
-            <div className="org-card-header">
+        <div className="entity-card">
+            <div className="entity-card-header">
                 <code>{title}</code>
                 {tag && <span style={{ marginLeft: "0.6rem", fontSize: 11, color: "#888", fontFamily: "monospace" }}>{tag}</span>}
             </div>

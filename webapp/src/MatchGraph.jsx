@@ -35,7 +35,7 @@ const criteriaPredicates = (() => {
 })()
 
 // Map<recordIri, Map<predIri, [literalValue]>> for the per-member details modal.
-const orgInfo = groupBySubject(parseTtl(mappedTtl), { literalsOnly: true })
+const entityInfo = groupBySubject(parseTtl(mappedTtl), { literalsOnly: true })
 
 const manualPairs = parseTtl(matchKnowledgeTtl)
     .filter(q => q.predicate.value === OWL_SAME_AS)
@@ -52,7 +52,7 @@ function MemberDetailsModal({ clusterId, memberIris, onClose }) {
                     <button onClick={onClose} style={{ border: 0, background: "transparent", fontSize: 18, cursor: "pointer", lineHeight: 1 }}>×</button>
                 </div>
                 {memberIris.map((iri) => {
-                    const info = orgInfo.get(iri)
+                    const info = entityInfo.get(iri)
                     return (
                         <div key={iri} style={{ marginBottom: 14 }}>
                             <div style={{ fontSize: 11, color: "#666", marginBottom: 4 }}><code>{prefixed(iri)}</code></div>
@@ -98,7 +98,7 @@ export default function MatchGraph() {
             if (n.isCluster) n.subtitle = n.id.startsWith(CDF_NS) ? `cdf:${n.id.slice(CDF_NS.length)}` : prefixed(n.id)
             else {                                     // a source (dedup) node
                 n.label = sourceCode(n.id)
-                n.subtitle = orgInfo.get(n.id)?.get(SCHEMA_IDENTIFIER)?.[0]
+                n.subtitle = entityInfo.get(n.id)?.get(SCHEMA_IDENTIFIER)?.[0]
             }
         }
         // Drop columns that ended up empty (schemas with no source duplication when

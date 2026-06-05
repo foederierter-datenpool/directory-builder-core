@@ -246,7 +246,7 @@ export default function ColumnGraph({ nodes, edges, columns, colors, centerColum
     const [draggingId, setDraggingId] = useState(null)
     const [hoveredEdge, setHoveredEdge] = useState(null)
     const hoverCtx = useMemo(() => ({ id: hoveredEdge, set: setHoveredEdge }), [hoveredEdge])
-    // Sync edges when value labels change (e.g. selecting a different org) so
+    // Sync edges when value labels change (e.g. selecting a different entity) so
     // the user keeps any node positions they've dragged.
     useEffect(() => { setRfEdges(flowEdges) }, [flowEdges, setRfEdges])
 

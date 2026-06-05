@@ -16,7 +16,7 @@ export function serveInstanceData({ root = process.cwd() } = {}) {
         // Own the 404: falling through would hit the SPA fallback, which
         // serves index.html with 200 — instanceData would parse HTML as TTL.
         if (!existsSync(file)) { res.statusCode = 404; return res.end() }
-        res.setHeader("Content-Type", { js: "text/javascript", md: "text/markdown" }[rel.split(".").pop()] ?? "text/turtle")
+        res.setHeader("Content-Type", { js: "text/javascript", md: "text/markdown", sparql: "application/sparql-query" }[rel.split(".").pop()] ?? "text/turtle")
         res.end(readFileSync(file))
     }
     return {

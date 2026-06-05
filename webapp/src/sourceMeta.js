@@ -3,7 +3,7 @@
 // the PATHS conventions. JS never hardcodes a source name — it resolves records
 // to a :Source via cdp:fromSource.
 // Reads:  TTL strings passed in (federation, mapped, ingest-log)
-// Does:   returns lookup maps + helpers (used by loadMerge, OrgCard, MapGraph, MatchGraph)
+// Does:   returns lookup maps + helpers (used by loadMerge, EntityCard, MapGraph, MatchGraph)
 
 import { CDP as NS, parseTtl, PATHS, sourceName } from "@directory-builder/core/utils"
 
