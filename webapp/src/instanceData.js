@@ -6,7 +6,7 @@
 // artifact resolves to "" (pages render empty). Top-level await — importing
 // modules stay synchronous.
 
-import { CDP, objectsOf, parseTtl, PATHS, prefixesOf, sourceName } from "@directory-builder/core/utils"
+import { CDP, enabledSources, objectsOf, parseTtl, PATHS, prefixesOf, sourceName } from "@directory-builder/core/utils"
 
 const fetchText = async (path) => {
     const res = await fetch(`${import.meta.env.BASE_URL}${path}`).catch(() => null)
@@ -16,7 +16,7 @@ const fetchText = async (path) => {
 export const federationTtl = await fetchText(PATHS.federation)
 
 const fedQuads = parseTtl(federationTtl)
-const cleanedPaths = objectsOf(fedQuads, `${CDP}hasSource`).map((iri) => PATHS.cleaned(sourceName(iri)))
+const cleanedPaths = enabledSources(fedQuads).map((iri) => PATHS.cleaned(sourceName(iri)))
 // The instance's repo URL (:federation :repository …) — undefined when not
 // declared; pages hide their GitHub links then.
 export const repositoryUrl = objectsOf(fedQuads, `${CDP}repository`)[0]

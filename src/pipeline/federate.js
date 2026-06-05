@@ -1,5 +1,5 @@
 import { newStore, parser as n3Parser, storeFromTurtles } from "@foerderfunke/sem-ops-utils"
-import { CDP, objectsOf, parseTtl, PATHS, sourceGraph, sourceName, stepIri, stepJournal } from "../utils.js"
+import { CDP, enabledSources, parseTtl, PATHS, sourceGraph, sourceName, stepIri, stepJournal } from "../utils.js"
 import { COMMON_PREFIXES, writeTurtleFile } from "./write-turtle.js"
 import { MAPPED_GRAPH, runMap } from "./steps/map.js"
 import { runClean } from "./steps/clean.js"
@@ -26,7 +26,7 @@ export async function federate(root = process.cwd()) {
     const abs = (p) => path.join(root, p)
     const federationTtl = fs.readFileSync(abs(PATHS.federation), "utf8")
     const defStore = storeFromTurtles([federationTtl, fs.readFileSync(abs(PATHS.matchKnowledge), "utf8")])
-    const sources = objectsOf(parseTtl(federationTtl), `${CDP}hasSource`)
+    const sources = enabledSources(parseTtl(federationTtl))
 
     const store = newStore()
     const journal = stepJournal()

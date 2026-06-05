@@ -108,6 +108,13 @@ export const shrink = (iri, prefixMap) => {
 export const objectsOf = (quads, predIri) =>
     [...new Set(quads.filter((q) => q.predicate.value === predIri).map((q) => q.object.value))]
 
+// The federation's sources minus any switched off with `:enabled false`, in
+// :hasSource declaration order — the source list engines and webapp run on.
+export const enabledSources = (quads) => {
+    const disabled = new Set(quads.filter((q) => q.predicate.value === `${CDP}enabled` && q.object.value === "false").map((q) => q.subject.value))
+    return objectsOf(quads, `${CDP}hasSource`).filter((iri) => !disabled.has(iri))
+}
+
 // Set of subjects typed `rdf:type typeIri`. Iteration order = encounter order.
 export function subjectsOfType(quads, typeIri) {
     const out = new Set()

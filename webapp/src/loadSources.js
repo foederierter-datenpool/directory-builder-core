@@ -3,7 +3,7 @@
 // Reads:  federation, mapped, ingest-log TTL strings passed by Sources.jsx
 // Does:   returns source[] ({iri, label, format, totalFields, mappedFields, records, …})
 
-import { CDP as NS, formatFamily, parseTtl, PATHS, sourceName, subjectsOfType } from "@directory-builder/core/utils"
+import { CDP as NS, enabledSources, formatFamily, parseTtl, PATHS, sourceName } from "@directory-builder/core/utils"
 
 const PROV_AT_TIME = "http://www.w3.org/ns/prov#atTime"
 const RDFS_LABEL = "http://www.w3.org/2000/01/rdf-schema#label"
@@ -18,7 +18,7 @@ export function loadSources(federationTtl, mappedTtl, ingestLogTtl) {
     const mappedQuads = mappedTtl ? parseTtl(mappedTtl) : []
     const logQuads = ingestLogTtl ? parseTtl(ingestLogTtl) : []
 
-    const sourceIris = subjectsOfType(fedQuads, `${NS}Source`)
+    const sourceIris = new Set(enabledSources(fedQuads))
 
     const props = new Map()
     const get = (iri) => {

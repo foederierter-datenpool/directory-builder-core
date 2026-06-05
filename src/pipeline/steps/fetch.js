@@ -11,6 +11,8 @@ export const runFetch = ({ abs, root }, { name, fetchUrl, paramsJson }) => {
     const outDir = PATHS.raw(name)
     const origin = fetchUrl ?? abs(PATHS.staticDir(name))
     console.log(`fetch  ${fetchUrl ?? PATHS.staticDir(name)} (params ${paramsJson}) → ${outDir}`)
+    // Clear any prior output first, so changed run params (or changed records) can't leave stale files behind
+    fs.rmSync(abs(outDir), { recursive: true, force: true })
     fs.mkdirSync(abs(outDir), { recursive: true })
     run("node", [abs(PATHS.fetchScript(name)), abs(outDir), origin, paramsJson])
     const harvest = { time: new Date().toISOString() }

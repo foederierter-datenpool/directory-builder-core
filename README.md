@@ -66,6 +66,10 @@ Each source's `fetch.js` is invoked as `node fetch.js <outDir> <fetchUrl-or-stat
 <runParamsJson>` — the JSON holds all `:hasRunParam` values grouped by name;
 each fetcher picks the parameters it needs.
 
+A source declared with `:enabled false` stays in the config but is skipped by
+the engines and hidden from the webapp's Sources page — e.g. while its files
+aren't available yet.
+
 Engines journal their executed steps as p-plan RDF (`data/ingest/ingest-log.ttl`,
 `data/pipeline/federate-log.ttl`) — evidence of what ran, not a plan.
 

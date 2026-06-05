@@ -1,5 +1,5 @@
 import { sparqlSelect, storeFromTurtles } from "@foerderfunke/sem-ops-utils"
-import { CDP, objectsOf, parseTtl, PATHS, sourceName, stepJournal } from "../utils.js"
+import { CDP, enabledSources, parseTtl, PATHS, sourceName, stepJournal } from "../utils.js"
 import { ensureJar, runLift } from "./steps/lift.js"
 import { runFetch } from "./steps/fetch.js"
 import path from "path"
@@ -30,7 +30,7 @@ export async function ingest(root = process.cwd()) {
         if (!facts.has(r.source)) facts.set(r.source, { fetchUrl: r.fetchUrl, format: r.format, params: [] })
         if (r.paramName) facts.get(r.source).params.push([r.paramName, r.paramValue])
     }
-    const sources = new Map(objectsOf(parseTtl(federationTtl), `${CDP}hasSource`).map((iri) => [iri, facts.get(iri)]))
+    const sources = new Map(enabledSources(parseTtl(federationTtl)).map((iri) => [iri, facts.get(iri)]))
     for (const [iri, s] of sources) {
         if (!s.format) throw new Error(`${iri} declares no :format (needed to pick the lift query)`)
     }

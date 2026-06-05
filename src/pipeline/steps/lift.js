@@ -49,6 +49,8 @@ export const runLift = ({ abs }, { jar, name, format, params }) => {
     const inAbs = abs(PATHS.raw(name))
     const outAbs = abs(PATHS.lifted(name))
     const files = fs.readdirSync(inAbs).filter(f => !f.startsWith(".")).sort()
+    // Clear stale lifted files first — the clean step reads every .ttl here.
+    fs.rmSync(outAbs, { recursive: true, force: true })
     fs.mkdirSync(outAbs, { recursive: true })
     console.log(`lift   ${PATHS.raw(name)} (${files.length} files) → ${PATHS.lifted(name)}`)
     for (const f of files) {
