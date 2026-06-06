@@ -8,12 +8,12 @@ export class Pipeline {
     constructor({ root = process.cwd() } = {}) {
         this.root = root
     }
-    validate() {
-        const problems = validate(this.root)
+    async validate() {
+        const problems = await validate(this.root)
         if (problems.length) throw new Error(`invalid instance at ${this.root}:\n  ${problems.join("\n  ")}`)
     }
-    ingest()   { this.validate(); return ingest(this.root) }
-    federate() { this.validate(); return federate(this.root) }
+    async ingest()   { await this.validate(); return ingest(this.root) }
+    async federate() { await this.validate(); return federate(this.root) }
     async run() {
         await this.ingest()
         await this.federate()

@@ -1,0 +1,26 @@
+@prefix :   <https://civic-data.de/pipeline#> .
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+
+# The engine's contract for a well-formed federation.ttl
+# expressed as SHACL and enforced by ../validate.js
+
+:federationShape a sh:NodeShape ;
+    sh:targetNode :federation ;
+    sh:property [
+        sh:path :hasSource ;
+        sh:minCount 1 ;
+        sh:nodeKind sh:IRI ;
+        sh:message "needs at least one :hasSource"
+    ] .
+
+:sourceShape a sh:NodeShape ;
+    sh:targetObjectsOf :hasSource ;
+    sh:property [
+        sh:path :format ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:nodeKind sh:IRI ;
+        sh:message "needs exactly one :format"
+    ] .
+
+# TODO: add the rest

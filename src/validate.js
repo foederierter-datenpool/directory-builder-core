@@ -1,19 +1,22 @@
-import { CDP, objectsOf, parseTtl, PATHS, sourceName } from "./utils.js"
+import { buildValidator, turtleToDataset } from "@foerderfunke/sem-ops-utils"
+import { CDP, objectsOf, parseTtl, PATHS, shrink, sourceName } from "./utils.js"
 import path from "path"
 import fs from "fs"
 
-// Instance integrity checks. Each check takes { abs, quads } (path resolver
-// rooted at the instance, parsed federation.ttl) and returns problem strings.
-// validate() runs them all; empty result = valid. Runs automatically before
-// the engines; `directory-builder validate` triggers it on its own.
+// Instance integrity checks. Each check takes { abs, ttl, quads } (path
+// resolver rooted at the instance, federation.ttl raw + parsed) and returns
+// problem strings. validate() runs them all; empty result = valid. Runs
+// automatically before the engines; `directory-builder validate` triggers it
+// on its own.
 
-const checks = [sourcesFoldersInSync, secondValidationTest]
+const checks = [sourcesFoldersInSync, federationConformsToShape]
 
-export function validate(root = process.cwd()) {
+export async function validate(root = process.cwd()) {
     const abs = (p) => path.join(root, p)
     if (!fs.existsSync(abs(PATHS.federation))) return [`${PATHS.federation} missing`]
-    const quads = parseTtl(fs.readFileSync(abs(PATHS.federation), "utf8"))
-    return checks.flatMap((check) => check({ abs, quads }))
+    const ttl = fs.readFileSync(abs(PATHS.federation), "utf8")
+    const ctx = { abs, ttl, quads: parseTtl(ttl) }
+    return (await Promise.all(checks.map((check) => check(ctx)))).flat()
 }
 
 // Every :hasSource in federation.ttl has its sources/<name>/ folder with
@@ -37,7 +40,13 @@ function sourcesFoldersInSync({ abs, quads }) {
     return problems
 }
 
-function secondValidationTest({ abs, quads }) {
-    // TODO
-    return []
+// federation.ttl conforms to the engine's config contract, expressed as SHACL
+// in federation.shacl.ttl next to this file - the shape ships with the
+// package, instances never carry it.
+const validator = buildValidator(fs.readFileSync(path.join(import.meta.dirname, "validate/federation.shacl.ttl"), "utf8"))
+
+async function federationConformsToShape({ ttl }) {
+    const report = await validator.validate({ dataset: turtleToDataset(ttl) })
+    return report.results.map((r) =>
+        `${PATHS.federation}: ${shrink(r.focusNode.value, { "": CDP })} ${r.message.map((m) => m.value).join("; ")}`)
 }

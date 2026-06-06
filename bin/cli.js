@@ -24,8 +24,8 @@ const commands = {
     run:      () => pipeline.run(),
     ingest:   () => pipeline.ingest(),
     federate: () => pipeline.federate(),
-    validate: () => {
-        const problems = validate()
+    validate: async () => {
+        const problems = await validate()
         if (problems.length) { console.error(problems.join("\n")); process.exit(1) }
         console.log("instance valid")
     },
