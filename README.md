@@ -88,6 +88,11 @@ npx directory-builder webapp build --base /repo/     # production build → weba
 `webapp/{content,exporters}/` into `webapp/dist/` next to the bundle —
 `webapp/dist/` is the complete site, ready to publish as-is.
 
+The two are independent: the dev server never needs a prior build — `webapp
+build` exists only to produce the deployable. Both show whatever `data/` the
+pipeline last produced, so run the pipeline first (and rebuild before
+publishing, or `dist/` keeps the stale snapshot).
+
 For webapp development in this repo:
 
 ```sh
