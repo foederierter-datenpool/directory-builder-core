@@ -11,22 +11,22 @@ export const MERGED_GRAPH = df.namedNode("urn:merged")
 
 const RDF_REIFIES = df.namedNode("http://www.w3.org/1999/02/22-rdf-syntax-ns#reifies")
 
+// Engine invariant, mirrored by the webapp's loadMerge: each derivation's
+// origin hangs off its reifier via prov:wasDerivedFrom.
+const PROV_DERIVED_FROM = df.namedNode("http://www.w3.org/ns/prov#wasDerivedFrom")
+
 export const runMerge = async ({ store, defStore, abs }, outPath, provOutPath) => {
     const [cfg] = await sparqlSelect(`
         PREFIX : <${CDP}>
-        SELECT ?ns ?originPred WHERE {
-            ?match a :MatchRule ; :targetNamespace ?ns .
-            ?merge a :MergeRule ; :originPredicate ?originPred .
-        }`, [defStore])
-    if (!cfg) throw new Error(":MergeRule / :MatchRule config missing in federation.ttl")
-    const { ns: namespace, originPred } = cfg
+        SELECT ?ns WHERE { ?match a :MatchRule ; :targetNamespace ?ns . }`, [defStore])
+    if (!cfg) throw new Error(":MatchRule config missing in federation.ttl")
+    const namespace = cfg.ns
 
     const memberQuads = store.getQuads(null, HAS_MEMBER, null, MATCH_GRAPH)
     const mintedFor = new Map()
     for (const mq of memberQuads) mintedFor.set(mq.object.value, mq.subject)
 
     const fedQuads = store.getQuads(null, null, null, MAPPED_GRAPH)
-    const originPredNode = df.namedNode(originPred)
     const provQuads = []
     for (const qu of fedQuads) {
         const minted = mintedFor.get(qu.subject.value)
@@ -43,7 +43,7 @@ export const runMerge = async ({ store, defStore, abs }, outPath, provOutPath) =
         // per-derivation metadata (time, confidence) has a home when needed.
         const reifier = df.blankNode()
         provQuads.push(df.quad(reifier, RDF_REIFIES, df.quad(minted, qu.predicate, object)))
-        provQuads.push(df.quad(reifier, originPredNode, qu.subject))
+        provQuads.push(df.quad(reifier, PROV_DERIVED_FROM, qu.subject))
     }
 
     const mergedQuads = store.getQuads(null, null, null, MERGED_GRAPH)

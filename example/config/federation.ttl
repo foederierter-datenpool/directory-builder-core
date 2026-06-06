@@ -2,13 +2,12 @@
 @prefix rdfs:   <http://www.w3.org/2000/01/rdf-schema#> .
 @prefix schema: <http://schema.org/> .
 @prefix foaf:   <http://xmlns.com/foaf/0.1/> .
-@prefix prov:   <http://www.w3.org/ns/prov#> .
 @prefix skos:   <http://www.w3.org/2004/02/skos/core#> .
 @prefix ft:     <http://publications.europa.eu/resource/authority/file-type/> .
 
 # A minimal single-entity federation: two directories of libraries, merged into
 # one set of schema:Organization records. Config declares decisions only —
-# sources and their facts, target schema, mappings, match/merge/resolve rules.
+# sources and their facts, target schema, mappings, match/resolve rules.
 # The engines own the step shape (fetch → lift, clean → map → match → merge →
 # resolve) and resolve all file paths by convention from the source names.
 # Add target schemas / mappings / match rules to model more entity types
@@ -18,7 +17,6 @@
     :hasSource       :cityopenSource, :civichubSource ;
     :hasTargetSchema :organisationSchema ;
     :hasMatchRule    :organisationMatch ;
-    :hasMergeRule    :merge ;
     :hasResolveRule  :resolve .
 
 # ---- Target schema ------------------------------------------------------
@@ -121,11 +119,6 @@
     :hasHardCriterion     [ :on schema:postalCode ] ;
     :minScore             0.5 ;
     :hasWeightedCriterion [ :on schema:name ; :weight 1.0 ] .
-
-# ---- Merge --------------------------------------------------------------
-
-:merge a :MergeRule ;
-    :originPredicate prov:wasDerivedFrom .
 
 # ---- Resolve ------------------------------------------------------------
 # One value per predicate per merged record; alphabeticFirst is deterministic.
