@@ -4,3 +4,4 @@
 export { Pipeline } from "./pipeline.js"
 export { ingest } from "./pipeline/ingest.js"
 export { federate } from "./pipeline/federate.js"
+export { validate } from "./validate.js"
