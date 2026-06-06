@@ -69,6 +69,7 @@ export const PATHS = {
     ingestLog:   "data/ingest/ingest-log.ttl",
     federateLog: "data/pipeline/federate-log.ttl",
     mappingQueries: "data/pipeline/direct-mapping-queries/",
+    defaultCleanQuery: (name) => `data/pipeline/default-clean-queries/${name}.sparql`,
     mapped:      "data/pipeline/mapped.ttl",
     matches:     "data/pipeline/matches.ttl",
     merged:      "data/pipeline/merged.ttl",
@@ -113,6 +114,18 @@ export const objectsOf = (quads, predIri) =>
 export const enabledSources = (quads) => {
     const disabled = new Set(quads.filter((q) => q.predicate.value === `${CDP}enabled` && q.object.value === "false").map((q) => q.subject.value))
     return objectsOf(quads, `${CDP}hasSource`).filter((iri) => !disabled.has(iri))
+}
+
+// The source's skolem key for the default clean: the :fieldPath of the source
+// field whose mapping points at the target field with :targetPredicate
+// schema:identifier. Undefined when the source declares no such mapping.
+export const identifierFieldPath = (quads, sourceIri) => {
+    const o = (s, p) => quads.filter((q) => q.subject.value === s && q.predicate.value === `${CDP}${p}`).map((q) => q.object.value)
+    for (const m of quads.filter((q) => q.predicate.value === `${CDP}fromSource` && q.object.value === sourceIri).map((q) => q.subject.value)) {
+        for (const fm of o(m, "hasFieldMapping")) {
+            if (o(o(fm, "to")[0], "targetPredicate")[0] === "http://schema.org/identifier") return o(o(fm, "from")[0], "fieldPath")[0]
+        }
+    }
 }
 
 // Set of subjects typed `rdf:type typeIri`. Iteration order = encounter order.

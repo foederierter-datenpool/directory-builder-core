@@ -1,13 +1,21 @@
 import { sparqlConstruct, storeFromTurtles } from "@foerderfunke/sem-ops-utils"
+import { CDP, identifierFieldPath, PATHS, sourceName } from "../../utils.js"
 import { writeTurtleFile } from "../write-turtle.js"
-import { CDP, PATHS } from "../../utils.js"
 import path from "path"
 import fs from "fs"
 
+// The default clean ships with the engine, like the lift queries.
+const DEFAULT_CLEAN = path.join(import.meta.dirname, "../../clean/default.sparql")
+
 // Clean step: the source's clean.sparql reshapes its lifted RDF into
 // federation subjects (xyz:/cdp: vocabulary only — schema: enters at map).
-export const runClean = async ({ abs }, name) => {
-    const cleanQuery = fs.readFileSync(abs(PATHS.cleanQuery(name)), "utf8")
+// clean.sparql is optional when the source maps a field to schema:identifier:
+// the engine then derives the default clean from that mapping.
+export const runClean = async ({ abs, quads }, sourceIri) => {
+    const name = sourceName(sourceIri)
+    const cleanQuery = fs.existsSync(abs(PATHS.cleanQuery(name)))
+        ? fs.readFileSync(abs(PATHS.cleanQuery(name)), "utf8")
+        : defaultClean({ abs, quads }, sourceIri, name)
     const inDir = PATHS.lifted(name)
     const outPath = PATHS.cleaned(name)
     // Run CONSTRUCT per file so each lifted TTL stays isolated in its
@@ -24,4 +32,19 @@ export const runClean = async ({ abs }, name) => {
         xyz: "http://sparql.xyz/facade-x/data/",
         cdp: CDP,
     })
+}
+
+// No clean.sparql given: resolve the engine's default template with the
+// source's identifier field as skolem key, and put the applied query on
+// record under data/ — no silent fallbacks.
+const defaultClean = ({ abs, quads }, sourceIri, name) => {
+    const idPath = identifierFieldPath(quads, sourceIri)
+    if (!idPath) throw new Error(`${PATHS.cleanQuery(name)} missing and no schema:identifier mapping to derive the default clean from`)
+    const query = fs.readFileSync(DEFAULT_CLEAN, "utf8")
+        .replaceAll("__source__", `<${sourceIri}>`).replaceAll("__name__", name).replaceAll("__idPath__", idPath)
+    const outPath = abs(PATHS.defaultCleanQuery(name))
+    fs.mkdirSync(path.dirname(outPath), { recursive: true })
+    fs.writeFileSync(outPath, query)
+    console.log(`clean  ${name} default (id field: ${idPath}) → ${PATHS.defaultCleanQuery(name)}`)
+    return query
 }

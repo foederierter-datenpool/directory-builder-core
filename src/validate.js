@@ -1,5 +1,5 @@
 import { buildValidator, turtleToDataset } from "@foerderfunke/sem-ops-utils"
-import { CDP, objectsOf, parseTtl, PATHS, shrink, sourceName } from "./utils.js"
+import { CDP, identifierFieldPath, objectsOf, parseTtl, PATHS, shrink, sourceName } from "./utils.js"
 import path from "path"
 import fs from "fs"
 
@@ -19,24 +19,27 @@ export async function validate(root = process.cwd()) {
     return (await Promise.all(checks.map((check) => check(ctx)))).flat()
 }
 
-// Every :hasSource in federation.ttl has its sources/<name>/ folder with
-// clean.sparql and either fetch.js or static/ (the default fetch copies
-// static/) - and no folder exists that the federation doesn't declare.
-// Checks all declared sources, enabled or not: folder presence is a
-// repo-layout contract.
+// Every :hasSource in federation.ttl has what its engine steps need: a
+// fetch.js or static/ to default to, a clean.sparql or a schema:identifier
+// mapping to derive the default clean from - and no sources/ folder exists
+// that the federation doesn't declare. Checks all declared sources, enabled
+// or not: folder presence is a repo-layout contract.
 function sourcesFoldersInSync({ abs, quads }) {
-    const declared = objectsOf(quads, `${CDP}hasSource`).map(sourceName)
+    const declared = objectsOf(quads, `${CDP}hasSource`)
     const problems = []
-    for (const name of declared) {
+    for (const iri of declared) {
+        const name = sourceName(iri)
         if (![PATHS.fetchScript(name), PATHS.staticDir(name)].some((f) => fs.existsSync(abs(f))))
             problems.push(`${PATHS.fetchScript(name)} missing and no ${PATHS.staticDir(name)} to default to`)
-        if (!fs.existsSync(abs(PATHS.cleanQuery(name)))) problems.push(`${PATHS.cleanQuery(name)} missing`)
+        if (!fs.existsSync(abs(PATHS.cleanQuery(name))) && !identifierFieldPath(quads, iri))
+            problems.push(`${PATHS.cleanQuery(name)} missing and no schema:identifier mapping to derive the default clean from`)
     }
+    const declaredNames = declared.map(sourceName)
     const folders = fs.existsSync(abs("sources"))
         ? fs.readdirSync(abs("sources"), { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name)
         : []
     for (const name of folders) {
-        if (!declared.includes(name)) problems.push(`sources/${name}/ has no :hasSource declaration in ${PATHS.federation}`)
+        if (!declaredNames.includes(name)) problems.push(`sources/${name}/ has no :hasSource declaration in ${PATHS.federation}`)
     }
     return problems
 }

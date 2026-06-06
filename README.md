@@ -66,7 +66,10 @@ Each source's `fetch.js` is invoked as `node fetch.js <outDir> <fetchUrl-or-stat
 <runParamsJson>` — the JSON holds all `:hasRunParam` values grouped by name;
 each fetcher picks the parameters it needs. For static-file sources `fetch.js`
 is optional: without one, the default fetch copies `sources/<name>/static/`
-verbatim.
+verbatim. `clean.sparql` is likewise optional when the source maps a field to
+`schema:identifier`: the engine derives a default clean from that mapping —
+skolemise on the identifier field, copy the scalar fields — and puts the
+resolved query on record under `data/pipeline/default-clean-queries/`.
 
 A source declared with `:enabled false` stays in the config but is skipped by
 the engines and hidden from the webapp's Sources page — e.g. while its files

@@ -26,17 +26,17 @@ export async function federate(root = process.cwd()) {
     const abs = (p) => path.join(root, p)
     const federationTtl = fs.readFileSync(abs(PATHS.federation), "utf8")
     const defStore = storeFromTurtles([federationTtl, fs.readFileSync(abs(PATHS.matchKnowledge), "utf8")])
-    const sources = enabledSources(parseTtl(federationTtl))
+    const federationQuads = parseTtl(federationTtl)
+    const sources = enabledSources(federationQuads)
 
     const store = newStore()
     const journal = stepJournal()
-    const ctx = { store, defStore, abs }
+    const ctx = { store, defStore, abs, quads: federationQuads }
 
     const cleanSteps = []
     for (const src of sources) {
-        const name = sourceName(src)
-        cleanSteps.push(await journal.step("clean", { source: src, after: [stepIri("lift", name)] },
-            () => runClean(ctx, name)))
+        cleanSteps.push(await journal.step("clean", { source: src, after: [stepIri("lift", sourceName(src))] },
+            () => runClean(ctx, src)))
     }
 
     // Load each source's cleaned TTL into its own graph — plain mechanics, not a
