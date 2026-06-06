@@ -20,16 +20,17 @@ export async function validate(root = process.cwd()) {
 }
 
 // Every :hasSource in federation.ttl has its sources/<name>/ folder with
-// fetch.js + clean.sparql - and no folder exists that the federation doesn't
-// declare. Checks all declared sources, enabled or not: folder presence is a
+// clean.sparql and either fetch.js or static/ (the default fetch copies
+// static/) - and no folder exists that the federation doesn't declare.
+// Checks all declared sources, enabled or not: folder presence is a
 // repo-layout contract.
 function sourcesFoldersInSync({ abs, quads }) {
     const declared = objectsOf(quads, `${CDP}hasSource`).map(sourceName)
     const problems = []
     for (const name of declared) {
-        for (const file of [PATHS.fetchScript(name), PATHS.cleanQuery(name)]) {
-            if (!fs.existsSync(abs(file))) problems.push(`${file} missing`)
-        }
+        if (![PATHS.fetchScript(name), PATHS.staticDir(name)].some((f) => fs.existsSync(abs(f))))
+            problems.push(`${PATHS.fetchScript(name)} missing and no ${PATHS.staticDir(name)} to default to`)
+        if (!fs.existsSync(abs(PATHS.cleanQuery(name)))) problems.push(`${PATHS.cleanQuery(name)} missing`)
     }
     const folders = fs.existsSync(abs("sources"))
         ? fs.readdirSync(abs("sources"), { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name)

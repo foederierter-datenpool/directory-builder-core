@@ -64,7 +64,9 @@ fixture.
 
 Each source's `fetch.js` is invoked as `node fetch.js <outDir> <fetchUrl-or-staticDir>
 <runParamsJson>` — the JSON holds all `:hasRunParam` values grouped by name;
-each fetcher picks the parameters it needs.
+each fetcher picks the parameters it needs. For static-file sources `fetch.js`
+is optional: without one, the default fetch copies `sources/<name>/static/`
+verbatim.
 
 A source declared with `:enabled false` stays in the config but is skipped by
 the engines and hidden from the webapp's Sources page — e.g. while its files
