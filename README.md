@@ -11,7 +11,7 @@ artefacts — no engine code:
 config/
   federation.ttl        # the decisions: sources + facts, target schemas,
                         # field mappings, match/merge/resolve rules
-  match-knowledge.ttl   # curated owl:sameAs pairs
+  match-knowledge.ttl   # optional: curated owl:sameAs pairs
 sources/<name>/
   fetch.js              # how to fetch this source
   clean.sparql          # how to clean its lifted RDF

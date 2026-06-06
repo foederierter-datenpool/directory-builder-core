@@ -25,7 +25,9 @@ const df = DataFactory
 export async function federate(root = process.cwd()) {
     const abs = (p) => path.join(root, p)
     const federationTtl = fs.readFileSync(abs(PATHS.federation), "utf8")
-    const defStore = storeFromTurtles([federationTtl, fs.readFileSync(abs(PATHS.matchKnowledge), "utf8")])
+    // match-knowledge.ttl (curated owl:sameAs pairs) is optional — no file, no manual matches.
+    const matchKnowledge = fs.existsSync(abs(PATHS.matchKnowledge)) ? [fs.readFileSync(abs(PATHS.matchKnowledge), "utf8")] : []
+    const defStore = storeFromTurtles([federationTtl, ...matchKnowledge])
     const federationQuads = parseTtl(federationTtl)
     const sources = enabledSources(federationQuads)
 
