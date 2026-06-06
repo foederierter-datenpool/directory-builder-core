@@ -87,7 +87,6 @@
 :cityopen-mapping a :Mapping ;
     :fromSource  :cityopenSource ;
     :toTarget    :organisationSchema ;
-    :sourceGraph <urn:source:cityopen> ;
     :hasFieldMapping
         [ :from :co-id         ; :to :t-identifier    ] ,
         [ :from :co-name       ; :to :t-name          ] ,
@@ -101,7 +100,6 @@
 :civichub-mapping a :Mapping ;
     :fromSource  :civichubSource ;
     :toTarget    :organisationSchema ;
-    :sourceGraph <urn:source:civichub> ;
     :hasFieldMapping
         [ :from :ch-uid         ; :to :t-identifier    ] ,
         [ :from :ch-bezeichnung ; :to :t-name          ] ,

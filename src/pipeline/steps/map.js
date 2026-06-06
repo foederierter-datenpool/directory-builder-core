@@ -1,5 +1,5 @@
 import { sparqlInsertDelete, sparqlSelect } from "@foerderfunke/sem-ops-utils"
-import { buildPrefixBlock, CDP, PATHS, shrink, sourceName } from "../../utils.js"
+import { buildPrefixBlock, CDP, PATHS, shrink, sourceGraph, sourceName } from "../../utils.js"
 import { DataFactory } from "n3"
 import path from "path"
 import fs from "fs"
@@ -88,10 +88,9 @@ ${insertBlock}
 export const runMap = async ({ store, defStore, abs }, queriesDir) => {
     const mappings = await sparqlSelect(`
         PREFIX : <${CDP}>
-        SELECT ?mapping ?source ?sourceGraph ?target ?targetClass WHERE {
+        SELECT ?mapping ?source ?target ?targetClass WHERE {
             ?mapping a :Mapping ;
                 :fromSource ?source .
-            OPTIONAL { ?mapping :sourceGraph ?sourceGraph }
             OPTIONAL { ?mapping :toTarget ?target }
             OPTIONAL { ?mapping :toTarget/:targetClass ?targetClass }
         } ORDER BY ?mapping`, [defStore])
@@ -108,9 +107,11 @@ export const runMap = async ({ store, defStore, abs }, queriesDir) => {
                 OPTIONAL { ?parent :hasSubField ?src . ?parent :fieldPath ?parentPath }
             }`, [defStore])
 
-        if (directRows.length && m.sourceGraph) {
+        if (directRows.length) {
             const localName = m.mapping.split("#").pop()
-            const query = buildDirectInsert(m, directRows)
+            // The mapping's source graph follows by convention from :fromSource —
+            // the load step names it the same way.
+            const query = buildDirectInsert({ ...m, sourceGraph: sourceGraph(sourceName(m.source)) }, directRows)
             const queryPath = abs(path.join(queriesDir, `${localName}.sparql`))
             fs.mkdirSync(path.dirname(queryPath), { recursive: true })
             fs.writeFileSync(queryPath, query)
@@ -139,9 +140,9 @@ export const runMap = async ({ store, defStore, abs }, queriesDir) => {
     // the merge step rewrites them to the minted cluster IRIs.
     const linkRows = await sparqlSelect(`
         PREFIX : <${CDP}>
-        SELECT ?mapping ?sourceGraph ?fromSchema ?sourcePredicate ?targetPredicate ?toSchema WHERE {
+        SELECT ?mapping ?source ?fromSchema ?sourcePredicate ?targetPredicate ?toSchema WHERE {
             ?mapping a :Mapping ;
-                :sourceGraph     ?sourceGraph ;
+                :fromSource      ?source ;
                 :toTarget        ?fromSchema ;
                 :hasRelationship ?rel .
             ?rel :sourcePredicate ?sourcePredicate ;
@@ -160,7 +161,7 @@ INSERT {
         ?from ${short(rel.targetPredicate)} ?to .
     }
 } WHERE {
-    GRAPH <${rel.sourceGraph}> {
+    GRAPH <${sourceGraph(sourceName(rel.source))}> {
         ?from ${short(rel.sourcePredicate)} ?to ;
               cdp:targetSchema ${short(rel.fromSchema)} .
         ?to cdp:targetSchema ${short(rel.toSchema)} .
