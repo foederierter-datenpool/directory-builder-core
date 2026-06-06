@@ -8,3 +8,4 @@ example/data/
 example/tools/
 example/webapp/
 webapp/dist/
+test/tmp/
