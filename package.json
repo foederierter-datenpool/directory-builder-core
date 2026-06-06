@@ -7,6 +7,7 @@
   "license": "MIT",
   "type": "module",
   "scripts": {
+    "test": "node --test",
     "example": "cd example && node ../bin/cli.js",
     "webapp": "vite webapp",
     "webapp:build": "vite build webapp"
