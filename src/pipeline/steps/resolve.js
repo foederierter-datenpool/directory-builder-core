@@ -26,11 +26,12 @@ export const runResolve = async ({ store, defStore, abs }, outPath) => {
     const [cfg] = await sparqlSelect(`
         PREFIX : <${CDP}>
         SELECT ?strategy ?ns WHERE {
-            ?resolve a :ResolveRule ; :defaultStrategy ?strategy .
-            ?match   a :MatchRule   ; :targetNamespace ?ns .
+            ?match a :MatchRule ; :targetNamespace ?ns .
+            OPTIONAL { ?resolve a :ResolveRule ; :defaultStrategy ?strategy }
         }`, [defStore])
-    if (!cfg) throw new Error(":ResolveRule config missing in federation.ttl")
-    const defaultPick = lookupStrategy(cfg.strategy)
+    if (!cfg) throw new Error(":MatchRule config missing in federation.ttl")
+    // No :ResolveRule (or none with a :defaultStrategy) → alphabeticFirst.
+    const defaultPick = lookupStrategy(cfg.strategy ?? `${CDP}alphabeticFirst`)
 
     const overrideRows = await sparqlSelect(`
         PREFIX : <${CDP}>
