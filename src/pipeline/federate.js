@@ -58,7 +58,7 @@ export async function federate(root = process.cwd()) {
         await writeTurtleFile(abs(PATHS.mapped), mappedQuads, { ...COMMON_PREFIXES, cdp: CDP })
         console.log(`map: wrote ${mappedQuads.length} triples → ${PATHS.mapped}`)
     })
-    const matchStep   = await journal.step("match",   { after: [mapStep] },   () => runMatch(ctx, PATHS.matches))
+    const matchStep   = await journal.step("match",   { after: [mapStep] },   () => runMatch(ctx, PATHS.matches, PATHS.registry))
     const mergeStep   = await journal.step("merge",   { after: [matchStep] }, () => runMerge(ctx, PATHS.merged, PATHS.provenance))
     await journal.step("resolve", { after: [mergeStep] }, () => runResolve(ctx, PATHS.final))
 

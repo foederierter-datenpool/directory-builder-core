@@ -1,10 +1,11 @@
 import { sparqlSelect } from "@foerderfunke/sem-ops-utils"
 import { COMMON_PREFIXES, writeTurtleFile } from "../write-turtle.js"
 import { MAPPED_GRAPH } from "./map.js"
-import { CDP } from "../../utils.js"
+import { CDP, parseTtl } from "../../utils.js"
 import { token_set_ratio } from "fuzzball"
 import { DataFactory } from "n3"
 import { createHash } from "crypto"
+import fs from "fs"
 
 const df = DataFactory
 
@@ -22,7 +23,22 @@ const MATCH_CLUSTER = df.namedNode(CDP + "MatchCluster")
 const SIMILARITY_ALGORITHM = "token_set_ratio"
 const similarity = (a, b) => token_set_ratio(a ?? "", b ?? "") / 100
 
-export const runMatch = async ({ store, defStore, abs }, outPath) => {
+export const runMatch = async ({ store, defStore, abs }, outPath, registryPath) => {
+    // The identity registry (minted IRI :hasMember source IRI, one assignment
+    // per member) makes minting write-once: an entity's IRI is computed at
+    // most once — at first sight — recorded here, and afterwards only looked
+    // up, so membership can change without identity churn. Instance state to
+    // commit, neither config nor regenerable data; empty on a fresh instance.
+    const registry = new Map() // member source IRI → minted IRI
+    if (fs.existsSync(abs(registryPath))) {
+        for (const q of parseTtl(fs.readFileSync(abs(registryPath), "utf8"))) {
+            if (q.predicate.value === HAS_MEMBER.value) registry.set(q.object.value, q.subject.value)
+        }
+    }
+    const reserved = new Set(registry.values()) // every IRI ever minted — never mint one again
+    const taken = new Set()                     // minted IRIs claimed by a cluster this run
+    let reusedCount = 0, mintedCount = 0
+
     // One match rule per target schema; each rule scores its own fields, mints
     // with its own prefix, and clusters only subjects of its :targetClass.
     const rules = await sparqlSelect(`
@@ -169,8 +185,30 @@ export const runMatch = async ({ store, defStore, abs }, outPath) => {
         let multiSource = 0
         const clusterIriByRoot = new Map()
         for (const members of clusterMembers) {
-            const id = createHash("sha1").update(members.join("|")).digest("hex").slice(0, 12)
-            const minted = df.namedNode(namespace + mintedPrefix + id)
+            // Reconcile against the registry: any member already known → its
+            // entity exists, reuse the IRI (clusters come largest-first, so on
+            // a split the larger fragment keeps the identity). Only unseen
+            // entities mint, seeded by their smallest member at mint time — a
+            // one-time uniqueness seed, not a content address: the registry
+            // pins the IRI afterwards, however membership evolves.
+            const prior = [...new Set(members.map(m => registry.get(m)).filter(Boolean))].sort()
+            const free = prior.filter(iri => !taken.has(iri))
+            let minted
+            if (free.length) {
+                if (prior.length > 1) console.warn(`match: clusters merged (${prior.join(" + ")}) — keeping ${free[0]}`)
+                minted = df.namedNode(free[0])
+                reusedCount++
+            } else {
+                if (prior.length) console.warn(`match: cluster split off ${prior.join(", ")} — minting fresh`)
+                let id = createHash("sha1").update(members[0]).digest("hex").slice(0, 12)
+                // Seed collision (e.g. a split remainder re-hashing its old anchor): re-hash until free.
+                while (taken.has(namespace + mintedPrefix + id) || reserved.has(namespace + mintedPrefix + id))
+                    id = createHash("sha1").update(id).digest("hex").slice(0, 12)
+                minted = df.namedNode(namespace + mintedPrefix + id)
+                mintedCount++
+            }
+            taken.add(minted.value)
+            for (const m of members) registry.set(m, minted.value)
             clusterIriByRoot.set(find(members[0]), minted)
             if (members.length > 1) multiSource++
             store.addQuad(df.quad(minted, RDF_TYPE, MATCH_CLUSTER, MATCH_GRAPH))
@@ -209,4 +247,8 @@ export const runMatch = async ({ store, defStore, abs }, outPath) => {
     const matchQuads = store.getQuads(null, null, null, MATCH_GRAPH)
     await writeTurtleFile(abs(outPath), matchQuads, { cdp: CDP, cdf: rules[0].ns, ...COMMON_PREFIXES })
     console.log(`match: wrote cluster log → ${outPath}`)
+
+    await writeTurtleFile(abs(registryPath), [...registry].map(([member, minted]) =>
+        df.quad(df.namedNode(minted), HAS_MEMBER, df.namedNode(member))), { cdp: CDP, cdf: rules[0].ns })
+    console.log(`match: identity registry ${reusedCount} reused, ${mintedCount} minted → ${registryPath}`)
 }
