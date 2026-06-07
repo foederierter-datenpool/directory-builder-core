@@ -1,7 +1,7 @@
 import { sparqlSelect } from "@foerderfunke/sem-ops-utils"
 import { COMMON_PREFIXES, writeTurtleFile } from "../write-turtle.js"
 import { MAPPED_GRAPH } from "./map.js"
-import { CDP, parseTtl } from "../../utils.js"
+import { CDP, parseTtl, shrink } from "../../utils.js"
 import { token_set_ratio } from "fuzzball"
 import { DataFactory } from "n3"
 import { createHash } from "crypto"
@@ -23,7 +23,7 @@ const MATCH_CLUSTER = df.namedNode(CDP + "MatchCluster")
 const SIMILARITY_ALGORITHM = "token_set_ratio"
 const similarity = (a, b) => token_set_ratio(a ?? "", b ?? "") / 100
 
-export const runMatch = async ({ store, defStore, abs }, outPath, registryPath) => {
+export const runMatch = async ({ store, defStore, abs }, outPath, registryPath, historyPath) => {
     // The identity registry (minted IRI :hasMember source IRI, one assignment
     // per member) makes minting write-once: an entity's IRI is computed at
     // most once — at first sight — recorded here, and afterwards only looked
@@ -36,8 +36,14 @@ export const runMatch = async ({ store, defStore, abs }, outPath, registryPath) 
         }
     }
     const reserved = new Set(registry.values()) // every IRI ever minted — never mint one again
+    const known    = new Set(registry.keys())   // members assigned in a prior run
     const taken = new Set()                     // minted IRIs claimed by a cluster this run
     let reusedCount = 0, mintedCount = 0
+    // Identity events this run, appended to history.ttl (the registry's
+    // provenance): when each entity was first minted, gained a member, or
+    // absorbed/split off another. Append-only and written only when non-empty,
+    // so a no-change harvest leaves the file — and its git diff — untouched.
+    const events = []
 
     // One match rule per target schema; each rule scores its own fields, mints
     // with its own prefix, and clusters only subjects of its :targetClass.
@@ -194,10 +200,18 @@ export const runMatch = async ({ store, defStore, abs }, outPath, registryPath) 
             const prior = [...new Set(members.map(m => registry.get(m)).filter(Boolean))].sort()
             const free = prior.filter(iri => !taken.has(iri))
             let minted
+            // TODO: merge and split (prior carrying ≥2 IRIs in the reuse branch,
+            // or any prior in the mint branch) are reconciled correctly — a
+            // survivor keeps the IRI — but their history events (:Merged /
+            // :Split) and the tombstone they imply (the retired IRI preserved
+            // with :isReplacedBy, rather than silently vanishing from
+            // identity.ttl) are their own rung. For now they only warn.
             if (free.length) {
-                if (prior.length > 1) console.warn(`match: clusters merged (${prior.join(" + ")}) — keeping ${free[0]}`)
                 minted = df.namedNode(free[0])
                 reusedCount++
+                const joined = members.filter(m => !known.has(m))
+                if (joined.length) events.push({ type: "MemberJoined", entity: free[0], member: joined })
+                if (prior.length > 1) console.warn(`match: clusters merged (${prior.join(" + ")}) — keeping ${free[0]}`)
             } else {
                 if (prior.length) console.warn(`match: cluster split off ${prior.join(", ")} — minting fresh`)
                 let id = createHash("sha1").update(members[0]).digest("hex").slice(0, 12)
@@ -206,6 +220,7 @@ export const runMatch = async ({ store, defStore, abs }, outPath, registryPath) 
                     id = createHash("sha1").update(id).digest("hex").slice(0, 12)
                 minted = df.namedNode(namespace + mintedPrefix + id)
                 mintedCount++
+                if (!prior.length) events.push({ type: "Minted", entity: minted.value, member: members })
             }
             taken.add(minted.value)
             for (const m of members) registry.set(m, minted.value)
@@ -251,4 +266,38 @@ export const runMatch = async ({ store, defStore, abs }, outPath, registryPath) 
     await writeTurtleFile(abs(registryPath), [...registry].map(([member, minted]) =>
         df.quad(df.namedNode(minted), HAS_MEMBER, df.namedNode(member))), { cdp: CDP, cdf: rules[0].ns })
     console.log(`match: identity registry ${reusedCount} reused, ${mintedCount} minted → ${registryPath}`)
+
+    // Append this run's events to the history (the registry's provenance) as
+    // one :Revision node carrying the timestamp, with each event hung off it as
+    // a nested [entity ; members] binding under a type predicate (cdp:minted /
+    // cdp:memberJoined). Revisions count only changing runs — a no-op harvest
+    // appends nothing — so the next number is one past the highest on file. The
+    // whole block is one append, so the named :Revision and its fresh blank
+    // nodes never collide with earlier revisions when the file is re-parsed.
+    if (events.length) {
+        const prefixes = { cdp: CDP, cdf: rules[0].ns }
+        const sh   = (iri) => shrink(iri, prefixes)
+        const list = (arr) => arr.map(sh).join(", ")
+        const existing = fs.existsSync(abs(historyPath)) ? fs.readFileSync(abs(historyPath), "utf8") : ""
+        const rev = Math.max(0, ...[...existing.matchAll(/revision-(\d+)/g)].map(m => +m[1])) + 1
+
+        const byPredicate = new Map() // cdp:minted / cdp:memberJoined → binding strings
+        for (const e of events) {
+            const pred = "cdp:" + e.type[0].toLowerCase() + e.type.slice(1)
+            if (!byPredicate.has(pred)) byPredicate.set(pred, [])
+            byPredicate.get(pred).push(`[ cdp:entity ${sh(e.entity)} ; cdp:member ${list(e.member)} ]`)
+        }
+        const props = [...byPredicate].map(([pred, bindings]) =>
+            `    ${pred}\n        ${bindings.join(" ,\n        ")}`).join(" ;\n")
+        const block = `cdp:revision-${rev} a cdp:Revision ; prov:atTime "${new Date().toISOString()}"^^xsd:dateTime ;\n${props} .\n`
+
+        const header = `@prefix cdp:  <${CDP}> .
+@prefix cdf:  <${rules[0].ns}> .
+@prefix prov: <http://www.w3.org/ns/prov#> .
+@prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .
+
+`
+        fs.appendFileSync(abs(historyPath), (existing ? "\n" : header) + block)
+        console.log(`match: revision ${rev} — ${events.length} identity event(s) → ${historyPath}`)
+    }
 }

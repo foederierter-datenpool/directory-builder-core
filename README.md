@@ -19,6 +19,8 @@ sources/<name>/
 registry/
   identity.ttl          # engine-maintained: minted entity IRIs and their
                         # source members — accumulated state, commit it
+  history.ttl           # engine-maintained: append-only log of identity
+                        # events (mint, member joined)
 webapp/
   content/about.md      # optional: the webapp's About page prose
   exporters/<name>.js   # optional: output adapters the webapp loads at runtime
@@ -85,8 +87,14 @@ Minting is write-once: the match step keeps an identity registry
 (`registry/identity.ttl`, created on the first run) assigning each source
 record to its minted entity IRI. A cluster with a known member reuses the
 registered IRI, so identities survive re-harvests however membership evolves;
-only unseen entities mint fresh. Unlike `data/`, the registry is accumulated
-state, not derived output — commit it, and review its diff after each harvest.
+only unseen entities mint fresh. Alongside it, `registry/history.ttl` is an
+append-only log of identity events (mint, member joined) grouped under a
+timestamped `:Revision` node per changing run — the registry's provenance,
+where the snapshot in `identity.ttl` came from. Both are written only when
+something changes, so a no-op harvest leaves them — and their git diff —
+untouched, and the revision counter only advances when identity actually moves.
+Unlike `data/`, the registry is accumulated state, not derived output — commit
+it, and review its diff after each harvest.
 
 ## Run the webapp
 
