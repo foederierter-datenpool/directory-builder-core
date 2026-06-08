@@ -20,6 +20,7 @@ const MATCH_CLUSTER = df.namedNode(CDP + "MatchCluster")
 // word-order variations. Returns 0–100; we normalise to 0–1. The algorithm
 // name is recorded in the evidence graph so old similarity numbers stay
 // interpretable across algorithm swaps.
+// https://github.com/nol13/fuzzball.js/blob/master/jsdocs/fuzzball.md#fuzzballtoken_set_ratiostr1-str2-options_p--number
 const SIMILARITY_ALGORITHM = "token_set_ratio"
 const similarity = (a, b) => token_set_ratio(a ?? "", b ?? "") / 100
 
@@ -134,6 +135,7 @@ export const runMatch = async ({ store, defStore, abs }, outPath, registryPath, 
         const matches = (a, b) => {
             if (!hard.length && !weighted.length) return null
             const ha = hardVals.get(a), hb = hardVals.get(b)
+
             for (let i = 0; i < hard.length; i++) {
                 if (ha[i] == null || hb[i] == null || ha[i] !== hb[i]) return null
             }
@@ -171,10 +173,33 @@ export const runMatch = async ({ store, defStore, abs }, outPath, registryPath, 
             if (parent.has(a) && parent.has(b)) { union(a, b); sameAsUnions++; evidence.push({ a, b, manual: true }) }
         }
 
-        for (let i = 0; i < subjects.length; i++) {
-            for (let j = i + 1; j < subjects.length; j++) {
-                const m = matches(subjects[i], subjects[j])
-                if (m) { union(subjects[i], subjects[j]); evidence.push({ a: subjects[i], b: subjects[j], ...m }) }
+        // Grouping turns the O(n²) all-pairs scan into a per-bucket
+        // O(Σ mᵢ²) one. The hard checks are redundant after bucketing, 
+        // but introduces a cheap correctness check
+        // buckets: a subject's bucket key is the JSON of its hard
+        // value **tuple** (hardVals), so subjects sharing identical hard values
+        // land in the same bucket. 
+        const buckets = new Map()
+        if (hard.length) {
+            for (const s of subjects) {
+                const hv = hardVals.get(s)
+                if (hv.some(v => v == null)) continue
+                const key = JSON.stringify(hv)
+                if (!buckets.has(key)){
+                    buckets.set(key, [])
+                }
+                buckets.get(key).push(s)
+            }
+        } else {
+            buckets.set("", subjects)
+        }
+
+        for (const bucket of buckets.values()) {
+            for (let i = 0; i < bucket.length; i++) {
+                for (let j = i + 1; j < bucket.length; j++) {
+                    const m = matches(bucket[i], bucket[j])
+                    if (m) { union(bucket[i], bucket[j]); evidence.push({ a: bucket[i], b: bucket[j], ...m }) }
+                }
             }
         }
 
@@ -256,7 +281,7 @@ export const runMatch = async ({ store, defStore, abs }, outPath, registryPath, 
             }
         }
 
-        console.log(`match: ${rule.match.split("#").pop()} ${subjects.length} entities → ${clusters.size} clusters (${multiSource} multi-source, ${sameAsUnions} sameAs unions)`)
+        console.log(`match: ${rule.match.split("#").pop()} ${subjects.length} entities in ${buckets.size} bucket(s) → ${clusters.size} clusters (${multiSource} multi-source, ${sameAsUnions} sameAs unions)`)
     }
 
     const matchQuads = store.getQuads(null, null, null, MATCH_GRAPH)

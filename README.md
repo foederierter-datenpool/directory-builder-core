@@ -145,6 +145,10 @@ exported separately so bundlers never see the engines' Node imports:
 import { CDP, parseTtl, PATHS } from "@directory-builder/core/utils"
 ```
 
+## Limitations for large datasets
+
+- A good hard criterion splits the data into many small groups; a postal code is a typical example. Without any hard criterion every subject lands in one bucket and matching degrades to a full all-pairs O(n²·k) scan, so cost grows quadratically with the number of subjects.
+
 ## Roadmap
 
 - Testing
