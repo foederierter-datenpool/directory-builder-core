@@ -46,6 +46,10 @@
 :cityopenSource a :Source ;
     rdfs:label    "CityOpen Data" ;
     skos:notation "co" ;
+    # :dedupWithinSource false ;   # optional, default true. Set false for a
+    #   source whose own ids already distinguish its entities — the matcher then
+    #   skips same-source pairs and only fuzzy-matches this source against the
+    #   others. Curated owl:sameAs still merges same-source records explicitly.
     :retrieval    "Files" ;
     :format       ft:JSON ;
     :hasField :co-id, :co-name, :co-street, :co-postalCode, :co-city, :co-phone, :co-email, :co-website .

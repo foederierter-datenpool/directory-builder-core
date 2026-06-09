@@ -94,6 +94,29 @@ export const runMatch = async ({ store, defStore, abs }, outPath, registryPath, 
         PREFIX owl: <http://www.w3.org/2002/07/owl#>
         SELECT ?a ?b WHERE { ?a owl:sameAs ?b }`, [defStore])
 
+    // owl:differentFrom pins two records apart — a curated veto on a merge. The
+    // pairwise scan below never unions a distinct pair, even when its score clears
+    // the rule (e.g. two co-located einrichtungen whose names overlap).
+    const differentRows = await sparqlSelect(`
+        PREFIX owl: <http://www.w3.org/2002/07/owl#>
+        SELECT ?a ?b WHERE { ?a owl:differentFrom ?b }`, [defStore])
+    const distinctPairs = new Set()
+    for (const { a, b } of differentRows) { distinctPairs.add(`${a}|${b}`); distinctPairs.add(`${b}|${a}`) }
+
+    // Each record's source (cdp:fromSource), and whether a source dedups within
+    // itself. A source whose own IDs already distinguish its entities sets
+    // :dedupWithinSource false, so the pairwise scan skips same-source pairs —
+    // only cross-source pairs fuzzy-match. Default true. Explicit owl:sameAs
+    // still merges same-source pairs (it runs earlier, ungated by this).
+    const FROM_SOURCE = df.namedNode(CDP + "fromSource")
+    const sourceOf = new Map()
+    for (const q of store.getQuads(null, FROM_SOURCE, null, MAPPED_GRAPH)) sourceOf.set(q.subject.value, q.object.value)
+    const dedupRows = await sparqlSelect(`
+        PREFIX : <${CDP}>
+        SELECT ?source ?dedup WHERE { ?source a :Source . OPTIONAL { ?source :dedupWithinSource ?dedup } }`, [defStore])
+    const dedupWithinSource = new Map(dedupRows.map(r => [r.source, r.dedup !== "false"]))
+    const dedupsWithin = (src) => dedupWithinSource.get(src) ?? true
+
     const MATCH_EVIDENCE     = df.namedNode(CDP + "MatchEvidence")
     const HAS_MATCH_EVIDENCE = df.namedNode(CDP + "hasMatchEvidence")
     const PAIR               = df.namedNode(CDP + "pair")
@@ -169,6 +192,7 @@ export const runMatch = async ({ store, defStore, abs }, outPath, registryPath, 
 
         const evidence = []
         let sameAsUnions = 0
+        let keptDistinct = 0
         for (const { a, b } of sameAsRows) {
             if (parent.has(a) && parent.has(b)) { union(a, b); sameAsUnions++; evidence.push({ a, b, manual: true }) }
         }
@@ -197,8 +221,12 @@ export const runMatch = async ({ store, defStore, abs }, outPath, registryPath, 
         for (const bucket of buckets.values()) {
             for (let i = 0; i < bucket.length; i++) {
                 for (let j = i + 1; j < bucket.length; j++) {
-                    const m = matches(bucket[i], bucket[j])
-                    if (m) { union(bucket[i], bucket[j]); evidence.push({ a: bucket[i], b: bucket[j], ...m }) }
+                    const a = bucket[i], b = bucket[j], sa = sourceOf.get(a)
+                    if (sa === sourceOf.get(b) && !dedupsWithin(sa)) continue  // source trusts its own IDs
+                    const m = matches(a, b)
+                    if (!m) continue
+                    if (distinctPairs.has(`${a}|${b}`)) { keptDistinct++; continue }  // owl:differentFrom veto
+                    union(a, b); evidence.push({ a, b, ...m })
                 }
             }
         }
@@ -213,7 +241,7 @@ export const runMatch = async ({ store, defStore, abs }, outPath, registryPath, 
             .map(m => [...m].sort())
             .sort((a, b) => b.length - a.length || a[0].localeCompare(b[0]))
 
-        let multiSource = 0
+        let multiMember = 0
         const clusterIriByRoot = new Map()
         for (const members of clusterMembers) {
             // Reconcile against the registry: any member already known → its
@@ -250,7 +278,7 @@ export const runMatch = async ({ store, defStore, abs }, outPath, registryPath, 
             taken.add(minted.value)
             for (const m of members) registry.set(m, minted.value)
             clusterIriByRoot.set(find(members[0]), minted)
-            if (members.length > 1) multiSource++
+            if (members.length > 1) multiMember++
             store.addQuad(df.quad(minted, RDF_TYPE, MATCH_CLUSTER, MATCH_GRAPH))
             for (const s of members) {
                 store.addQuad(df.quad(minted, HAS_MEMBER, df.namedNode(s), MATCH_GRAPH))
@@ -281,7 +309,7 @@ export const runMatch = async ({ store, defStore, abs }, outPath, registryPath, 
             }
         }
 
-        console.log(`match: ${rule.match.split("#").pop()} ${subjects.length} entities in ${buckets.size} bucket(s) → ${clusters.size} clusters (${multiSource} multi-source, ${sameAsUnions} sameAs unions)`)
+        console.log(`match: ${rule.match.split("#").pop()} ${subjects.length} entities in ${buckets.size} bucket(s) → ${clusters.size} clusters (${multiMember} multi-member, ${sameAsUnions} sameAs unions, ${keptDistinct} kept distinct)`)
     }
 
     const matchQuads = store.getQuads(null, null, null, MATCH_GRAPH)

@@ -19,6 +19,7 @@ const HARD_CRITERION = `${CDP}hasHardCriterion`
 const WEIGHTED_CRITERION = `${CDP}hasWeightedCriterion`
 const ON = `${CDP}on`
 const OWL_SAME_AS = "http://www.w3.org/2002/07/owl#sameAs"
+const OWL_DIFFERENT_FROM = "http://www.w3.org/2002/07/owl#differentFrom"
 
 const prefixed = (iri) => shrink(iri, displayPrefixes)
 
@@ -41,9 +42,14 @@ const manualPairs = parseTtl(matchKnowledgeTtl)
     .filter(q => q.predicate.value === OWL_SAME_AS)
     .map(q => [q.subject.value, q.object.value])
 
+const distinctPairs = parseTtl(matchKnowledgeTtl)
+    .filter(q => q.predicate.value === OWL_DIFFERENT_FROM)
+    .map(q => [q.subject.value, q.object.value])
+
 function MemberDetailsModal({ clusterId, memberIris, onClose }) {
     const memberSet = new Set(memberIris)
     const manualHere = manualPairs.filter(([a, b]) => memberSet.has(a) && memberSet.has(b))
+    const distinctHere = distinctPairs.filter(([a, b]) => memberSet.has(a) || memberSet.has(b))
     return (
         <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", zIndex: 9999, display: "flex", justifyContent: "center", alignItems: "flex-start", paddingTop: 60, overflowY: "auto" }}>
             <div onClick={(e) => e.stopPropagation()} style={{ background: "white", borderRadius: 6, padding: 20, minWidth: 480, maxWidth: 800, boxShadow: "0 8px 24px rgba(0,0,0,0.3)" }}>
@@ -75,6 +81,16 @@ function MemberDetailsModal({ clusterId, memberIris, onClose }) {
                         {manualHere.map(([a, b], i) => (
                             <div key={i} style={{ fontSize: 11, color: "#555", marginBottom: 2 }}>
                                 <code>{prefixed(a)}</code> <span style={{ color: "#999" }}>owl:sameAs</span> <code>{prefixed(b)}</code>
+                            </div>
+                        ))}
+                    </div>
+                )}
+                {distinctHere.length > 0 && (
+                    <div style={{ marginTop: 16, paddingTop: 12, borderTop: "1px solid #ddd" }}>
+                        <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 6 }}>Kept distinct</div>
+                        {distinctHere.map(([a, b], i) => (
+                            <div key={i} style={{ fontSize: 11, color: "#555", marginBottom: 2 }}>
+                                <code>{prefixed(a)}</code> <span style={{ color: "#999" }}>owl:differentFrom</span> <code>{prefixed(b)}</code>
                             </div>
                         ))}
                     </div>

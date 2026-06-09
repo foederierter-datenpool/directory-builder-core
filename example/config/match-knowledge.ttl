@@ -2,7 +2,10 @@
 @prefix owl: <http://www.w3.org/2002/07/owl#> .
 
 # Curated match knowledge for the example. Empty — the two sources match on
-# postal code + fuzzy name alone. This is where hand-curated owl:sameAs pairs
-# would go, forcing two records into one cluster regardless of score:
+# postal code + fuzzy name alone. This is where hand-curated overrides go:
 #
-#   :cityopen-co-3 owl:sameAs :civichub-ch-102 .
+#   :cityopen-co-3 owl:sameAs       :civichub-ch-102 .   # force into one cluster
+#   :cityopen-co-3 owl:differentFrom :civichub-ch-104 .  # veto a merge, never cluster
+#
+# owl:sameAs forces two records together regardless of score; owl:differentFrom
+# pins two apart even when they clear the match rule.
