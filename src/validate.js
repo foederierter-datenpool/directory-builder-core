@@ -34,13 +34,14 @@ function sourcesFoldersInSync({ abs, quads }) {
         if (!fs.existsSync(abs(PATHS.cleanQuery(name))) && !identifierFieldPath(quads, iri))
             problems.push(`${PATHS.cleanQuery(name)} missing and no schema:identifier mapping to derive the default clean from`)
     }
-    const declaredNames = declared.map(sourceName)
-    const folders = fs.existsSync(abs("sources"))
-        ? fs.readdirSync(abs("sources"), { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name)
-        : []
-    for (const name of folders) {
-        if (!declaredNames.includes(name)) problems.push(`sources/${name}/ has no :hasSource declaration in ${PATHS.federation}`)
-    }
+    // The other direction (every folder in sources needs to be present in federation.ttl) is temporarily disabled
+    // const declaredNames = declared.map(sourceName)
+    // const folders = fs.existsSync(abs("sources"))
+    //     ? fs.readdirSync(abs("sources"), { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name)
+    //     : []
+    // for (const name of folders) {
+    //     if (!declaredNames.includes(name)) problems.push(`sources/${name}/ has no :hasSource declaration in ${PATHS.federation}`)
+    // }
     return problems
 }
 

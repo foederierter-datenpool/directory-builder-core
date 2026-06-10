@@ -30,10 +30,12 @@ const buildDirectInsert = ({ sourceGraph, source, targetClass, target }, fields)
     const v      = (path) => `?${path}`
     // STR() before the emptiness check so the guard works for any literal
     // datatype — a bare `?v != ""` errors on e.g. xsd:int and would silently
-    // drop the field (AWO's numeric ids hit exactly this).
+    // drop the field (AWO's numeric ids hit exactly this). Whitespace-only
+    // values count as empty too — caritas emits " " categories, and resolve's
+    // alphabeticFirst would pick them over real values.
     const optLit = (subj, path) =>
         `OPTIONAL { ${subj} xyz:${path} ${v(path)} . ` +
-        `FILTER(isLiteral(${v(path)}) && STR(${v(path)}) != "") }`
+        `FILTER(isLiteral(${v(path)}) && REPLACE(STR(${v(path)}), "\\\\s+", "") != "") }`
 
     const insertBlock = fields
         .map(f => `        ?entity ${short(f.predicate)} ${v(f.fieldPath)} .`)
