@@ -84,6 +84,52 @@ function SourcesDropdown({ visible, onChange }) {
     )
 }
 
+const MIRO_SNIPPET = `miro.board.createStickyNote({
+    content: "hello123",
+    x: 0, y: 0
+})
+`
+
+// "Export to Miro" button + explainer modal. The export needs no Miro app or
+// API key: the Miro Web SDK is exposed as `miro.board` in the browser console
+// of any open board, so users just paste the copied snippet there.
+// https://developers.miro.com/docs/use-the-developer-tools-with-the-miro-web-sdk
+const BTN     = { padding: "0.25rem 0.6rem", border: "1px solid #aaa", borderRadius: 4, background: "white", cursor: "pointer", fontSize: 13 }
+const OVERLAY = { position: "fixed", inset: 0, zIndex: 100, background: "rgba(0,0,0,0.35)", display: "flex", alignItems: "center", justifyContent: "center" }
+const CARD    = { background: "white", borderRadius: 6, padding: "1.25rem 1.5rem", width: 480, maxWidth: "90vw", boxShadow: "0 6px 24px rgba(0,0,0,0.25)", fontSize: 13, lineHeight: 1.5 }
+
+function MiroExport() {
+    const [open, setOpen] = useState(false)
+    const [copied, setCopied] = useState(false)
+    const copy = () => navigator.clipboard.writeText(MIRO_SNIPPET).then(() => {
+        setCopied(true)
+        setTimeout(() => setCopied(false), 2000)
+    })
+    return (
+        <>
+            <button onClick={() => setOpen(true)} style={BTN}>Export to Miro</button>
+            {open && (
+                <div onClick={() => setOpen(false)} style={OVERLAY}>
+                    <div onClick={(e) => e.stopPropagation()} style={CARD}>
+                        <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between" }}>
+                            <strong style={{ fontSize: 15 }}>Export to Miro</strong>
+                            <button onClick={() => setOpen(false)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 16, color: "#888" }}>✕</button>
+                        </div>
+                        <p style={{ margin: "0.5rem 0 0" }}>Recreate this Map on a Miro board. Works via the Miro Web SDK.</p>
+                        <ol style={{ margin: "0.5rem 0 0.75rem", paddingLeft: "1.25rem" }}>
+                            <li>Open a Miro board you have edit rights on</li>
+                            <li>Open the browser's developer console</li>
+                            <li>Paste the copied code and press Enter</li>
+                        </ol>
+                        <button onClick={copy} style={BTN}>Copy code to clipboard</button>
+                        {copied && <span style={{ color: "#2a7d2a", marginLeft: "0.75rem" }}>Copied!</span>}
+                    </div>
+                </div>
+            )}
+        </>
+    )
+}
+
 function EntityCombobox({ entities, value, onChange, disabled }) {
     const [open, setOpen] = useState(false)
     const [filter, setFilter] = useState("")
@@ -238,6 +284,7 @@ export default function MapGraph() {
                     <EntityCombobox entities={entities} value={selectedEntity} onChange={setSelectedEntity} disabled={!enabled} />
                     <button disabled={!enabled} onClick={() => cycle(1)} title={enabled ? "Next" : disabledHint} style={iconBtnStyle}><SkipForward size={13} fill="currentColor" /></button>
                 </div>
+                <MiroExport />
             </div>
             <div style={{ flex: 1, minHeight: 0 }}>
                 <ColumnGraph key={graphKey} nodes={nodes} edges={edges} columns={COLUMNS} colors={COLORS} anchorColumns={ANCHOR_COLUMNS} />
