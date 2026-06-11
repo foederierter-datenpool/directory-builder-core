@@ -287,16 +287,22 @@ export function loadMap(ttl, { hideUnmappedFields = true, hideUnmappedTargetFiel
             grew = false
             for (const e of edges) if (reachable.has(e.from) && !reachable.has(e.to)) { reachable.add(e.to); grew = true }
         }
+        // Unmapped target-field copies have no incoming edges, so the flood
+        // fill can't reach them: keep every copy of a reachable schema and let
+        // the mapped-ness filters below decide (default mode still hides them).
+        for (const [copy, { schema }] of copyInfo) if (reachable.has(schema)) reachable.add(copy)
         for (const iri of [...nodeSet]) if (!reachable.has(iri)) nodeSet.delete(iri)
     }
 
-    // Track mapped-ness on both ends of mapsTo edges. Source fields are mapped
-    // when they appear as `from`; target fields when they appear as `to`. Sub-
-    // field parents inherit mapped-ness from any of their sub-fields. Unmapped
-    // nodes are either hidden or tagged dashed for the caller to style.
+    // Track mapped-ness on both ends of mapsTo edges — counting only edges
+    // between still-visible nodes, so a copy fed solely by hidden sources reads
+    // as unmapped. Source fields are mapped when they appear as `from`; target
+    // fields when they appear as `to`. Sub-field parents inherit mapped-ness
+    // from any of their sub-fields. Unmapped nodes are either hidden or tagged
+    // dashed for the caller to style.
     const mappedSources = new Set()
     const mappedTargets = new Set()
-    for (const e of edges) if (e.label === "mapsTo") { mappedSources.add(e.from); mappedTargets.add(e.to) }
+    for (const e of edges) if (e.label === "mapsTo" && nodeSet.has(e.from) && nodeSet.has(e.to)) { mappedSources.add(e.from); mappedTargets.add(e.to) }
     for (const e of edges) if (e.label === "hasSubField" && mappedSources.has(e.to)) mappedSources.add(e.from)
     const isField = (iri) => {
         const ts = typeOf.get(iri)
