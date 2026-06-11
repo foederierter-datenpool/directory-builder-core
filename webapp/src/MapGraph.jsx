@@ -84,9 +84,13 @@ function SourcesDropdown({ visible, onChange }) {
     )
 }
 
-const MIRO_SNIPPET = `miro.board.createStickyNote({
+// If an element is selected on the board, the content lands a bit below it;
+// otherwise at the board origin. (Consoles support top-level await.)
+const MIRO_SNIPPET = `const [sel] = await miro.board.getSelection()
+miro.board.createStickyNote({
     content: "hello123",
-    x: 0, y: 0
+    x: sel?.x ?? 0,
+    y: sel ? sel.y + (sel.height ?? 100) : 0,
 })
 `
 
