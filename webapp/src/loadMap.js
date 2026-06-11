@@ -312,6 +312,65 @@ export function loadMap(ttl, { hideUnmappedFields = true, hideUnmappedTargetFiel
     }
     const visibleEdges = edges.filter((e) => nodeSet.has(e.from) && nodeSet.has(e.to))
 
+    // ---- Barycenter ordering (Sugiyama crossing-minimisation heuristic) ---
+    // The target-field column is pinned by config (schema grouping), so one
+    // downward pass suffices: every free node's barycenter is the MEAN column
+    // index of the target-field copies it flows into (traced through transform
+    // nodes), and sorting by it pulls connected nodes level. The sort nests to
+    // keep containers intact: fields within their entity, units (entity
+    // rectangles and loose fields) within their source, sub-fields under their
+    // parent. Unmapped nodes have no barycenter (Infinity, ties kept stable)
+    // and sink to the bottom of their container in declaration order.
+    const copyIndex = new Map([...copyInfo.keys()].map((c, i) => [c, i]))
+    const directCopies = new Map()  // node -> [copy ids]
+    const viasOf       = new Map()  // field -> [transform nodes]
+    for (const e of edges) {
+        if (e.label !== "mapsTo") continue
+        if (transformLabel.has(e.to)) appendTo(viasOf, e.from, e.to)
+        else appendTo(directCopies, e.from, e.to)
+    }
+    const targetIndicesOf = (iri) => [
+        ...(directCopies.get(iri) ?? []),
+        ...(viasOf.get(iri) ?? []).flatMap((v) => directCopies.get(v) ?? []),
+    ].map((c) => copyIndex.get(c)).filter((i) => i !== undefined)
+    const barycenter = (idxs) => idxs.length ? idxs.reduce((a, b) => a + b, 0) / idxs.length : Infinity
+    const byBarycenter = (xs, indices) =>
+        xs.map((x) => [barycenter(indices(x)), x]).sort(([a], [b]) => (a === b ? 0 : a - b)).map(([, x]) => x)
+
+    const subsOf = new Map()
+    for (const [parent, sub] of subPairs) appendTo(subsOf, parent, sub)
+    const blockIndices = (f) => [f, ...(subsOf.get(f) ?? [])].flatMap(targetIndicesOf)
+
+    // An entity is one sortable unit (its rectangle stays contiguous); a loose
+    // field is its own. Sources keep their declaration order.
+    const unitsBySource = new Map()  // src -> Map<entityIri | fieldIri, fields[]>
+    for (const [owner, field] of fieldPairs) {
+        const src = sourceOfEntity.get(owner) ?? owner
+        if (!unitsBySource.has(src)) unitsBySource.set(src, new Map())
+        const units = unitsBySource.get(src)
+        const key = sourceOfEntity.has(owner) ? owner : field
+        if (!units.has(key)) units.set(key, [])
+        units.get(key).push(field)
+    }
+    const sourceFieldOrder = []
+    for (const units of unitsBySource.values()) {
+        for (const fields of byBarycenter([...units.values()], (fs) => fs.flatMap(blockIndices))) {
+            for (const f of byBarycenter(fields, blockIndices)) {
+                sourceFieldOrder.push(f, ...byBarycenter(subsOf.get(f) ?? [], targetIndicesOf))
+            }
+        }
+    }
+    const transformOrder = byBarycenter([...transformLabel.keys()], targetIndicesOf)
+
+    // Emission order drives ColumnGraph's stacking; the reordered columns go
+    // first, everything else keeps nodeSet (declaration) order.
+    const ordered = []
+    const emitted = new Set()
+    for (const iri of [...sourceFieldOrder, ...transformOrder]) {
+        if (nodeSet.has(iri) && !emitted.has(iri)) { ordered.push(iri); emitted.add(iri) }
+    }
+    for (const iri of nodeSet) if (!emitted.has(iri)) ordered.push(iri)
+
     const schemaLabel = (iri) => labelOf.get(iri) ?? localName(iri)
     const labelFor = (iri) => {
         const tl = transformLabel.get(iri)
@@ -324,7 +383,7 @@ export function loadMap(ttl, { hideUnmappedFields = true, hideUnmappedTargetFiel
         return localName(iri)
     }
 
-    const nodes = [...nodeSet].map((iri) => ({
+    const nodes = ordered.map((iri) => ({
         id: iri,
         label: labelFor(iri),
         type: typeFor(iri),

@@ -12,6 +12,9 @@ import { SkipBack, SkipForward } from "lucide-react"
 import ColumnGraph from "./ColumnGraph.jsx"
 
 const COLUMNS = ["Source", "SourceField", "TransformNode", "TargetField", "TargetSchema"]
+// The short columns anchor at the vertical middle of what they connect to —
+// a source at its fields, a schema at its target-field copies.
+const ANCHOR_COLUMNS = ["Source", "TransformNode", "TargetSchema"]
 const COLORS = {
     Source: "#d4e7ff",
     SourceField: "#e6f3d8",
@@ -237,7 +240,7 @@ export default function MapGraph() {
                 </div>
             </div>
             <div style={{ flex: 1, minHeight: 0 }}>
-                <ColumnGraph key={graphKey} nodes={nodes} edges={edges} columns={COLUMNS} colors={COLORS} />
+                <ColumnGraph key={graphKey} nodes={nodes} edges={edges} columns={COLUMNS} colors={COLORS} anchorColumns={ANCHOR_COLUMNS} />
             </div>
         </div>
     )

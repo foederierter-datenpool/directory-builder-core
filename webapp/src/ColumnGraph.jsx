@@ -131,8 +131,13 @@ const REL_COLOR = "#9333ea"
 const nodeTypes = { sideNode: SideNode, headerNode: HeaderNode, bandNode: BandNode, groupNode: GroupNode }
 const edgeTypes = { value: ValueEdge }
 
-function toFlow({ nodes, edges }, columns, colors, centerColumns, direction, colSpacing, siblingGap, nodeWidth, columnTitles, columnBands, nodeY, columnHeaderStyle) {
+function toFlow({ nodes, edges }, columns, colors, centerColumns, anchorColumns, direction, colSpacing, siblingGap, nodeWidth, columnTitles, columnBands, nodeY, columnHeaderStyle) {
     const isVertical = direction === "vertical"
+    // SideNode clamps labels at two lines, so a long label makes a ~15px taller
+    // node. Estimated from label length vs. characters per line; used to give
+    // wrapped nodes extra stacking room and to size group rectangles.
+    const BASE_NODE_H = 36
+    const estHeight = (n) => BASE_NODE_H + (String(n.label ?? "").length > (nodeWidth - 12) / 6.2 ? 15 : 0)
     const centered = new Set(centerColumns ?? [])
     const buckets = Object.fromEntries(columns.map((c) => [c, []]))
     for (const n of nodes) (buckets[n.type] ??= []).push(n)
@@ -140,6 +145,20 @@ function toFlow({ nodes, edges }, columns, colors, centerColumns, direction, col
     const maxColSize = Math.max(...columns.map((c) => buckets[c]?.length ?? 0))
     // Logical layout in (col-axis, sibling-axis) coords; swapped at the end for vertical mode.
     const positions = new Map()
+
+    // Barycenter placement (the layered-graph-drawing method): each node's
+    // target coord is the MEAN of its neighbours' coords, then nodes settle
+    // top-down at max(target, previous + siblingGap) — keeping the barycenter
+    // order while enforcing a minimum gap.
+    const mean = (xs) => xs?.length ? xs.reduce((a, b) => a + b, 0) / xs.length : undefined
+    const placeByBarycenter = (items) => {  // [{ id, x, target }]
+        let last = -Infinity
+        for (const { id, x, target } of [...items].sort((a, b) => a.target - b.target)) {
+            const y = Math.max(target, last + siblingGap)
+            positions.set(id, { x, y })
+            last = y
+        }
+    }
 
     if (nodeY) {
         // Caller supplies the sibling-axis coord per node (e.g. a tree layout);
@@ -151,8 +170,8 @@ function toFlow({ nodes, edges }, columns, colors, centerColumns, direction, col
         const x = colIdx * colSpacing
         const colNodes = buckets[col] ?? []
         if (centered.has(col)) {
-            // Position each node at the average sibling-axis coord of its incoming neighbours,
-            // sorted so we can push later nodes down to avoid overlap.
+            // Barycenter over incoming neighbours only — earlier columns are
+            // already placed, so chains of centered columns work in-sweep.
             const incomingYs = new Map()
             for (const e of edges) {
                 if (e.sideInput) continue   // side inputs feed a step without pulling its centering
@@ -161,22 +180,14 @@ function toFlow({ nodes, edges }, columns, colors, centerColumns, direction, col
                 if (!incomingYs.has(e.to)) incomingYs.set(e.to, [])
                 incomingYs.get(e.to).push(fromPos.y)
             }
-            const ranked = colNodes.map((n) => {
-                const ys = incomingYs.get(n.id) ?? []
-                const target = ys.length ? ys.reduce((a, b) => a + b, 0) / ys.length : 0
-                return { node: n, target }
-            }).sort((a, b) => a.target - b.target)
-            let lastY = -Infinity
-            for (const { node, target } of ranked) {
-                const y = Math.max(target, lastY + siblingGap)
-                positions.set(node.id, { x, y })
-                lastY = y
-            }
+            placeByBarycenter(colNodes.map((n) => ({ id: n.id, x, target: mean(incomingYs.get(n.id)) ?? 0 })))
         } else {
             const yOffset = ((maxColSize - colNodes.length) / 2) * siblingGap
-            colNodes.forEach((n, i) => {
-                positions.set(n.id, { x, y: yOffset + i * siblingGap })
-            })
+            let y = yOffset
+            for (const n of colNodes) {
+                positions.set(n.id, { x, y })
+                y += siblingGap + (isVertical ? 0 : estHeight(n) - BASE_NODE_H)
+            }
         }
     })
 
@@ -188,6 +199,31 @@ function toFlow({ nodes, edges }, columns, colors, centerColumns, direction, col
         const tgt = positions.get(e.to)
         const src = positions.get(e.from)
         if (tgt && src) positions.set(e.from, { x: src.x, y: tgt.y + siblingGap })
+    }
+
+    // Anchor columns: barycenter over ALL edge neighbours (not just incoming) —
+    // a source centres on its fields, a schema on its target-field copies. A
+    // post-pass over the finished non-anchored columns, so it also works for
+    // first columns (e.g. Map's Source), which only have outgoing edges.
+    if (anchorColumns?.length) {
+        const anchored = new Set()
+        for (const col of anchorColumns) for (const n of buckets[col] ?? []) anchored.add(n.id)
+        const neighbourYs = new Map()
+        for (const e of edges) {
+            for (const [self, other] of [[e.from, e.to], [e.to, e.from]]) {
+                if (!anchored.has(self) || anchored.has(other)) continue
+                const pos = positions.get(other)
+                if (!pos) continue
+                if (!neighbourYs.has(self)) neighbourYs.set(self, [])
+                neighbourYs.get(self).push(pos.y)
+            }
+        }
+        for (const col of anchorColumns) {
+            placeByBarycenter((buckets[col] ?? []).flatMap((n) => {
+                const pos = positions.get(n.id)
+                return pos ? [{ id: n.id, x: pos.x, target: mean(neighbourYs.get(n.id)) ?? pos.y }] : []
+            }))
+        }
     }
 
     const targetPos = isVertical ? Position.Top : Position.Left
@@ -217,22 +253,22 @@ function toFlow({ nodes, edges }, columns, colors, centerColumns, direction, col
     // cluster of nodes sharing n.group. Assumes a group's nodes are adjacent in
     // their column (they are — column order follows declaration order).
     if (!isVertical) {
-        const bounds = new Map()  // group -> { x, minY, maxY, label }
+        const bounds = new Map()  // group -> { x, minY, maxB, label }
         for (const n of nodes) {
             if (!n.group) continue
             const pos = positions.get(n.id)
             if (!pos) continue
-            const b = bounds.get(n.group) ?? { x: pos.x, minY: Infinity, maxY: -Infinity, label: n.groupLabel }
+            const b = bounds.get(n.group) ?? { x: pos.x, minY: Infinity, maxB: -Infinity, label: n.groupLabel }
             b.minY = Math.min(b.minY, pos.y)
-            b.maxY = Math.max(b.maxY, pos.y)
+            b.maxB = Math.max(b.maxB, pos.y + estHeight(n))  // bottom edge incl. label wrap
             bounds.set(n.group, b)
         }
-        // Vertical paddings tuned so consecutive groups keep a visible gap:
-        // rect-to-rect spacing = siblingGap - the height padding (top offset cancels).
+        // 24px label headroom above the first node, 10px clearance under the
+        // last node's (estimated) bottom edge.
         for (const [group, b] of bounds) flowNodes.unshift({
             id: `__group_${group}`, type: "groupNode", position: { x: b.x - 14, y: b.minY - 24 },
             draggable: false, selectable: false, zIndex: -1, data: { label: b.label },
-            style: { width: nodeWidth + 28, height: (b.maxY - b.minY) + 68, border: "1.5px dashed #c4c4c4", borderRadius: 10, background: "rgba(120,120,120,0.05)" },
+            style: { width: nodeWidth + 28, height: (b.maxB - b.minY) + 34, border: "1.5px dashed #c4c4c4", borderRadius: 10, background: "rgba(120,120,120,0.05)" },
         })
     }
 
@@ -270,8 +306,8 @@ function toFlow({ nodes, edges }, columns, colors, centerColumns, direction, col
     return { flowNodes, flowEdges }
 }
 
-export default function ColumnGraph({ nodes, edges, columns, colors, centerColumns, direction = "horizontal", colSpacing = DEFAULT_COL_SPACING, siblingGap = DEFAULT_SIBLING_GAP, nodeWidth = DEFAULT_NODE_WIDTH, columnTitles, columnBands, nodeY, columnHeaderStyle, onNodeClick }) {
-    const { flowNodes, flowEdges } = useMemo(() => toFlow({ nodes, edges }, columns, colors, centerColumns, direction, colSpacing, siblingGap, nodeWidth, columnTitles, columnBands, nodeY, columnHeaderStyle), [nodes, edges, columns, colors, centerColumns, direction, colSpacing, siblingGap, nodeWidth, columnTitles, columnBands, nodeY, columnHeaderStyle])
+export default function ColumnGraph({ nodes, edges, columns, colors, centerColumns, anchorColumns, direction = "horizontal", colSpacing = DEFAULT_COL_SPACING, siblingGap = DEFAULT_SIBLING_GAP, nodeWidth = DEFAULT_NODE_WIDTH, columnTitles, columnBands, nodeY, columnHeaderStyle, onNodeClick }) {
+    const { flowNodes, flowEdges } = useMemo(() => toFlow({ nodes, edges }, columns, colors, centerColumns, anchorColumns, direction, colSpacing, siblingGap, nodeWidth, columnTitles, columnBands, nodeY, columnHeaderStyle), [nodes, edges, columns, colors, centerColumns, anchorColumns, direction, colSpacing, siblingGap, nodeWidth, columnTitles, columnBands, nodeY, columnHeaderStyle])
     const [rfNodes, , onNodesChange] = useNodesState(flowNodes)
     const [rfEdges, setRfEdges, onEdgesChange] = useEdgesState(flowEdges)
     const [draggingId, setDraggingId] = useState(null)
