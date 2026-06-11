@@ -131,7 +131,10 @@ const REL_COLOR = "#9333ea"
 const nodeTypes = { sideNode: SideNode, headerNode: HeaderNode, bandNode: BandNode, groupNode: GroupNode }
 const edgeTypes = { value: ValueEdge }
 
-function toFlow({ nodes, edges }, columns, colors, centerColumns, anchorColumns, direction, colSpacing, siblingGap, nodeWidth, columnTitles, columnBands, nodeY, columnHeaderStyle) {
+// Pure layout: graph data in, positioned React Flow nodes/edges out. Exported
+// so callers (e.g. the Map view's Miro export) can compute the same layout the
+// component renders.
+export function toFlow({ nodes, edges, columns, colors, centerColumns, anchorColumns, direction = "horizontal", colSpacing = DEFAULT_COL_SPACING, siblingGap = DEFAULT_SIBLING_GAP, nodeWidth = DEFAULT_NODE_WIDTH, columnTitles, columnBands, nodeY, columnHeaderStyle }) {
     const isVertical = direction === "vertical"
     // SideNode clamps labels at two lines, so a long label makes a ~15px taller
     // node. Estimated from label length vs. characters per line; used to give
@@ -237,7 +240,7 @@ function toFlow({ nodes, edges }, columns, colors, centerColumns, anchorColumns,
             id: n.id,
             type: "sideNode",
             position: isVertical ? { x: pos.y, y: pos.x } : pos,
-            data: { label: n.label, subtitle: n.subtitle, props: n.props, targetPos, sourcePos },
+            data: { label: n.label, subtitle: n.subtitle, props: n.props, targetPos, sourcePos, estH: estHeight(n) },
             style: {
                 background: n.color ?? colors[n.type] ?? "#eee",
                 border: `1px ${n.dashed ? "dashed" : "solid"} ${n.borderColor ?? "#888"}`,
@@ -307,7 +310,7 @@ function toFlow({ nodes, edges }, columns, colors, centerColumns, anchorColumns,
 }
 
 export default function ColumnGraph({ nodes, edges, columns, colors, centerColumns, anchorColumns, direction = "horizontal", colSpacing = DEFAULT_COL_SPACING, siblingGap = DEFAULT_SIBLING_GAP, nodeWidth = DEFAULT_NODE_WIDTH, columnTitles, columnBands, nodeY, columnHeaderStyle, onNodeClick }) {
-    const { flowNodes, flowEdges } = useMemo(() => toFlow({ nodes, edges }, columns, colors, centerColumns, anchorColumns, direction, colSpacing, siblingGap, nodeWidth, columnTitles, columnBands, nodeY, columnHeaderStyle), [nodes, edges, columns, colors, centerColumns, anchorColumns, direction, colSpacing, siblingGap, nodeWidth, columnTitles, columnBands, nodeY, columnHeaderStyle])
+    const { flowNodes, flowEdges } = useMemo(() => toFlow({ nodes, edges, columns, colors, centerColumns, anchorColumns, direction, colSpacing, siblingGap, nodeWidth, columnTitles, columnBands, nodeY, columnHeaderStyle }), [nodes, edges, columns, colors, centerColumns, anchorColumns, direction, colSpacing, siblingGap, nodeWidth, columnTitles, columnBands, nodeY, columnHeaderStyle])
     const [rfNodes, , onNodesChange] = useNodesState(flowNodes)
     const [rfEdges, setRfEdges, onEdgesChange] = useEdgesState(flowEdges)
     const [draggingId, setDraggingId] = useState(null)

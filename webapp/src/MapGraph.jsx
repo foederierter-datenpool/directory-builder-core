@@ -9,7 +9,8 @@ import { loadMap, loadSources, loadEntitiesBySource, loadFieldValuesByEntity } f
 import React, { useEffect, useMemo, useRef, useState } from "react"
 import { loadCleanedBySource } from "./sourceMeta.js"
 import { SkipBack, SkipForward } from "lucide-react"
-import ColumnGraph from "./ColumnGraph.jsx"
+import ColumnGraph, { toFlow } from "./ColumnGraph.jsx"
+import { buildMiroSnippet } from "./miroExport.js"
 
 const COLUMNS = ["Source", "SourceField", "TransformNode", "TargetField", "TargetSchema"]
 // The short columns anchor at the vertical middle of what they connect to —
@@ -85,27 +86,18 @@ function SourcesDropdown({ visible, onChange }) {
     )
 }
 
-// If an element is selected on the board, the content lands a bit below it;
-// otherwise at the board origin. (Consoles support top-level await.)
-const MIRO_SNIPPET = `const [sel] = await miro.board.getSelection()
-miro.board.createStickyNote({
-    content: "hello123",
-    x: sel?.x ?? 0,
-    y: sel ? sel.y + (sel.height ?? 100) : 0,
-})
-`
-
 // "Export to Miro" button + explainer modal. The export needs no Miro app or
 // API key: the Miro Web SDK is exposed as `miro.board` in the browser console
-// of any open board, so users just paste the copied snippet there.
+// of any open board, so users just paste the copied snippet there (built by
+// miroExport.js from the same layout the page renders).
 // https://developers.miro.com/docs/use-the-developer-tools-with-the-miro-web-sdk
 const OVERLAY = { position: "fixed", inset: 0, zIndex: 100, background: "rgba(0,0,0,0.35)", display: "flex", alignItems: "center", justifyContent: "center" }
 const CARD    = { background: "white", borderRadius: 6, padding: "1.25rem 1.5rem", width: 480, maxWidth: "90vw", boxShadow: "0 6px 24px rgba(0,0,0,0.25)", fontSize: 13, lineHeight: 1.5 }
 
-function MiroExport() {
+function MiroExport({ snippet }) {
     const [open, setOpen] = useState(false)
     const [copied, setCopied] = useState(false)
-    const copy = () => navigator.clipboard.writeText(MIRO_SNIPPET).then(() => {
+    const copy = () => navigator.clipboard.writeText(snippet).then(() => {
         setCopied(true)
         setTimeout(() => setCopied(false), 2000)
     })
@@ -201,6 +193,12 @@ export default function MapGraph() {
         return loadMap(ttl, { hiddenSources, hideUnmappedFields: !showUnmapped, hideUnmappedTargetFields: !showAllTargets })
     }, [visible, showUnmapped, showAllTargets])
 
+    // The export mirrors the rendered view: same loadMap output, same layout.
+    const miroSnippet = useMemo(() => {
+        const { flowNodes, flowEdges } = toFlow({ nodes, edges: rawEdges, columns: COLUMNS, colors: COLORS, anchorColumns: ANCHOR_COLUMNS })
+        return buildMiroSnippet(flowNodes, flowEdges)
+    }, [nodes, rawEdges])
+
     const oneActive = visible.size === 1
     const enabled = dataFlow && oneActive
     const valueByField = enabled && selectedEntity ? FIELD_VALUES.get(selectedEntity) : null
@@ -288,7 +286,7 @@ export default function MapGraph() {
                     <EntityCombobox entities={entities} value={selectedEntity} onChange={setSelectedEntity} disabled={!enabled} />
                     <button disabled={!enabled} onClick={() => cycle(1)} title={enabled ? "Next" : disabledHint} style={iconBtnStyle}><SkipForward size={13} fill="currentColor" /></button>
                 </div>
-                <MiroExport />
+                <MiroExport snippet={miroSnippet} />
             </div>
             <div style={{ flex: 1, minHeight: 0 }}>
                 <ColumnGraph key={graphKey} nodes={nodes} edges={edges} columns={COLUMNS} colors={COLORS} anchorColumns={ANCHOR_COLUMNS} />
