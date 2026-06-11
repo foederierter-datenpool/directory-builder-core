@@ -7,7 +7,19 @@
 // Pure (flow layout in → code string out); the layout comes from the same
 // toFlow() the Map page renders, so the board mirrors the current view.
 
-export function buildMiroSnippet(flowNodes, flowEdges) {
+// Where connectors leave a shape, per flow direction (relative coords on the
+// item, e.g. {x:1,y:0.5} = middle of the right edge); the entry point is
+// always the mirror image. Matches the webapp's fixed handles.
+const OUT_POS = {
+    "left-right": { x: 1, y: 0.5 },
+    "right-left": { x: 0, y: 0.5 },
+    "top-down":   { x: 0.5, y: 1 },
+    "down-top":   { x: 0.5, y: 0 },
+}
+
+export function buildMiroSnippet(flowNodes, flowEdges, direction = "left-right") {
+    const outPos = OUT_POS[direction] ?? OUT_POS["left-right"]
+    const inPos  = { x: 1 - outPos.x, y: 1 - outPos.y }
     const rects = []  // group rectangles, created first so they sit behind the nodes
     const nodes = []
     for (const n of flowNodes) {
@@ -40,12 +52,26 @@ export function buildMiroSnippet(flowNodes, flowEdges) {
 
     // The runtime: anchor below the selected element (board origin as fallback),
     // group rects sequentially (z-order = creation order), nodes and connectors
-    // in parallel. Consoles support top-level await.
-    return `const rects = ${JSON.stringify(rects)}
+    // in parallel. Consoles support top-level await; the surrounding block
+    // scopes the declarations so the snippet can be pasted repeatedly (the
+    // console session would otherwise keep them and refuse re-declaration).
+    return `{
+const rects = ${JSON.stringify(rects)}
 const nodes = ${JSON.stringify(nodes)}
 const links = ${JSON.stringify(links)}
 const [sel] = await miro.board.getSelection()
-const ox = sel?.x ?? 0, oy = sel ? sel.y + (sel.height ?? 100) : 0
+let ox = 0, oy = 0
+if (sel) {
+    ox = sel.x; oy = sel.y + (sel.height ?? 100)
+    // A frame child's x/y are relative to the frame's TOP-LEFT corner, while
+    // shapes are created in absolute board coords (a frame's own x/y is its
+    // centre) — translate the anchor accordingly.
+    if (sel.parentId) {
+        const [frame] = await miro.board.get({ id: [sel.parentId] })
+        ox += frame.x - frame.width / 2
+        oy += frame.y - frame.height / 2
+    }
+}
 const shape = (it, style) => miro.board.createShape({
     shape: "round_rectangle", content: it.content,
     x: ox + it.x, y: oy + it.y, width: it.w, height: it.h, style,
@@ -54,9 +80,10 @@ for (const r of rects) await shape(r, { fillColor: "#787878", fillOpacity: 0.05,
 const made = await Promise.all(nodes.map((n) =>
     shape(n, { fillColor: n.fill, borderColor: "#888888", borderStyle: n.dashed ? "dashed" : "normal", borderWidth: 1, fontSize: 10, textAlign: "center", textAlignVertical: "middle" })))
 await Promise.all(links.map(([f, t]) => miro.board.createConnector({
-    start: { item: made[f].id, position: { x: 1, y: 0.5 } },  // right edge out, left edge in,
-    end:   { item: made[t].id, position: { x: 0, y: 0.5 } },  // matching the webapp's fixed handles
+    start: { item: made[f].id, position: ${JSON.stringify(outPos)} },
+    end:   { item: made[t].id, position: ${JSON.stringify(inPos)} },
     shape: "curved", style: { strokeColor: "#999999", strokeWidth: 1, endStrokeCap: "stealth" },
 })))
+}
 `
 }

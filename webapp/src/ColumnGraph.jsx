@@ -135,7 +135,10 @@ const edgeTypes = { value: ValueEdge }
 // so callers (e.g. the Map view's Miro export) can compute the same layout the
 // component renders.
 export function toFlow({ nodes, edges, columns, colors, centerColumns, anchorColumns, direction = "horizontal", colSpacing = DEFAULT_COL_SPACING, siblingGap = DEFAULT_SIBLING_GAP, nodeWidth = DEFAULT_NODE_WIDTH, columnTitles, columnBands, nodeY, columnHeaderStyle }) {
-    const isVertical = direction === "vertical"
+    // direction: left-right | right-left | top-down | down-top, with
+    // "horizontal"/"vertical" as legacy aliases for left-right/top-down.
+    const isVertical = direction === "vertical" || direction === "top-down" || direction === "down-top"
+    const isReversed = direction === "right-left" || direction === "down-top"
     // SideNode clamps labels at two lines, so a long label makes a ~15px taller
     // node. Estimated from label length vs. characters per line; used to give
     // wrapped nodes extra stacking room and to size group rectangles.
@@ -146,7 +149,10 @@ export function toFlow({ nodes, edges, columns, colors, centerColumns, anchorCol
     for (const n of nodes) (buckets[n.type] ??= []).push(n)
 
     const maxColSize = Math.max(...columns.map((c) => buckets[c]?.length ?? 0))
-    // Logical layout in (col-axis, sibling-axis) coords; swapped at the end for vertical mode.
+    // Logical layout in (col-axis, sibling-axis) coords; swapped at the end for
+    // vertical mode. Reversed directions mirror the column sequence here, so
+    // everything downstream (anchoring, group rects, export) inherits it.
+    const colX = (colIdx) => (isReversed ? columns.length - 1 - colIdx : colIdx) * colSpacing
     const positions = new Map()
 
     // Barycenter placement (the layered-graph-drawing method): each node's
@@ -167,10 +173,10 @@ export function toFlow({ nodes, edges, columns, colors, centerColumns, anchorCol
         // Caller supplies the sibling-axis coord per node (e.g. a tree layout);
         // the column still fixes the col-axis coord.
         columns.forEach((col, colIdx) => {
-            for (const n of buckets[col] ?? []) positions.set(n.id, { x: colIdx * colSpacing, y: nodeY.get(n.id) ?? 0 })
+            for (const n of buckets[col] ?? []) positions.set(n.id, { x: colX(colIdx), y: nodeY.get(n.id) ?? 0 })
         })
     } else columns.forEach((col, colIdx) => {
-        const x = colIdx * colSpacing
+        const x = colX(colIdx)
         const colNodes = buckets[col] ?? []
         if (centered.has(col)) {
             // Barycenter over incoming neighbours only — earlier columns are
@@ -229,8 +235,8 @@ export function toFlow({ nodes, edges, columns, colors, centerColumns, anchorCol
         }
     }
 
-    const targetPos = isVertical ? Position.Top : Position.Left
-    const sourcePos = isVertical ? Position.Bottom : Position.Right
+    const targetPos = isVertical ? (isReversed ? Position.Bottom : Position.Top) : (isReversed ? Position.Right : Position.Left)
+    const sourcePos = isVertical ? (isReversed ? Position.Top : Position.Bottom) : (isReversed ? Position.Left : Position.Right)
 
     const flowNodes = []
     for (const n of nodes) {
@@ -252,26 +258,29 @@ export function toFlow({ nodes, edges, columns, colors, centerColumns, anchorCol
         })
     }
 
-    // Group rectangles (horizontal layouts only): one decorative box behind each
-    // cluster of nodes sharing n.group. Assumes a group's nodes are adjacent in
-    // their column (they are — column order follows declaration order).
-    if (!isVertical) {
-        const bounds = new Map()  // group -> { x, minY, maxB, label }
+    // Group rectangles: one decorative box behind each cluster of nodes sharing
+    // n.group. Assumes a group's nodes are adjacent in their column (they are —
+    // column order follows declaration order).
+    {
+        const bounds = new Map()  // group -> { minX, maxX, minY, maxY, label }
         for (const n of nodes) {
             if (!n.group) continue
             const pos = positions.get(n.id)
             if (!pos) continue
-            const b = bounds.get(n.group) ?? { x: pos.x, minY: Infinity, maxB: -Infinity, label: n.groupLabel }
-            b.minY = Math.min(b.minY, pos.y)
-            b.maxB = Math.max(b.maxB, pos.y + estHeight(n))  // bottom edge incl. label wrap
+            // Final (rendered) coords, so both orientations share the geometry.
+            const fx = isVertical ? pos.y : pos.x
+            const fy = isVertical ? pos.x : pos.y
+            const b = bounds.get(n.group) ?? { minX: Infinity, maxX: -Infinity, minY: Infinity, maxY: -Infinity, label: n.groupLabel }
+            b.minX = Math.min(b.minX, fx); b.maxX = Math.max(b.maxX, fx + nodeWidth)
+            b.minY = Math.min(b.minY, fy); b.maxY = Math.max(b.maxY, fy + estHeight(n))  // incl. label wrap
             bounds.set(n.group, b)
         }
         // 24px label headroom above the first node, 10px clearance under the
-        // last node's (estimated) bottom edge.
+        // last node's (estimated) bottom edge, 14px to the sides.
         for (const [group, b] of bounds) flowNodes.unshift({
-            id: `__group_${group}`, type: "groupNode", position: { x: b.x - 14, y: b.minY - 24 },
+            id: `__group_${group}`, type: "groupNode", position: { x: b.minX - 14, y: b.minY - 24 },
             draggable: false, selectable: false, zIndex: -1, data: { label: b.label },
-            style: { width: nodeWidth + 28, height: (b.maxB - b.minY) + 34, border: "1.5px dashed #c4c4c4", borderRadius: 10, background: "rgba(120,120,120,0.05)" },
+            style: { width: (b.maxX - b.minX) + 28, height: (b.maxY - b.minY) + 34, border: "1.5px dashed #c4c4c4", borderRadius: 10, background: "rgba(120,120,120,0.05)" },
         })
     }
 
@@ -281,7 +290,7 @@ export function toFlow({ nodes, edges, columns, colors, centerColumns, anchorCol
         const ys = [...positions.values()].map((p) => p.y)
         const minY = Math.min(...ys), maxY = Math.max(...ys)
         columns.forEach((col, colIdx) => {
-            const x = colIdx * colSpacing
+            const x = colX(colIdx)
             if (columnBands?.[col]) flowNodes.unshift({
                 id: `__band_${col}`, type: "bandNode", position: { x: x - 16, y: minY - 66 },
                 draggable: false, selectable: false, zIndex: -1, data: {},

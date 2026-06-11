@@ -16,6 +16,10 @@ const COLUMNS = ["Source", "SourceField", "TransformNode", "TargetField", "Targe
 // The short columns anchor at the vertical middle of what they connect to —
 // a source at its fields, a schema at its target-field copies.
 const ANCHOR_COLUMNS = ["Source", "TransformNode", "TargetSchema"]
+const DIRECTIONS = ["left-right", "right-left", "top-down", "down-top"]
+// Vertical directions: columns become rows; siblings sit side by side, so
+// their gap must clear the node width (160) instead of the node height.
+const VERTICAL_SPACING = { colSpacing: 160, siblingGap: 200 }
 const COLORS = {
     Source: "#d4e7ff",
     SourceField: "#e6f3d8",
@@ -187,6 +191,9 @@ export default function MapGraph() {
     const [showUnmapped, setShowUnmapped] = useState(false)
     const [showAllTargets, setShowAllTargets] = useState(false)
     const [showDirectFlows, setShowDirectFlows] = useState(false)
+    const [direction, setDirection] = useState("left-right")
+    const verticalMode = direction === "top-down" || direction === "down-top"
+    const layout = { direction, ...(verticalMode ? VERTICAL_SPACING : {}) }
 
     const { nodes, edges: rawEdges } = useMemo(() => {
         const hiddenSources = new Set(SOURCES.filter(s => !visible.has(s.iri)).map(s => s.iri))
@@ -195,9 +202,9 @@ export default function MapGraph() {
 
     // The export mirrors the rendered view: same loadMap output, same layout.
     const miroSnippet = useMemo(() => {
-        const { flowNodes, flowEdges } = toFlow({ nodes, edges: rawEdges, columns: COLUMNS, colors: COLORS, anchorColumns: ANCHOR_COLUMNS })
-        return buildMiroSnippet(flowNodes, flowEdges)
-    }, [nodes, rawEdges])
+        const { flowNodes, flowEdges } = toFlow({ nodes, edges: rawEdges, columns: COLUMNS, colors: COLORS, anchorColumns: ANCHOR_COLUMNS, ...layout })
+        return buildMiroSnippet(flowNodes, flowEdges, direction)
+    }, [nodes, rawEdges, direction])
 
     const oneActive = visible.size === 1
     const enabled = dataFlow && oneActive
@@ -223,7 +230,7 @@ export default function MapGraph() {
 
     // Remount when the visible node set changes (sources or unmapped-fields
     // toggle). Entity / data-flow changes only update edge labels in place.
-    const graphKey = useMemo(() => `${[...visible].sort().join("|")}::${showUnmapped ? "all" : "mapped"}::${showAllTargets ? "allT" : "mappedT"}`, [visible, showUnmapped, showAllTargets])
+    const graphKey = useMemo(() => `${[...visible].sort().join("|")}::${showUnmapped ? "all" : "mapped"}::${showAllTargets ? "allT" : "mappedT"}::${direction}`, [visible, showUnmapped, showAllTargets, direction])
 
     const activeSource = oneActive ? [...visible][0] : null
     const entities = activeSource ? (ENTITIES_BY_SOURCE.get(activeSource) ?? []) : []
@@ -286,10 +293,13 @@ export default function MapGraph() {
                     <EntityCombobox entities={entities} value={selectedEntity} onChange={setSelectedEntity} disabled={!enabled} />
                     <button disabled={!enabled} onClick={() => cycle(1)} title={enabled ? "Next" : disabledHint} style={iconBtnStyle}><SkipForward size={13} fill="currentColor" /></button>
                 </div>
+                <select value={direction} onChange={(e) => setDirection(e.target.value)} title="Graph orientation" style={BTN}>
+                    {DIRECTIONS.map((d) => <option key={d} value={d}>{d[0].toUpperCase() + d.slice(1)}</option>)}
+                </select>
                 <MiroExport snippet={miroSnippet} />
             </div>
             <div style={{ flex: 1, minHeight: 0 }}>
-                <ColumnGraph key={graphKey} nodes={nodes} edges={edges} columns={COLUMNS} colors={COLORS} anchorColumns={ANCHOR_COLUMNS} />
+                <ColumnGraph key={graphKey} nodes={nodes} edges={edges} columns={COLUMNS} colors={COLORS} anchorColumns={ANCHOR_COLUMNS} {...layout} />
             </div>
         </div>
     )
