@@ -28,6 +28,7 @@ const VALUE_LABEL_BG = {
     SourceField:   "#f0f8e0",
     TransformNode: "#fff8c8",
 }
+const BTN = { padding: "0.25rem 0.6rem", border: "1px solid #aaa", borderRadius: 4, background: "white", cursor: "pointer", fontSize: 13 }
 
 const SOURCES = loadSources(ttl)
 const ENTITIES_BY_SOURCE = loadEntitiesBySource(ttl, mappedTtl)
@@ -63,7 +64,7 @@ function SourcesDropdown({ visible, onChange }) {
 
     return (
         <div ref={ref} style={{ position: "relative", display: "inline-block" }}>
-            <button onClick={() => setOpen(!open)} style={{ padding: "0.25rem 0.6rem", border: "1px solid #aaa", borderRadius: 4, background: "white", cursor: "pointer", fontSize: 13 }}>
+            <button onClick={() => setOpen(!open)} style={BTN}>
                 {summary} ▾
             </button>
             {open && (
@@ -98,7 +99,6 @@ miro.board.createStickyNote({
 // API key: the Miro Web SDK is exposed as `miro.board` in the browser console
 // of any open board, so users just paste the copied snippet there.
 // https://developers.miro.com/docs/use-the-developer-tools-with-the-miro-web-sdk
-const BTN     = { padding: "0.25rem 0.6rem", border: "1px solid #aaa", borderRadius: 4, background: "white", cursor: "pointer", fontSize: 13 }
 const OVERLAY = { position: "fixed", inset: 0, zIndex: 100, background: "rgba(0,0,0,0.35)", display: "flex", alignItems: "center", justifyContent: "center" }
 const CARD    = { background: "white", borderRadius: 6, padding: "1.25rem 1.5rem", width: 480, maxWidth: "90vw", boxShadow: "0 6px 24px rgba(0,0,0,0.25)", fontSize: 13, lineHeight: 1.5 }
 
