@@ -5,18 +5,18 @@
 @prefix skos:   <http://www.w3.org/2004/02/skos/core#> .
 @prefix ft:     <http://publications.europa.eu/resource/authority/file-type/> .
 
-# A minimal single-entity federation: two directories of libraries, merged into
-# one set of schema:Organization records. Config declares decisions only —
-# sources and their facts, target schema, mappings, match/resolve rules.
-# The engines own the step shape (fetch → lift, clean → map → match → merge →
-# resolve) and resolve all file paths by convention from the source names.
-# Add target schemas / mappings / match rules to model more entity types
-# (e.g. a Service tier) and their relationships.
+# A minimal federation: two directories of libraries merged into one set of
+# schema:Organization records, plus a third source whose rows denormalise two
+# entities (a reading programme + its host library) — the multi-entity case.
+# Config declares decisions only — sources and their facts, target schemas,
+# mappings, match/resolve rules. The engines own the step shape (fetch → lift,
+# clean → map → match → merge → resolve) and resolve all file paths by
+# convention from the source names.
 
 :federation a :Federation ;
-    :hasSource       :cityopenSource, :civichubSource ;
-    :hasTargetSchema :organisationSchema ;
-    :hasMatchRule    :organisationMatch ;
+    :hasSource       :cityopenSource, :civichubSource, :readcitySource ;
+    :hasTargetSchema :organisationSchema, :programSchema ;
+    :hasMatchRule    :organisationMatch, :programMatch ;
     :hasResolveRule  :resolve .
 
 # ---- Target schema ------------------------------------------------------
@@ -26,6 +26,13 @@
     rdfs:label "Organisation"@en ;
     :hasTargetField :t-identifier, :t-name, :t-streetAddress, :t-postalCode,
                     :t-locality, :t-telephone, :t-email, :t-homepage .
+
+# Target fields are shared between schemas — :t-identifier and :t-name below
+# serve both tiers.
+:programSchema a :TargetSchema ;
+    :targetClass schema:Event ;
+    rdfs:label "Programme"@en ;
+    :hasTargetField :t-identifier, :t-name .
 
 # :multiValued - one value per contributing source is expected; the Merge view doesn't flag these as conflicts
 :t-identifier    a :TargetField ; :targetPredicate schema:identifier ; :multiValued true .
@@ -84,6 +91,29 @@
 :ch-plz     a :SubField ; :fieldPath "plz"     .
 :ch-ort     a :SubField ; :fieldPath "ort"     .
 
+# A third shape again: each row denormalises TWO entities — a reading programme
+# and the library hosting it. The clean step splits the row (program_* /
+# library_* prefixes); :hasEntity declares that split so views can show it.
+:readcitySource a :Source ;
+    rdfs:label    "ReadCity Programmes" ;
+    skos:notation "rc" ;
+    :retrieval    "Files" ;
+    :format       ft:JSON ;
+    :hasEntity    :rc-program, :rc-library .
+
+:rc-program a :SourceEntity ;
+    rdfs:label "Programme" ;
+    :hasField :rc-program_id, :rc-program_title .
+
+:rc-library a :SourceEntity ;
+    rdfs:label "Library" ;
+    :hasField :rc-library_name, :rc-library_plz .
+
+:rc-program_id    a :SourceField ; :fieldPath "program_id"    .
+:rc-program_title a :SourceField ; :fieldPath "program_title" .
+:rc-library_name  a :SourceField ; :fieldPath "library_name"  .
+:rc-library_plz   a :SourceField ; :fieldPath "library_plz"   .
+
 # ---- Mappings -----------------------------------------------------------
 
 :cityopen-mapping a :Mapping ;
@@ -112,6 +142,21 @@
         [ :from :ch-email       ; :to :t-email         ] ,
         [ :from :ch-webseite    ; :to :t-homepage      ] .
 
+# Two mappings for the two-entity source — one per tier.
+:readcity-library-mapping a :Mapping ;
+    :fromSource  :readcitySource ;
+    :toTarget    :organisationSchema ;
+    :hasFieldMapping
+        [ :from :rc-library_name ; :to :t-name       ] ,
+        [ :from :rc-library_plz  ; :to :t-postalCode ] .
+
+:readcity-program-mapping a :Mapping ;
+    :fromSource  :readcitySource ;
+    :toTarget    :programSchema ;
+    :hasFieldMapping
+        [ :from :rc-program_id    ; :to :t-identifier ] ,
+        [ :from :rc-program_title ; :to :t-name       ] .
+
 # ---- Match --------------------------------------------------------------
 # Records match when their postal code is identical (hard gate) and their names
 # are fuzzily similar enough that the weighted score clears :minScore.
@@ -122,6 +167,13 @@
     :mintedSubjectPrefix "org-" ;
     :hasHardCriterion     [ :on schema:postalCode ] ;
     :minScore             0.5 ;
+    :hasWeightedCriterion [ :on schema:name ; :weight 1.0 ] .
+
+:programMatch a :MatchRule ;
+    :forTarget           :programSchema ;
+    :targetNamespace     "https://example.org/directory#" ;
+    :mintedSubjectPrefix "program-" ;
+    :minScore             1.0 ;
     :hasWeightedCriterion [ :on schema:name ; :weight 1.0 ] .
 
 # ---- Resolve ------------------------------------------------------------

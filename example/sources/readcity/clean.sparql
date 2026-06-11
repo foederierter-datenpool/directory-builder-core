@@ -1,0 +1,28 @@
+# Each ReadCity row denormalises TWO entities: the reading programme and the
+# library hosting it. Split them — program_* scalars onto a programme entity
+# minted from program_id, library_* onto a library entity minted from its plz
+# (this toy source's stand-in id: one library per postal code, so repeated
+# libraries across rows collapse onto one IRI). cdp:targetSchema routes each
+# entity to its tier at the map step. Clean stays in xyz:/cdp: vocabulary.
+
+PREFIX xyz: <http://sparql.xyz/facade-x/data/>
+PREFIX cdp: <https://civic-data.de/pipeline#>
+
+CONSTRUCT {
+    ?program cdp:fromSource    cdp:readcitySource ;
+             cdp:targetSchema  cdp:programSchema ;
+             xyz:program_id    ?pid ;
+             xyz:program_title ?ptitle .
+    ?library cdp:fromSource    cdp:readcitySource ;
+             cdp:targetSchema  cdp:organisationSchema ;
+             xyz:library_name  ?lname ;
+             xyz:library_plz   ?plz .
+} WHERE {
+    ?row xyz:program_id ?pid .
+    BIND(IRI(CONCAT(STR(cdp:), "readcity-", STR(?pid))) AS ?program)
+    OPTIONAL { ?row xyz:program_title ?ptitle }
+    OPTIONAL {
+        ?row xyz:library_plz ?plz ; xyz:library_name ?lname .
+        BIND(IRI(CONCAT(STR(cdp:), "readcity-lib-", STR(?plz))) AS ?library)
+    }
+}

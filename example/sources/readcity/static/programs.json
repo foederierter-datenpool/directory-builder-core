@@ -1,0 +1,14 @@
+[
+  {
+    "program_id": "rp-1",
+    "program_title": "Story Time for Kids",
+    "library_name": "Central City Library",
+    "library_plz": "10115"
+  },
+  {
+    "program_id": "rp-2",
+    "program_title": "Coding Club",
+    "library_name": "Riverside Library",
+    "library_plz": "10243"
+  }
+]

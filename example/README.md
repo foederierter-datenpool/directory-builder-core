@@ -1,9 +1,12 @@
 # Example use case
 
-A minimal, self-contained example use case that exercises the whole pipeline with two
-**static file sources** — fictional library directories (`cityopen`, `civichub`)
+A minimal, self-contained example use case that exercises the whole pipeline with three
+**static file sources** — two fictional library directories (`cityopen`, `civichub`)
 with **deliberately different schemas** that partly overlap, so the field
-mappings, then Match/Merge/Resolve, all have visible work to do.
+mappings, then Match/Merge/Resolve, all have visible work to do, plus a
+**multi-entity source** (`readcity`) whose rows each denormalise a reading
+programme *and* its host library, split by its clean step into two source
+entities mapped to two target schemas.
 
 It doubles as the engine's smoke test and as the dataset a scaffolded use case can start from.
 
@@ -12,12 +15,13 @@ It doubles as the engine's smoke test and as the dataset a scaffolded use case c
 ```
 example/
   config/
-    federation.ttl        # the decisions: sources + facts, one schema:Organization
-                          # target, field mappings, match/merge/resolve rules
+    federation.ttl        # the decisions: sources + facts, target schemas,
+                          # field mappings, match/merge/resolve rules
     match-knowledge.ttl   # curated owl:sameAs pairs (empty here)
   sources/
-    cityopen/  { fetch.js, clean.sparql, static/libraries.json }
-    civichub/  { fetch.js, clean.sparql, static/libraries.json }
+    cityopen/  { clean.sparql, static/libraries.json }
+    civichub/  { clean.sparql, static/libraries.json }
+    readcity/  { clean.sparql, static/programs.json }
 ```
 
 That's everything a use case is: config + one folder per source. Each source

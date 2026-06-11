@@ -27,8 +27,9 @@ export function loadSources(federationTtl, mappedTtl, ingestLogTtl) {
     }
 
     // Source-level: label, top-level fields, sub-fields, mappings.
-    const topFieldsOf = new Map()    // sourceIri -> Set<fieldIri>
+    const topFieldsOf = new Map()    // sourceIri (or entityIri) -> Set<fieldIri>
     const subFieldsOf = new Map()    // fieldIri  -> Set<subFieldIri>
+    const entitiesOf  = new Map()    // sourceIri -> Set<entityIri>
     const mappingSource = new Map()  // mappingIri -> sourceIri
     const fmsOfMapping = new Map()   // mappingIri -> Set<fieldMappingBnode>
     const fromsOfFm = new Map()      // bnode      -> Set<fieldIri>
@@ -42,13 +43,15 @@ export function loadSources(federationTtl, mappedTtl, ingestLogTtl) {
                                                get(q.subject.value).format = formatFamily(q.object.value)
         else if (p === `${NS}hasField`)        setAdd(topFieldsOf, q.subject.value, q.object.value)
         else if (p === `${NS}hasSubField`)     setAdd(subFieldsOf, q.subject.value, q.object.value)
+        else if (p === `${NS}hasEntity`)       setAdd(entitiesOf, q.subject.value, q.object.value)
         else if (p === `${NS}fromSource`)      mappingSource.set(q.subject.value, q.object.value)
         else if (p === `${NS}hasFieldMapping`) setAdd(fmsOfMapping, q.subject.value, q.object.value)
         else if (p === `${NS}from`)            setAdd(fromsOfFm, q.subject.value, q.object.value)
     }
 
     for (const sourceIri of sourceIris) {
-        const top = topFieldsOf.get(sourceIri) ?? new Set()
+        const top = new Set(topFieldsOf.get(sourceIri) ?? [])
+        for (const e of entitiesOf.get(sourceIri) ?? []) for (const f of topFieldsOf.get(e) ?? []) top.add(f)
         const all = new Set(top)
         for (const tf of top) for (const sf of subFieldsOf.get(tf) ?? []) all.add(sf)
         get(sourceIri).totalFields = all.size

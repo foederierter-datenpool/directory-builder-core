@@ -163,7 +163,7 @@ export default function MapGraph() {
             // behind the "Also show 1:1 flows" toggle.
             if (e.direct && !showDirectFlows) return e
             const fromType = typeOf.get(e.from)
-            const v = fromType === "TransformNode" ? valueByField.get(e.to)
+            const v = fromType === "TransformNode" ? valueByField.get(e.toField ?? e.to)
                 : fromType === "SourceField"       ? valueByField.get(e.from)
                 : undefined
             return v ? { ...e, value: v, valueBg: VALUE_LABEL_BG[fromType] } : e

@@ -119,8 +119,16 @@ function HeaderNode({ data, style }) {
 }
 function BandNode({ style }) { return <div style={{ ...style, pointerEvents: "none" }} /> }
 
+// Soft labelled rectangle behind a cluster of nodes sharing `group` (e.g. the
+// fields of one source entity). The frame (size, border, fill) lives in the
+// node's style — React Flow applies that to the wrapper div — so only the
+// label renders here.
+function GroupNode({ data }) {
+    return <div style={{ pointerEvents: "none", fontSize: 11, color: "#999", padding: "4px 0 0 10px" }}>{data.label}</div>
+}
+
 const REL_COLOR = "#9333ea"
-const nodeTypes = { sideNode: SideNode, headerNode: HeaderNode, bandNode: BandNode }
+const nodeTypes = { sideNode: SideNode, headerNode: HeaderNode, bandNode: BandNode, groupNode: GroupNode }
 const edgeTypes = { value: ValueEdge }
 
 function toFlow({ nodes, edges }, columns, colors, centerColumns, direction, colSpacing, siblingGap, nodeWidth, columnTitles, columnBands, nodeY, columnHeaderStyle) {
@@ -202,6 +210,29 @@ function toFlow({ nodes, edges }, columns, colors, centerColumns, direction, col
                 padding: 6,
                 width: nodeWidth,
             },
+        })
+    }
+
+    // Group rectangles (horizontal layouts only): one decorative box behind each
+    // cluster of nodes sharing n.group. Assumes a group's nodes are adjacent in
+    // their column (they are — column order follows declaration order).
+    if (!isVertical) {
+        const bounds = new Map()  // group -> { x, minY, maxY, label }
+        for (const n of nodes) {
+            if (!n.group) continue
+            const pos = positions.get(n.id)
+            if (!pos) continue
+            const b = bounds.get(n.group) ?? { x: pos.x, minY: Infinity, maxY: -Infinity, label: n.groupLabel }
+            b.minY = Math.min(b.minY, pos.y)
+            b.maxY = Math.max(b.maxY, pos.y)
+            bounds.set(n.group, b)
+        }
+        // Vertical paddings tuned so consecutive groups keep a visible gap:
+        // rect-to-rect spacing = siblingGap - the height padding (top offset cancels).
+        for (const [group, b] of bounds) flowNodes.unshift({
+            id: `__group_${group}`, type: "groupNode", position: { x: b.x - 14, y: b.minY - 24 },
+            draggable: false, selectable: false, zIndex: -1, data: { label: b.label },
+            style: { width: nodeWidth + 28, height: (b.maxY - b.minY) + 68, border: "1.5px dashed #c4c4c4", borderRadius: 10, background: "rgba(120,120,120,0.05)" },
         })
     }
 

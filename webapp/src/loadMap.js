@@ -50,6 +50,7 @@ export function loadFieldValuesByEntity(federationTtl, mappedTtl, liftedBySource
     const fieldsBySource    = new Map()
     const subFieldsOf       = new Map()
     const targetPredicateOf = new Map()
+    const entitiesOf        = new Map()
     for (const q of fedQuads) {
         const p = q.predicate.value
         if      (p === `${NS}fieldPath`)        fieldPathOf.set(q.subject.value, q.object.value)
@@ -60,7 +61,15 @@ export function loadFieldValuesByEntity(federationTtl, mappedTtl, liftedBySource
         } else if (p === `${NS}hasSubField`) {
             if (!subFieldsOf.has(q.subject.value)) subFieldsOf.set(q.subject.value, [])
             subFieldsOf.get(q.subject.value).push(q.object.value)
+        } else if (p === `${NS}hasEntity`) {
+            if (!entitiesOf.has(q.subject.value)) entitiesOf.set(q.subject.value, [])
+            entitiesOf.get(q.subject.value).push(q.object.value)
         }
+    }
+    // Entity-grouped sources: fold each :SourceEntity's fields into its source's list.
+    for (const [src, ents] of entitiesOf) {
+        if (!fieldsBySource.has(src)) fieldsBySource.set(src, [])
+        for (const e of ents) fieldsBySource.get(src).push(...(fieldsBySource.get(e) ?? []))
     }
 
     const FROM_SOURCE = `${NS}fromSource`
@@ -169,23 +178,63 @@ export function loadMap(ttl, { hideUnmappedFields = true, hideUnmappedTargetFiel
     const bnodeTo   = new Map()
     const bnodeVia  = new Map()
     const fromSourceOf = new Map()
+    const toTargetOf   = new Map()
+    const schemaFields = []  // (schema, field) pairs in declaration order
     const appendTo = (map, key, val) => {
         if (!map.has(key)) map.set(key, [])
         map.get(key).push(val)
     }
     const targetPredicate = new Map()
     const fieldPath = new Map()
+    const labelOf = new Map()
+    const sourceOfEntity = new Map()  // :SourceEntity iri -> its :Source iri
+    const fieldPairs = []             // (owner, field) — owner is a Source or SourceEntity
+    const subPairs   = []
     for (const q of quads) {
-        if (q.predicate.value === `${NS}hasField`)         push(q.subject.value, q.object.value, "hasField")
-        else if (q.predicate.value === `${NS}hasSubField`) push(q.subject.value, q.object.value, "hasSubField")
-        else if (q.predicate.value === `${NS}hasTargetField`) push(q.object.value, q.subject.value, "isTargetFieldOf")
+        if (q.predicate.value === `${NS}hasField`)         fieldPairs.push([q.subject.value, q.object.value])
+        else if (q.predicate.value === `${NS}hasSubField`) subPairs.push([q.subject.value, q.object.value])
+        else if (q.predicate.value === `${NS}hasEntity`)   sourceOfEntity.set(q.object.value, q.subject.value)
+        else if (q.predicate.value === `${NS}hasTargetField`) schemaFields.push([q.subject.value, q.object.value])
         else if (q.predicate.value === `${NS}from`) appendTo(bnodeFrom, q.subject.value, q.object.value)
         else if (q.predicate.value === `${NS}to`)   appendTo(bnodeTo,   q.subject.value, q.object.value)
         else if (q.predicate.value === `${NS}via`)  bnodeVia.set(q.subject.value, q.object.value)
         else if (q.predicate.value === `${NS}fromSource`) fromSourceOf.set(q.subject.value, q.object.value)
+        else if (q.predicate.value === `${NS}toTarget`)   toTargetOf.set(q.subject.value, q.object.value)
         else if (q.predicate.value === `${NS}targetPredicate`) targetPredicate.set(q.subject.value, q.object.value)
         else if (q.predicate.value === `${NS}fieldPath`) fieldPath.set(q.subject.value, q.object.value)
+        else if (q.predicate.value === RDFS_LABEL) labelOf.set(q.subject.value, q.object.value)
     }
+
+    // A field owned by a :SourceEntity gets its edge from the entity's source —
+    // the entity renders not as a node but as a group rectangle around its
+    // fields (sub-fields included), labelled with the entity's rdfs:label.
+    const groupOf = new Map()  // field iri -> entity iri
+    for (const [owner, field] of fieldPairs) {
+        const src = sourceOfEntity.get(owner)
+        push(src ?? owner, field, "hasField")
+        if (src) groupOf.set(field, owner)
+    }
+    for (const [parent, sub] of subPairs) {
+        push(parent, sub, "hasSubField")
+        if (groupOf.has(parent)) groupOf.set(sub, groupOf.get(parent))
+    }
+
+    // Target fields are shared between schemas (one :TargetField per predicate),
+    // but a single shared node draws false paths — a source feeding only one
+    // schema would appear connected to every schema using the field. So render
+    // one copy per (field, schema) pair and route each mapping's edges to the
+    // copy of its :toTarget.
+    const copyInfo = new Map()  // copy id -> { field, schema }
+    const copiesOf = new Map()  // field iri -> [copy ids]
+    for (const [schema, field] of schemaFields) {
+        if (!nodeSet.has(field) || !nodeSet.has(schema)) continue
+        const copy = `${field}|${schema}`
+        copyInfo.set(copy, { field, schema })
+        appendTo(copiesOf, field, copy)
+        nodeSet.add(copy)
+        push(copy, schema, "isTargetFieldOf")
+    }
+    for (const field of copiesOf.keys()) nodeSet.delete(field)
     // Deduplicate routed edges: the same (source, via) or (via, target) pair
     // can appear across multiple field-mappings sharing one transform node.
     const seen = new Set()
@@ -201,14 +250,20 @@ export function loadMap(ttl, { hideUnmappedFields = true, hideUnmappedTargetFiel
             const froms = bnodeFrom.get(q.object.value) ?? []
             const tos   = bnodeTo.get(q.object.value)   ?? []
             const viaName = bnodeVia.get(q.object.value)
+            // Route to the copy of the mapping's :toTarget schema; a mapping
+            // without one fans out to every copy (the pre-split reading).
+            const copies = (t) => {
+                const c = `${t}|${toTargetOf.get(q.subject.value)}`
+                return copyInfo.has(c) ? [c] : copiesOf.get(t) ?? [t]
+            }
             if (viaName) {
                 const name = sourceName(fromSourceOf.get(q.subject.value))
                 const via = `transform:${name}:${viaName}`
                 if (!transformLabel.has(via)) { transformLabel.set(via, `${name}/${viaName}`); nodeSet.add(via) }
                 for (const f of froms) pushOnce(f, via, "mapsTo")
-                for (const t of tos)   pushOnce(via, t, "mapsTo")
+                for (const t of tos) for (const c of copies(t)) pushOnce(via, c, "mapsTo", { toField: t })
             } else {
-                for (const f of froms) for (const t of tos) pushOnce(f, t, "mapsTo", { direct: true })
+                for (const f of froms) for (const t of tos) for (const c of copies(t)) pushOnce(f, c, "mapsTo", { direct: true })
             }
         }
     }
@@ -216,6 +271,7 @@ export function loadMap(ttl, { hideUnmappedFields = true, hideUnmappedTargetFiel
     // SubFields render in the SourceField column — they're just nested fields.
     const typeFor = (iri) => {
         if (transformLabel.has(iri)) return "TransformNode"
+        if (copyInfo.has(iri)) return "TargetField"
         const ts = typeOf.get(iri)
         if (ts?.has(SUB_FIELD)) return "SourceField"
         for (const t of NODE_TYPES) if (ts?.has(t)) return localName(t)
@@ -246,7 +302,7 @@ export function loadMap(ttl, { hideUnmappedFields = true, hideUnmappedTargetFiel
         const ts = typeOf.get(iri)
         return ts?.has(`${NS}SourceField`) || ts?.has(SUB_FIELD)
     }
-    const isTargetField = (iri) => typeOf.get(iri)?.has(`${NS}TargetField`) ?? false
+    const isTargetField = (iri) => copyInfo.has(iri) || (typeOf.get(iri)?.has(`${NS}TargetField`) ?? false)
 
     if (hideUnmappedFields) {
         for (const iri of [...nodeSet]) if (isField(iri) && !mappedSources.has(iri)) nodeSet.delete(iri)
@@ -256,13 +312,15 @@ export function loadMap(ttl, { hideUnmappedFields = true, hideUnmappedTargetFiel
     }
     const visibleEdges = edges.filter((e) => nodeSet.has(e.from) && nodeSet.has(e.to))
 
+    const schemaLabel = (iri) => labelOf.get(iri) ?? localName(iri)
     const labelFor = (iri) => {
         const tl = transformLabel.get(iri)
         if (tl) return tl
-        const tp = targetPredicate.get(iri)
+        const tp = targetPredicate.get(copyInfo.get(iri)?.field ?? iri)
         if (tp) return prefixedIri(tp)
         const fp = fieldPath.get(iri)
         if (fp) return fp
+        if (typeOf.get(iri)?.has(`${NS}TargetSchema`)) return schemaLabel(iri)
         return localName(iri)
     }
 
@@ -270,6 +328,8 @@ export function loadMap(ttl, { hideUnmappedFields = true, hideUnmappedTargetFiel
         id: iri,
         label: labelFor(iri),
         type: typeFor(iri),
+        ...(copyInfo.has(iri) && { subtitle: schemaLabel(copyInfo.get(iri).schema) }),
+        ...(groupOf.has(iri) && { group: groupOf.get(iri), groupLabel: labelOf.get(groupOf.get(iri)) ?? localName(groupOf.get(iri)) }),
         ...(((isField(iri) && !mappedSources.has(iri)) || (isTargetField(iri) && !mappedTargets.has(iri))) && { dashed: true }),
     }))
     return { nodes, edges: visibleEdges }
