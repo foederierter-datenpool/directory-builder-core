@@ -1,6 +1,6 @@
 {
   "name": "@directory-builder/core",
-  "version": "0.1.8",
+  "version": "0.1.9",
   "description": "Use-case-agnostic engine for config-driven federation pipelines",
   "author": "Civic Data Lab",
   "repository": "github:foederierter-datenpool/directory-builder-core",
@@ -27,6 +27,7 @@
     "@vitejs/plugin-react": "^6.0.1",
     "@xyflow/react": "^12.10.2",
     "@zazuko/yasgui": "^4.6.1",
+    "fflate": "^0.8.3",
     "fuzzball": "^2.2.6",
     "lucide-react": "^1.14.0",
     "marked": "^18.0.5",

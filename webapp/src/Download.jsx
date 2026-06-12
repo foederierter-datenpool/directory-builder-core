@@ -10,9 +10,11 @@ import { turtleToJsonLdObj } from "@foerderfunke/sem-ops-utils/jsonld"
 import { sparqlSelect } from "@foerderfunke/sem-ops-utils/sparql"
 import { CDP, groupBySubject, localName, objectsOf, parseTtl, PATHS, shrink, subjectsOfType } from "@directory-builder/core/utils"
 import { displayPrefixes, federationTtl, finalTtl } from "./instanceData.js"
+import { strToU8, zipSync } from "fflate"
 import React, { useState } from "react"
 
 const SCHEMA_IDENTIFIER = "http://schema.org/identifier"
+const RDFS_LABEL = "http://www.w3.org/2000/01/rdf-schema#label"
 
 function readTargetFields() {
     const quads = parseTtl(federationTtl)
@@ -38,6 +40,80 @@ const FINAL_QUADS = parseTtl(finalTtl)
 // declared-but-unmapped fields would just download as empty columns.
 const PREDICATES_WITH_DATA = new Set(FINAL_QUADS.map((q) => q.predicate.value))
 const TARGET_FIELDS = readTargetFields().filter((f) => PREDICATES_WITH_DATA.has(f.predicate))
+
+// The federation's target schemas in declaration order, each with its declared
+// fields — the schema definitions only, no instance data.
+function readTargetSchemas() {
+    const quads = parseTtl(federationTtl)
+    const labelOf = new Map(), classOf = new Map(), fieldsOf = new Map(), predicateOf = new Map(), multiValued = new Set()
+    // :on also hangs off match-criteria bnodes, so overrides resolve in a
+    // second pass scoped to the bnodes :hasOverride points at.
+    const overrideNodes = [], onOf = new Map(), strategyOf = new Map()
+    // Schema-to-schema links live on mappings: a :hasRelationship bnode names
+    // the predicate (via :toTargetField) and the schema at the other end.
+    const toTargetOf = new Map(), relPairs = [], relFieldOf = new Map(), relSchemaOf = new Map()
+    for (const q of quads) {
+        const p = q.predicate.value
+        if      (p === RDFS_LABEL)               labelOf.set(q.subject.value, q.object.value)
+        else if (p === `${CDP}targetClass`)      classOf.set(q.subject.value, q.object.value)
+        else if (p === `${CDP}targetPredicate`)  predicateOf.set(q.subject.value, q.object.value)
+        else if (p === `${CDP}multiValued`)      { if (q.object.value === "true") multiValued.add(q.subject.value) }
+        else if (p === `${CDP}hasOverride`)      overrideNodes.push(q.object.value)
+        else if (p === `${CDP}on`)               onOf.set(q.subject.value, q.object.value)
+        else if (p === `${CDP}strategy`)         strategyOf.set(q.subject.value, q.object.value)
+        else if (p === `${CDP}toTarget`)         toTargetOf.set(q.subject.value, q.object.value)
+        else if (p === `${CDP}hasRelationship`)  relPairs.push([q.subject.value, q.object.value])
+        else if (p === `${CDP}toTargetField`)    relFieldOf.set(q.subject.value, q.object.value)
+        else if (p === `${CDP}toTargetSchema`)   relSchemaOf.set(q.subject.value, q.object.value)
+        else if (p === `${CDP}hasTargetField`) {
+            if (!fieldsOf.has(q.subject.value)) fieldsOf.set(q.subject.value, [])
+            fieldsOf.get(q.subject.value).push(q.object.value)
+        }
+    }
+    const resolveOf = new Map(overrideNodes.flatMap((n) =>
+        onOf.has(n) && strategyOf.has(n) ? [[onOf.get(n), localName(strategyOf.get(n))]] : []))
+    // fromSchema -> Set<"schema:provider → Beratungsstelle">, deduped across mappings
+    const schemaLabel = (iri) => labelOf.get(iri) ?? localName(iri)
+    const relationsOf = new Map()
+    for (const [mapping, rel] of relPairs) {
+        const from = toTargetOf.get(mapping), pred = predicateOf.get(relFieldOf.get(rel)), to = relSchemaOf.get(rel)
+        if (!from || !pred || !to) continue
+        if (!relationsOf.has(from)) relationsOf.set(from, new Set())
+        relationsOf.get(from).add(`${shrink(pred, displayPrefixes)} → ${schemaLabel(to)}`)
+    }
+    return objectsOf(quads, `${CDP}hasTargetSchema`).map((iri) => ({
+        iri,
+        name: localName(iri),
+        label: schemaLabel(iri),
+        targetClass: shrink(classOf.get(iri) ?? "", displayPrefixes),
+        relations: [...(relationsOf.get(iri) ?? [])],
+        fields: (fieldsOf.get(iri) ?? []).filter((f) => predicateOf.has(f)).map((f) => ({
+            label: shrink(predicateOf.get(f), displayPrefixes),
+            multiValued: multiValued.has(f),
+            resolve: resolveOf.get(predicateOf.get(f)),
+        })),
+    }))
+}
+const TARGET_SCHEMAS = readTargetSchemas()
+
+// overview.csv: the schema-level model — each schema's target class and how
+// the schemas link to each other (from the mappings' :hasRelationship decls).
+function buildOverviewCsv() {
+    const lines = [["schema", "targetClass", "relationships"].join(",")]
+    for (const s of TARGET_SCHEMAS) lines.push([s.label, s.targetClass, s.relations.join("; ")].map(csvEscape).join(","))
+    return lines.join("\n") + "\n"
+}
+
+// One CSV per schema: one row per declared :TargetField, carrying everything
+// federation.ttl says about it — the predicate, the multiValued flag, and any
+// custom resolve strategy (:hasOverride) on its predicate.
+function buildSchemaCsv(schema) {
+    const lines = [["predicate", "multiValued", "resolveOverride"].join(",")]
+    for (const f of schema.fields) lines.push([f.label, f.multiValued ? "true" : "", f.resolve ?? ""].map(csvEscape).join(","))
+    return lines.join("\n") + "\n"
+}
+
+const SCHEMA_FORMATS = [{ value: "csv", label: "CSV (.csv)" }]
 
 const FORMATS = [
     { value: "ttl",    label: "Turtle (.ttl)",     ext: "ttl",    mime: "text/turtle" },
@@ -117,6 +193,7 @@ export default function Download() {
     const [selected, setSelected] = useState(() => new Set(TARGET_FIELDS.map((f) => f.predicate)))
     const [format, setFormat] = useState("ttl")
     const [externalTarget, setExternalTarget] = useState(EXTERNAL_TARGETS[0]?.value)
+    const [schemaFormat, setSchemaFormat] = useState("csv")
 
     const toggle = (pred) => {
         const next = new Set(selected)
@@ -134,6 +211,15 @@ export default function Download() {
     const onDownloadExternal = async () => {
         const target = EXTERNAL_TARGETS.find((t) => t.value === externalTarget)
         triggerDownload(await target.build(), target.mime, target.filename)
+    }
+
+    // One zip: overview.csv (classes + inter-schema links) + one CSV per schema.
+    const onDownloadSchemas = () => {
+        const files = {
+            "overview.csv": strToU8(buildOverviewCsv()),
+            ...Object.fromEntries(TARGET_SCHEMAS.map((s) => [`${s.name}.csv`, strToU8(buildSchemaCsv(s))])),
+        }
+        triggerDownload(zipSync(files), "application/zip", "target-schemata.zip")
     }
 
     return (
@@ -167,6 +253,25 @@ export default function Download() {
                         {EXTERNAL_TARGETS.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
                     </select>
                     <button onClick={onDownloadExternal}>Download</button>
+                </div>
+            </>}
+
+            {TARGET_SCHEMAS.length > 0 && <>
+                <hr style={{ margin: "1.5rem 0", border: 0, borderTop: "1px solid #ddd" }} />
+
+                <h3 style={{ margin: "0 0 0.75rem" }}>Target schemas</h3>
+                <div style={{ marginBottom: "0.5rem" }}>
+                    The schema definitions as a zip: one CSV per schema ({TARGET_SCHEMAS.map((s) => s.label).join(", ")}),
+                    plus an overview of their classes and links.
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+                    <label style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem" }}>
+                        Format:
+                        <select value={schemaFormat} onChange={(e) => setSchemaFormat(e.target.value)}>
+                            {SCHEMA_FORMATS.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
+                        </select>
+                    </label>
+                    <button onClick={onDownloadSchemas}>Download</button>
                 </div>
             </>}
         </div>
