@@ -1,5 +1,5 @@
 import { sparqlConstruct, storeFromTurtles } from "@foerderfunke/sem-ops-utils"
-import { CDP, identifierFieldPath, PATHS, sourceName } from "../../utils.js"
+import { CDP, identifierField, PATHS, sourceName } from "../../utils.js"
 import { writeTurtleFile } from "../write-turtle.js"
 import path from "path"
 import fs from "fs"
@@ -34,17 +34,30 @@ export const runClean = async ({ abs, quads }, sourceIri) => {
     })
 }
 
+// :keyFunction → the SPARQL expression that turns the bound ?id literal into
+// the IRI's key segment. The transform is config-declared, never hardcoded in
+// a clean.sparql: "none" mints from the raw value, "encode" percent-escapes it,
+// "slug" lowercases and dash-collapses non-alphanumerics.
+const KEY_FN = {
+    none:   "STR(?id)",
+    encode: "ENCODE_FOR_URI(STR(?id))",
+    slug:   `REPLACE(LCASE(STR(?id)), "[^a-z0-9]+", "-")`,
+}
+
 // No clean.sparql given: resolve the engine's default template with the
-// source's identifier field as skolem key, and put the applied query on
-// record under data/ — no silent fallbacks.
+// source's :iriSource field as skolem key (and its :keyFunction transform),
+// and put the applied query on record under data/ — no silent fallbacks.
 const defaultClean = ({ abs, quads }, sourceIri, name) => {
-    const idPath = identifierFieldPath(quads, sourceIri)
-    if (!idPath) throw new Error(`${PATHS.cleanQuery(name)} missing and no schema:identifier mapping to derive the default clean from`)
+    const idField = identifierField(quads, sourceIri)
+    if (!idField) throw new Error(`${PATHS.cleanQuery(name)} missing and no :iriSource field to derive the default clean from`)
+    const keyExpr = KEY_FN[idField.keyFn]
+    if (!keyExpr) throw new Error(`unknown :keyFunction "${idField.keyFn}" on ${name}'s :iriSource field — expected one of ${Object.keys(KEY_FN).join(", ")}`)
     const query = fs.readFileSync(DEFAULT_CLEAN, "utf8")
-        .replaceAll("__source__", `<${sourceIri}>`).replaceAll("__name__", name).replaceAll("__idPath__", idPath)
+        .replaceAll("__source__", `<${sourceIri}>`).replaceAll("__name__", name)
+        .replaceAll("__idPath__", idField.path).replaceAll("__keyExpr__", keyExpr)
     const outPath = abs(PATHS.defaultCleanQuery(name))
     fs.mkdirSync(path.dirname(outPath), { recursive: true })
     fs.writeFileSync(outPath, query)
-    console.log(`clean  ${name} default (id field: ${idPath}) → ${PATHS.defaultCleanQuery(name)}`)
+    console.log(`clean  ${name} default (id field: ${idField.path}, key: ${idField.keyFn}) → ${PATHS.defaultCleanQuery(name)}`)
     return query
 }

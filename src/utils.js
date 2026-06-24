@@ -118,15 +118,26 @@ export const enabledSources = (quads) => {
     return objectsOf(quads, `${CDP}hasSource`).filter((iri) => !disabled.has(iri))
 }
 
-// The source's skolem key for the default clean: the :fieldPath of the source
-// field whose mapping points at the target field with :targetPredicate
-// schema:identifier. Undefined when the source declares no such mapping.
-export const identifierFieldPath = (quads, sourceIri) => {
+// The source's skolem key for the default clean: the SourceField flagged
+// :iriSource true, returned as { path, keyFn } — its :fieldPath and its
+// :keyFunction (default "none", the verbatim value). The flag names the mint
+// key directly, decoupled from output semantics: a field can be the IRI key
+// without being mapped to schema:identifier (e.g. a record minted from its
+// postal code), and vice versa. Walks the source's :hasField and the :hasField
+// of any :hasEntity it declares. Undefined when no field is flagged.
+//
+// Source granularity (first flagged field wins) is enough: a multi-entity
+// source mints via a custom clean.sparql, so only clean-less (single-entity,
+// flat) sources reach the default clean — and those have one key field.
+export const identifierField = (quads, sourceIri) => {
     const o = (s, p) => quads.filter((q) => q.subject.value === s && q.predicate.value === `${CDP}${p}`).map((q) => q.object.value)
-    for (const m of quads.filter((q) => q.predicate.value === `${CDP}fromSource` && q.object.value === sourceIri).map((q) => q.subject.value)) {
-        for (const fm of o(m, "hasFieldMapping")) {
-            if (o(o(fm, "to")[0], "targetPredicate")[0] === "http://schema.org/identifier") return o(o(fm, "from")[0], "fieldPath")[0]
-        }
+    const fields = [
+        ...o(sourceIri, "hasField"),
+        ...o(sourceIri, "hasEntity").flatMap((e) => o(e, "hasField")),
+    ]
+    for (const f of fields) {
+        if (o(f, "iriSource")[0] === "true")
+            return { path: o(f, "fieldPath")[0], keyFn: o(f, "keyFunction")[0] ?? "none" }
     }
 }
 

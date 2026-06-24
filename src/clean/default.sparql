@@ -1,9 +1,9 @@
 # Default clean, applied when a source ships no clean.sparql: skolemise each
-# record from its identifier field (the source field mapped to the target
-# schema's schema:identifier) into a stable cdp:__name__-<id> IRI, copy its
+# record from its :iriSource field into a stable cdp:__name__-<id> IRI, copy its
 # scalar fields verbatim, and tag the source. The engine fills __source__,
-# __name__ and __idPath__ from federation.ttl and puts the resolved query on
-# record under data/pipeline/default-clean-queries/.
+# __name__, __idPath__ (the :iriSource field's :fieldPath) and __keyExpr__ (the
+# expression its :keyFunction maps to) from federation.ttl and puts the resolved
+# query on record under data/pipeline/default-clean-queries/.
 
 PREFIX xyz: <http://sparql.xyz/facade-x/data/>
 PREFIX cdp: <https://civic-data.de/pipeline#>
@@ -15,5 +15,5 @@ CONSTRUCT {
     ?node xyz:__idPath__ ?id ;
           ?p ?o .
     FILTER(isLiteral(?o))
-    BIND(IRI(CONCAT(STR(cdp:), "__name__-", STR(?id))) AS ?record)
+    BIND(IRI(CONCAT(STR(cdp:), "__name__-", __keyExpr__)) AS ?record)
 }

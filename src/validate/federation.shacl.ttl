@@ -1,5 +1,6 @@
-@prefix :   <https://civic-data.de/pipeline#> .
-@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix :    <https://civic-data.de/pipeline#> .
+@prefix sh:  <http://www.w3.org/ns/shacl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
 
 # The engine's contract for a well-formed federation.ttl
 # expressed as SHACL and enforced by ../validate.js
@@ -21,6 +22,25 @@
         sh:maxCount 1 ;
         sh:nodeKind sh:IRI ;
         sh:message "needs exactly one :format"
+    ] .
+
+# A SourceField's mint-key declarations, the pure-config slice of the
+# identity contract. The companion rule — every clean-less source needs an
+# :iriSource field — is filesystem-dependent (it hinges on clean.sparql's
+# presence) and lives in validate.js, not here.
+:sourceFieldShape a sh:NodeShape ;
+    sh:targetClass :SourceField ;
+    sh:property [
+        sh:path :keyFunction ;
+        sh:maxCount 1 ;
+        sh:in ( "none" "encode" "slug" ) ;
+        sh:message "keyFunction must be one of none|encode|slug"
+    ] ;
+    sh:property [
+        sh:path :iriSource ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:boolean ;
+        sh:message ":iriSource must be a single boolean"
     ] .
 
 # TODO: add the rest
