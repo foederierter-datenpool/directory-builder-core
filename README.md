@@ -73,10 +73,10 @@ each fetcher picks the parameters it needs. For static-file sources `fetch.js`
 is optional: without one, the default fetch copies `sources/<name>/static/`
 verbatim. `clean.sparql` is likewise optional when the source flags one of its
 fields `:iriSource true`: the engine derives a default clean from that field —
-skolemise on it (transformed by its optional `:keyFunction`, one of `none` /
-`encode` / `slug`), copy the scalar fields — and puts the resolved query on
-record under `data/pipeline/default-clean-queries/`. `:iriSource` names the mint
-key directly, independent of whether that field is also mapped to
+skolemise on it (URI-escaped, so any value mints a valid IRI), copy the scalar
+fields — and puts the resolved query on record under
+`data/pipeline/default-clean-queries/`. `:iriSource` names the mint key
+directly, independent of whether that field is also mapped to
 `schema:identifier` in the output.
 
 A source declared with `:enabled false` stays in the config but is skipped by

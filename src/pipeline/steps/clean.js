@@ -34,30 +34,18 @@ export const runClean = async ({ abs, quads }, sourceIri) => {
     })
 }
 
-// :keyFunction → the SPARQL expression that turns the bound ?id literal into
-// the IRI's key segment. The transform is config-declared, never hardcoded in
-// a clean.sparql: "none" mints from the raw value, "encode" percent-escapes it,
-// "slug" lowercases and dash-collapses non-alphanumerics.
-const KEY_FN = {
-    none:   "STR(?id)",
-    encode: "ENCODE_FOR_URI(STR(?id))",
-    slug:   `REPLACE(LCASE(STR(?id)), "[^a-z0-9]+", "-")`,
-}
-
 // No clean.sparql given: resolve the engine's default template with the
-// source's :iriSource field as skolem key (and its :keyFunction transform),
-// and put the applied query on record under data/ — no silent fallbacks.
+// source's :iriSource field as skolem key, and put the applied query on
+// record under data/ — no silent fallbacks. The template URI-escapes the key
+// (ENCODE_FOR_URI), so any field value mints a syntactically valid IRI.
 const defaultClean = ({ abs, quads }, sourceIri, name) => {
-    const idField = identifierField(quads, sourceIri)
-    if (!idField) throw new Error(`${PATHS.cleanQuery(name)} missing and no :iriSource field to derive the default clean from`)
-    const keyExpr = KEY_FN[idField.keyFn]
-    if (!keyExpr) throw new Error(`unknown :keyFunction "${idField.keyFn}" on ${name}'s :iriSource field — expected one of ${Object.keys(KEY_FN).join(", ")}`)
+    const idPath = identifierField(quads, sourceIri)
+    if (!idPath) throw new Error(`${PATHS.cleanQuery(name)} missing and no :iriSource field to derive the default clean from`)
     const query = fs.readFileSync(DEFAULT_CLEAN, "utf8")
-        .replaceAll("__source__", `<${sourceIri}>`).replaceAll("__name__", name)
-        .replaceAll("__idPath__", idField.path).replaceAll("__keyExpr__", keyExpr)
+        .replaceAll("__source__", `<${sourceIri}>`).replaceAll("__name__", name).replaceAll("__idPath__", idPath)
     const outPath = abs(PATHS.defaultCleanQuery(name))
     fs.mkdirSync(path.dirname(outPath), { recursive: true })
     fs.writeFileSync(outPath, query)
-    console.log(`clean  ${name} default (id field: ${idField.path}, key: ${idField.keyFn}) → ${PATHS.defaultCleanQuery(name)}`)
+    console.log(`clean  ${name} default (id field: ${idPath}) → ${PATHS.defaultCleanQuery(name)}`)
     return query
 }

@@ -24,18 +24,12 @@
         sh:message "needs exactly one :format"
     ] .
 
-# A SourceField's mint-key declarations, the pure-config slice of the
-# identity contract. The companion rule — every clean-less source needs an
-# :iriSource field — is filesystem-dependent (it hinges on clean.sparql's
-# presence) and lives in validate.js, not here.
+# A SourceField's mint-key flag, the pure-config slice of the identity
+# contract. The companion rule — every clean-less source needs an :iriSource
+# field — is filesystem-dependent (it hinges on clean.sparql's presence) and
+# lives in validate.js, not here.
 :sourceFieldShape a sh:NodeShape ;
     sh:targetClass :SourceField ;
-    sh:property [
-        sh:path :keyFunction ;
-        sh:maxCount 1 ;
-        sh:in ( "none" "encode" "slug" ) ;
-        sh:message "keyFunction must be one of none|encode|slug"
-    ] ;
     sh:property [
         sh:path :iriSource ;
         sh:maxCount 1 ;

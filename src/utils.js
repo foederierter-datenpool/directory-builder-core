@@ -118,13 +118,12 @@ export const enabledSources = (quads) => {
     return objectsOf(quads, `${CDP}hasSource`).filter((iri) => !disabled.has(iri))
 }
 
-// The source's skolem key for the default clean: the SourceField flagged
-// :iriSource true, returned as { path, keyFn } — its :fieldPath and its
-// :keyFunction (default "none", the verbatim value). The flag names the mint
-// key directly, decoupled from output semantics: a field can be the IRI key
-// without being mapped to schema:identifier (e.g. a record minted from its
-// postal code), and vice versa. Walks the source's :hasField and the :hasField
-// of any :hasEntity it declares. Undefined when no field is flagged.
+// The source's skolem key for the default clean: the :fieldPath of the
+// SourceField flagged :iriSource true. The flag names the mint key directly,
+// decoupled from output semantics: a field can be the IRI key without being
+// mapped to schema:identifier (e.g. a record minted from its postal code), and
+// vice versa. Walks the source's :hasField and the :hasField of any :hasEntity
+// it declares. Undefined when no field is flagged.
 //
 // Source granularity (first flagged field wins) is enough: a multi-entity
 // source mints via a custom clean.sparql, so only clean-less (single-entity,
@@ -136,8 +135,7 @@ export const identifierField = (quads, sourceIri) => {
         ...o(sourceIri, "hasEntity").flatMap((e) => o(e, "hasField")),
     ]
     for (const f of fields) {
-        if (o(f, "iriSource")[0] === "true")
-            return { path: o(f, "fieldPath")[0], keyFn: o(f, "keyFunction")[0] ?? "none" }
+        if (o(f, "iriSource")[0] === "true") return o(f, "fieldPath")[0]
     }
 }
 
