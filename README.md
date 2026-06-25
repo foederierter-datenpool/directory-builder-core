@@ -41,6 +41,31 @@ instance and the full data flow.
 - Java (for [SPARQL Anything](https://github.com/SPARQL-Anything/sparql.anything),
   auto-downloaded on first run)
 
+## Installation
+
+1. Create a new directory, e.g. `my-federation`
+2. Inside it, run `npm install @directory-builder/core`
+3. To start from a runnable example, run `npx directory-builder init` — copies
+   the example's `config/` and `sources/` (from this repo's [`example/`](example/))
+   into the current directory. Skip it to start empty.
+
+### Configuring the pipeline
+
+Edit `config/federation.ttl` — the federation's decisions (sources, target
+schemas, field mappings, match/merge/resolve rules). It's the one required
+file; see [`example/config/federation.ttl`](example/config/federation.ttl) for
+a worked example and [`src/validate/federation.shacl.ttl`](src/validate/federation.shacl.ttl)
+for the full contract it must satisfy. Then, per source:
+
+- create `sources/<name>/fetch.js` (optional — static sources default to copying `static/`)
+- create `sources/<name>/clean.sparql` (optional when a field maps to `schema:identifier`)
+- for static-file sources, put the data in `sources/<name>/static/`
+
+Optionally add curated `owl:sameAs` / `owl:differentFrom` pairs in
+`config/match-knowledge.ttl`.
+
+Check the setup before running: `npx directory-builder validate`.
+
 ## Run a pipeline
 
 Two ways — both run the same engines, rooted at the instance directory.
@@ -48,7 +73,6 @@ Two ways — both run the same engines, rooted at the instance directory.
 Via command (root = where you invoke):
 
 ```sh
-npm install @directory-builder/core
 npx directory-builder            # full pipeline: ingest + federate
 npx directory-builder ingest     # fetch + lift only
 npx directory-builder federate   # clean → map → match → merge → resolve only
