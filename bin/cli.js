@@ -27,7 +27,7 @@ const commands = {
         let dirs
         try { dirs = init() }
         catch (e) { console.error(e.message); process.exit(1) }
-        console.log(`scaffolded ${dirs.join("/, ")}/ — edit config/federation.ttl, then run \`directory-builder\``)
+        console.log(`scaffolded ${dirs.join("/, ")}/ — edit config/federation.ttl, then run \`npx directory-builder\``)
     },
     run:      () => pipeline.run(),
     ingest:   () => pipeline.ingest(),
