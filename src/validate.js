@@ -1,5 +1,5 @@
 import { buildValidator, turtleToDataset } from "@foerderfunke/sem-ops-utils"
-import { CDP, identifierFieldPath, objectsOf, parseTtl, PATHS, shrink, sourceName } from "./utils.js"
+import { CDP, identifierField, objectsOf, parseTtl, PATHS, shrink, sourceName } from "./utils.js"
 import path from "path"
 import fs from "fs"
 
@@ -20,10 +20,11 @@ export async function validate(root = process.cwd()) {
 }
 
 // Every :hasSource in federation.ttl has what its engine steps need: a
-// fetch.js or static/ to default to, a clean.sparql or a schema:identifier
-// mapping to derive the default clean from - and no sources/ folder exists
-// that the federation doesn't declare. Checks all declared sources, enabled
-// or not: folder presence is a repo-layout contract.
+// fetch.js or static/ to default to, a clean.sparql or an :iriSource field to
+// derive the default clean from - and no sources/ folder exists that the
+// federation doesn't declare. Checks all declared sources, enabled or not:
+// folder presence is a repo-layout contract. This "key OR clean.sparql" rule
+// is filesystem-dependent, so it lives here, not in the SHACL shape.
 function sourcesFoldersInSync({ abs, quads }) {
     const declared = objectsOf(quads, `${CDP}hasSource`)
     const problems = []
@@ -31,8 +32,8 @@ function sourcesFoldersInSync({ abs, quads }) {
         const name = sourceName(iri)
         if (![PATHS.fetchScript(name), PATHS.staticDir(name)].some((f) => fs.existsSync(abs(f))))
             problems.push(`${PATHS.fetchScript(name)} missing and no ${PATHS.staticDir(name)} to default to`)
-        if (!fs.existsSync(abs(PATHS.cleanQuery(name))) && !identifierFieldPath(quads, iri))
-            problems.push(`${PATHS.cleanQuery(name)} missing and no schema:identifier mapping to derive the default clean from`)
+        if (!fs.existsSync(abs(PATHS.cleanQuery(name))) && !identifierField(quads, iri))
+            problems.push(`${PATHS.cleanQuery(name)} missing and no :iriSource field to derive the default clean from`)
     }
     // The other direction (every folder in sources needs to be present in federation.ttl) is temporarily disabled
     // const declaredNames = declared.map(sourceName)

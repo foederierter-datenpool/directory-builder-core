@@ -1,5 +1,5 @@
 import { sparqlConstruct, storeFromTurtles } from "@foerderfunke/sem-ops-utils"
-import { CDP, identifierFieldPath, PATHS, sourceName } from "../../utils.js"
+import { CDP, identifierField, PATHS, sourceName } from "../../utils.js"
 import { writeTurtleFile } from "../write-turtle.js"
 import path from "path"
 import fs from "fs"
@@ -35,11 +35,12 @@ export const runClean = async ({ abs, quads }, sourceIri) => {
 }
 
 // No clean.sparql given: resolve the engine's default template with the
-// source's identifier field as skolem key, and put the applied query on
-// record under data/ — no silent fallbacks.
+// source's :iriSource field as skolem key, and put the applied query on
+// record under data/ — no silent fallbacks. The template URI-escapes the key
+// (ENCODE_FOR_URI), so any field value mints a syntactically valid IRI.
 const defaultClean = ({ abs, quads }, sourceIri, name) => {
-    const idPath = identifierFieldPath(quads, sourceIri)
-    if (!idPath) throw new Error(`${PATHS.cleanQuery(name)} missing and no schema:identifier mapping to derive the default clean from`)
+    const idPath = identifierField(quads, sourceIri)
+    if (!idPath) throw new Error(`${PATHS.cleanQuery(name)} missing and no :iriSource field to derive the default clean from`)
     const query = fs.readFileSync(DEFAULT_CLEAN, "utf8")
         .replaceAll("__source__", `<${sourceIri}>`).replaceAll("__name__", name).replaceAll("__idPath__", idPath)
     const outPath = abs(PATHS.defaultCleanQuery(name))

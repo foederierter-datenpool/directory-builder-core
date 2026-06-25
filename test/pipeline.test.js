@@ -26,12 +26,12 @@ const federation = `
 :t-id   a :TargetField ; :targetPredicate schema:identifier .
 :t-name a :TargetField ; :targetPredicate schema:name .
 
-:alphaSource a :Source ; :format ft:JSON .
-:betaSource  a :Source ; :format ft:JSON .
+:alphaSource a :Source ; :format ft:JSON ; :hasField :alpha-id, :alpha-name .
+:betaSource  a :Source ; :format ft:JSON ; :hasField :beta-id, :beta-label .
 
-:alpha-id   a :SourceField ; :fieldPath "id" .
+:alpha-id   a :SourceField ; :fieldPath "id" ; :iriSource true .
 :alpha-name a :SourceField ; :fieldPath "name" .
-:beta-id    a :SourceField ; :fieldPath "id" .
+:beta-id    a :SourceField ; :fieldPath "id" ; :iriSource true .
 :beta-label a :SourceField ; :fieldPath "label" .
 
 :alpha-mapping a :Mapping ; :fromSource :alphaSource ; :toTarget :thingSchema ;
