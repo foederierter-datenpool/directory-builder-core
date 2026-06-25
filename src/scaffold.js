@@ -7,8 +7,9 @@ import { PATHS } from "./utils.js"
 // data/ and tools/ are regenerable (the lift step downloads the jar on demand),
 // so they're not scaffolded. Refuses to clobber an existing federation.
 
-// The example ships with the package (.npmignore keeps example/config +
-// example/sources); it doubles as the starting dataset for a new instance.
+// The example ships with the package: .gitignore keeps its generated dirs
+// (data/, tools/, webapp/) out, leaving config/ + sources/ to publish — the two
+// we copy. It doubles as the starting dataset for a new instance.
 const EXAMPLE = path.join(import.meta.dirname, "..", "example")
 const SCAFFOLD_DIRS = ["config", "sources"]
 
