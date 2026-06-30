@@ -11,6 +11,7 @@ import { loadSourceMeta, loadSourceOfRecord } from "./sourceMeta.js"
 import { CDP, groupBySubject, parseTtl, shrink } from "@directory-builder/core/utils"
 import React, { useMemo, useState } from "react"
 import ColumnGraph from "./ColumnGraph.jsx"
+import Modal from "./Modal.jsx"
 import { loadMatch } from "./loadMatch.js"
 
 const SCHEMA_IDENTIFIER = "http://schema.org/identifier"
@@ -52,12 +53,7 @@ function MemberDetailsModal({ clusterId, memberIris, onClose }) {
     const manualHere = manualPairs.filter(([a, b]) => memberSet.has(a) && memberSet.has(b))
     const distinctHere = distinctPairs.filter(([a, b]) => memberSet.has(a) || memberSet.has(b))
     return (
-        <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", zIndex: 9999, display: "flex", justifyContent: "center", alignItems: "flex-start", paddingTop: 60, overflowY: "auto" }}>
-            <div onClick={(e) => e.stopPropagation()} style={{ background: "white", borderRadius: 6, padding: 20, minWidth: 480, maxWidth: 800, boxShadow: "0 8px 24px rgba(0,0,0,0.3)" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 12, gap: 12 }}>
-                    <h3 style={{ margin: 0, fontSize: 14 }}>Cluster <code>{clusterId.startsWith(CDF_NS) ? `cdf:${clusterId.slice(CDF_NS.length)}` : prefixed(clusterId)}</code></h3>
-                    <button onClick={onClose} style={{ border: 0, background: "transparent", fontSize: 18, cursor: "pointer", lineHeight: 1 }}>×</button>
-                </div>
+        <Modal title={<>Cluster <code>{clusterId.startsWith(CDF_NS) ? `cdf:${clusterId.slice(CDF_NS.length)}` : prefixed(clusterId)}</code></>} onClose={onClose}>
                 {memberIris.map((iri) => {
                     const info = entityInfo.get(iri)
                     return (
@@ -96,8 +92,7 @@ function MemberDetailsModal({ clusterId, memberIris, onClose }) {
                         ))}
                     </div>
                 )}
-            </div>
-        </div>
+        </Modal>
     )
 }
 

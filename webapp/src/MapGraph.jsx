@@ -10,6 +10,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react"
 import { loadCleanedBySource } from "./sourceMeta.js"
 import { SkipBack, SkipForward } from "lucide-react"
 import ColumnGraph, { toFlow } from "./ColumnGraph.jsx"
+import CheckboxDropdown from "./CheckboxDropdown.jsx"
 import { buildMiroSnippet } from "./miroExport.js"
 
 const COLUMNS = ["Source", "SourceField", "TransformNode", "TargetField", "TargetSchema"]
@@ -41,53 +42,9 @@ const ENTITIES_BY_SOURCE = loadEntitiesBySource(ttl, mappedTtl)
 // cleaned TTLs from :hasSource, so a new source needs no edit here.
 const FIELD_VALUES = loadFieldValuesByEntity(ttl, mappedTtl, loadCleanedBySource(ttl, cleanedByPath))
 
+const SOURCE_OPTS = SOURCES.map((s) => ({ key: s.iri, label: s.label }))
 function SourcesDropdown({ visible, onChange }) {
-    const [open, setOpen] = useState(false)
-    const ref = useRef(null)
-
-    useEffect(() => {
-        if (!open) return
-        const onDown = (e) => { if (!ref.current?.contains(e.target)) setOpen(false) }
-        document.addEventListener("mousedown", onDown)
-        return () => document.removeEventListener("mousedown", onDown)
-    }, [open])
-
-    const summary = visible.size === SOURCES.length
-        ? "All sources"
-        : visible.size === 0
-            ? "No sources"
-            : `${visible.size} of ${SOURCES.length} sources`
-
-    const toggle = (iri) => {
-        const next = new Set(visible)
-        if (next.has(iri)) next.delete(iri); else next.add(iri)
-        onChange(next)
-    }
-    const setAll = (on) => onChange(on ? new Set(SOURCES.map(s => s.iri)) : new Set())
-
-    const linkBtn = { background: "none", border: "none", color: "#06c", cursor: "pointer", padding: 0, fontSize: 12 }
-
-    return (
-        <div ref={ref} style={{ position: "relative", display: "inline-block" }}>
-            <button onClick={() => setOpen(!open)} style={BTN}>
-                {summary} ▾
-            </button>
-            {open && (
-                <div style={{ position: "absolute", top: "calc(100% + 4px)", left: 0, zIndex: 10, background: "white", border: "1px solid #aaa", borderRadius: 4, padding: 6, minWidth: 200, boxShadow: "0 2px 6px rgba(0,0,0,0.12)" }}>
-                    <div style={{ display: "flex", gap: 12, paddingBottom: 4, marginBottom: 4, borderBottom: "1px solid #eee" }}>
-                        <button onClick={() => setAll(true)} style={linkBtn}>Select all</button>
-                        <button onClick={() => setAll(false)} style={linkBtn}>Unselect all</button>
-                    </div>
-                    {SOURCES.map(s => (
-                        <label key={s.iri} style={{ display: "flex", alignItems: "center", gap: 6, padding: "2px 0" }}>
-                            <input type="checkbox" checked={visible.has(s.iri)} onChange={() => toggle(s.iri)} />
-                            {s.label}
-                        </label>
-                    ))}
-                </div>
-            )}
-        </div>
-    )
+    return <CheckboxDropdown options={SOURCE_OPTS} selected={visible} onChange={onChange} noun="source" />
 }
 
 // "Export to Miro" button + explainer modal. The export needs no Miro app or

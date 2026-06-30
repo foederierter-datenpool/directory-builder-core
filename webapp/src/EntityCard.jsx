@@ -118,8 +118,12 @@ function EntityCardWide({ entity, highlight }) {
 }
 
 export default function EntityCard({ entity, compact, highlight }) {
+    // On Merge, entity.columns lists the contributing records; show how many distinct
+    // sources this entity was merged from. (Empty on the Directory → no badge.)
+    const sourceCount = new Set((entity.columns ?? []).map((c) => c.source).filter(Boolean)).size
+    const meta = sourceCount > 0 ? `${sourceCount} source${sourceCount > 1 ? "s" : ""}` : null
     return (
-        <Card title={entity.label} tag={entity.type}>
+        <Card title={entity.label} tag={entity.type} meta={meta}>
             {compact ? <EntityCardNarrow entity={entity} highlight={highlight} /> : <EntityCardWide entity={entity} highlight={highlight} />}
         </Card>
     )

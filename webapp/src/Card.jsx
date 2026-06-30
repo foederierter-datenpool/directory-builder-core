@@ -4,12 +4,13 @@
 
 import React from "react"
 
-export default function Card({ title, tag, children }) {
+export default function Card({ title, tag, meta, children }) {
     return (
         <div className="entity-card">
-            <div className="entity-card-header">
+            <div className="entity-card-header" style={{ display: "flex", alignItems: "baseline" }}>
                 <code>{title}</code>
                 {tag && <span style={{ marginLeft: "0.6rem", fontSize: 11, color: "#888", fontFamily: "monospace" }}>{tag}</span>}
+                {meta && <span style={{ marginLeft: "auto", paddingLeft: "0.6rem", fontSize: 11, color: "#999" }}>{meta}</span>}
             </div>
             {children}
         </div>
