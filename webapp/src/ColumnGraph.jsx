@@ -337,10 +337,19 @@ export default function ColumnGraph({ nodes, edges, columns, colors, centerColum
     }), [rfEdges, draggingId])
 
     const onInit = async (instance) => {
-        await instance.fitView()
-        const { x, zoom } = instance.getViewport()
-        const minY = Math.min(...instance.getNodes().map((n) => n.position.y))
-        instance.setViewport({ x, y: 20 - minY * zoom, zoom })
+        const ns = instance.getNodes()
+        const minX = Math.min(...ns.map((n) => n.position.x))
+        const maxX = Math.max(...ns.map((n) => n.position.x)) + nodeWidth
+        const minY = Math.min(...ns.map((n) => n.position.y))
+        const cx = (minX + maxX) / 2
+        // Fit the full WIDTH (fitting the full height would shrink this tall graph to
+        // nothing), capped at a comfortable zoom, then centre horizontally and pin to
+        // the top so we open on the first lane, readable.
+        await instance.fitBounds({ x: minX, y: minY, width: maxX - minX, height: 10 }, { padding: 0.06 })
+        const vp = instance.getViewport()
+        const paneW = 2 * (vp.x + cx * vp.zoom)        // fitBounds centres content → its centre sits at paneW/2
+        const zoom = Math.min(vp.zoom, 1)
+        instance.setViewport({ x: paneW / 2 - cx * zoom, y: 20 - minY * zoom, zoom })
     }
 
     return (
@@ -360,6 +369,8 @@ export default function ColumnGraph({ nodes, edges, columns, colors, centerColum
                 nodeTypes={nodeTypes}
                 edgeTypes={edgeTypes}
                 onInit={onInit}
+                panOnScroll                  // wheel / two-finger scroll pans the canvas; pinch or ⌘-scroll still zooms
+                minZoom={0.1}                // zoom out far enough to take in a whole tall lane
             >
                 <Background />
                 <Controls showInteractive={false} />
