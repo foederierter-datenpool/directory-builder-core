@@ -9,10 +9,19 @@ const df = DataFactory
 // One value per (subject, predicate). schema:identifier and cdp:fromSource
 // are dropped — final.ttl is the consumer-facing artifact, source attribution
 // lives in provenance.ttl.
+// A strategy returns either one quad (collapse the group to a single value) or an
+// array of quads (keep several). The caller flattens, so both forms compose.
 const STRATEGIES = {
     alphabeticFirst: (quads) => [...quads].sort((a, b) => a.object.value.localeCompare(b.object.value))[0],
     concatenateAll:  (quads) => df.quad(quads[0].subject, quads[0].predicate,
         df.literal([...new Set(quads.map(q => q.object.value))].sort().join(", "))),
+    // Keep every distinct value as its own triple (e.g. one schema:availableService
+    // per offering) rather than collapsing the group to a single value.
+    keepAll: (quads) => {
+        const seen = new Set()
+        return quads.filter(q => !seen.has(q.object.value) && seen.add(q.object.value))
+            .sort((a, b) => a.object.value.localeCompare(b.object.value))
+    },
 }
 const RESOLVE_EXCLUDE = new Set(["http://schema.org/identifier", `${CDP}fromSource`])
 
@@ -47,8 +56,10 @@ export const runResolve = async ({ store, defStore, abs }, outPath) => {
         if (!groups.has(k)) groups.set(k, [])
         groups.get(k).push(q)
     }
-    const finalQuads = [...groups.values()].map(quads =>
-        (overrides.get(quads[0].predicate.value) ?? defaultPick)(quads))
+    const finalQuads = [...groups.values()].flatMap(quads => {
+        const picked = (overrides.get(quads[0].predicate.value) ?? defaultPick)(quads)
+        return Array.isArray(picked) ? picked : [picked]
+    })
 
     await writeTurtleFile(abs(outPath), finalQuads, { ...COMMON_PREFIXES, cdf: cfg.ns })
     console.log(`resolve: wrote ${finalQuads.length} triples → ${outPath}`)
