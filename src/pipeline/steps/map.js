@@ -153,6 +153,15 @@ export const runMap = async ({ store, defStore, abs }, queriesDir) => {
             ?field :targetPredicate ?targetPredicate .
         } ORDER BY ?mapping`, [defStore])
 
+    // cdp:matchString — clean's optional normalised matching surface. Not a target field,
+    // so copy it straight from each source graph to the mapped graph, where a criterion's
+    // :on can match on it. The match step deletes it afterwards, so it never reaches merged.ttl.
+    for (const source of [...new Set(mappings.map(m => m.source))]) {
+        await sparqlInsertDelete(`PREFIX cdp: <${CDP}>
+INSERT { GRAPH <urn:mapped> { ?e cdp:matchString ?m } }
+WHERE  { GRAPH <${sourceGraph(sourceName(source))}> { ?e cdp:matchString ?m } }`, store)
+    }
+
     for (const rel of linkRows) {
         const prefixes = { cdp: CDP, schema: "http://schema.org/" }
         const short = (iri) => { const s = shrink(iri, prefixes); return s === iri ? `<${iri}>` : s }

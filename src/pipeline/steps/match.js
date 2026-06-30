@@ -2,7 +2,7 @@ import { sparqlSelect } from "@foerderfunke/sem-ops-utils"
 import { COMMON_PREFIXES, writeTurtleFile } from "../write-turtle.js"
 import { MAPPED_GRAPH } from "./map.js"
 import { CDP, parseTtl, shrink } from "../../utils.js"
-import { token_set_ratio } from "fuzzball"
+import { token_set_ratio, token_sort_ratio, ratio } from "fuzzball"
 import { DataFactory } from "n3"
 import { createHash } from "crypto"
 import fs from "fs"
@@ -15,14 +15,14 @@ export const HAS_MEMBER  = df.namedNode(CDP + "hasMember")
 const RDF_TYPE      = df.namedNode("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")
 const MATCH_CLUSTER = df.namedNode(CDP + "MatchCluster")
 
-// token_set_ratio computes a ratio over the intersection of token sets, which
-// is robust to legal-form noise ("gGmbH", "e.V."), sub-unit specifiers, and
-// word-order variations. Returns 0–100; we normalise to 0–1. The algorithm
-// name is recorded in the evidence graph so old similarity numbers stay
-// interpretable across algorithm swaps.
-// https://github.com/nol13/fuzzball.js/blob/master/jsdocs/fuzzball.md#fuzzballtoken_set_ratiostr1-str2-options_p--number
-const SIMILARITY_ALGORITHM = "token_set_ratio"
-const similarity = (a, b) => token_set_ratio(a ?? "", b ?? "") / 100
+// Fuzzy string similarity for weighted criteria, 0–100 normalised to 0–1. A rule picks
+// one per :matchAlgorithm (default token_set_ratio): token_set scores over the token-set
+// intersection — robust to legal-form noise and word order, good for centre names; ratio
+// is plain edit distance, where a short name is not a perfect subset-match of a longer one,
+// good for org names ("SKM Krefeld" vs "SKM Warendorf"). Recorded on each evidence node.
+// https://github.com/nol13/fuzzball.js
+const ALGORITHMS = { token_set_ratio, token_sort_ratio, ratio }
+const DEFAULT_ALGORITHM = "token_set_ratio"
 
 export const runMatch = async ({ store, defStore, abs }, outPath, registryPath, historyPath) => {
     // The identity registry (minted IRI :hasMember source IRI, one assignment
@@ -50,13 +50,14 @@ export const runMatch = async ({ store, defStore, abs }, outPath, registryPath, 
     // with its own prefix, and clusters only subjects of its :targetClass.
     const rules = await sparqlSelect(`
         PREFIX : <${CDP}>
-        SELECT ?match ?targetClass ?ns ?prefix ?minScore WHERE {
+        SELECT ?match ?targetClass ?ns ?prefix ?minScore ?algo WHERE {
             ?match a :MatchRule ;
                 :forTarget           ?target ;
                 :targetNamespace     ?ns ;
                 :mintedSubjectPrefix ?prefix .
             ?target :targetClass ?targetClass .
             OPTIONAL { ?match :minScore ?minScore }
+            OPTIONAL { ?match :matchAlgorithm ?algo }
         } ORDER BY ?match`, [defStore])
     if (!rules.length) throw new Error(":MatchRule config missing in federation.ttl")
 
@@ -138,6 +139,9 @@ export const runMatch = async ({ store, defStore, abs }, outPath, registryPath, 
         const minScore     = parseFloat(rule.minScore)
         const hard     = hardByMatch.get(rule.match) ?? []
         const weighted = criteriaByMatch.get(rule.match) ?? []
+        const algoName = rule.algo ?? DEFAULT_ALGORITHM
+        if (!ALGORITHMS[algoName]) throw new Error(`match: unknown :matchAlgorithm "${algoName}" — use ${Object.keys(ALGORITHMS).join(", ")}`)
+        const similarity = (a, b) => ALGORITHMS[algoName](a ?? "", b ?? "") / 100
 
         // Subjects of this rule's target class only — passes never cross types.
         const subjects = [...new Set(store.getQuads(null, RDF_TYPE, df.namedNode(rule.targetClass), MAPPED_GRAPH)
@@ -296,7 +300,7 @@ export const runMatch = async ({ store, defStore, abs }, outPath, registryPath, 
                 store.addQuad(df.quad(evNode, VIA_MANUAL_MATCH, df.literal("true", XSD_BOOLEAN), MATCH_GRAPH))
             } else {
                 store.addQuad(df.quad(evNode, AGGREGATE_SCORE, df.literal(ev.aggregate.toFixed(3), XSD_DECIMAL), MATCH_GRAPH))
-                store.addQuad(df.quad(evNode, SIM_ALGORITHM, df.literal(SIMILARITY_ALGORITHM), MATCH_GRAPH))
+                store.addQuad(df.quad(evNode, SIM_ALGORITHM, df.literal(algoName), MATCH_GRAPH))
                 for (const s of ev.scores) {
                     const cNode = df.blankNode()
                     store.addQuad(df.quad(evNode, ON_CRITERION, cNode, MATCH_GRAPH))
@@ -311,6 +315,12 @@ export const runMatch = async ({ store, defStore, abs }, outPath, registryPath, 
 
         console.log(`match: ${rule.match.split("#").pop()} ${subjects.length} entities in ${buckets.size} bucket(s) → ${clusters.size} clusters (${multiMember} multi-member, ${sameAsUnions} sameAs unions, ${keptDistinct} kept distinct)`)
     }
+
+    // cdp:matchString was clean's private matching surface (a normalised name the
+    // criteria compared on). Now that matching is done it has served its purpose, so
+    // drop it from the mapped graph — it would otherwise ride into merged.ttl and the
+    // Merge view, where it means nothing to a reviewer.
+    store.removeMatches(null, df.namedNode(CDP + "matchString"), null, MAPPED_GRAPH)
 
     const matchQuads = store.getQuads(null, null, null, MATCH_GRAPH)
     await writeTurtleFile(abs(outPath), matchQuads, { cdp: CDP, cdf: rules[0].ns, ...COMMON_PREFIXES })
