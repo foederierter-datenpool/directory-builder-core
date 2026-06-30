@@ -27,6 +27,7 @@ const prefixed = (iri) => shrink(iri, displayPrefixes)
 const sourceMeta = loadSourceMeta(federationTtl)
 const sourceOfRecord = loadSourceOfRecord(mappedTtl)
 const sourceCode = (iri) => { const s = sourceOfRecord.get(iri); return (s && sourceMeta.get(s)?.notation) || "?" }
+const sourceLabel = (iri) => { const s = sourceOfRecord.get(iri); return (s && sourceMeta.get(s)?.label) || sourceCode(iri) }
 
 const criteriaPredicates = (() => {
     const quads = parseTtl(federationTtl)
@@ -113,7 +114,7 @@ export default function MatchGraph() {
         for (const n of r.nodes) {
             if (n.isCluster) n.subtitle = n.id.startsWith(CDF_NS) ? `cdf:${n.id.slice(CDF_NS.length)}` : prefixed(n.id)
             else {                                     // a source (dedup) node
-                n.label = sourceCode(n.id)
+                n.label = sourceLabel(n.id)             // full source name; ColumnGraph clamps to 2 lines
                 n.subtitle = entityInfo.get(n.id)?.get(SCHEMA_IDENTIFIER)?.[0]
             }
         }
