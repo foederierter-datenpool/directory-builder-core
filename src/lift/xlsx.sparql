@@ -1,0 +1,14 @@
+# Spreadsheet lift: first row is treated as headers, so each data row becomes a
+# node with xyz:<header> properties (like json.sparql's object keys). SPARQL
+# Anything picks the spreadsheet triplifier from the .xlsx extension.
+PREFIX xyz: <http://sparql.xyz/facade-x/data/>
+PREFIX fx: <http://sparql.xyz/facade-x/ns/>
+CONSTRUCT {
+    ?s ?p ?o
+} WHERE {
+    SERVICE <x-sparql-anything:> {
+        fx:properties fx:location ?_location ;
+            fx:spreadsheet.headers true .
+        ?s ?p ?o .
+    }
+}
