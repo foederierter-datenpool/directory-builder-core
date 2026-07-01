@@ -40,6 +40,15 @@ export const runMatch = async ({ store, defStore, abs }, outPath, registryPath, 
     const known    = new Set(registry.keys())   // members assigned in a prior run
     const taken = new Set()                     // minted IRIs claimed by a cluster this run
     let reusedCount = 0, mintedCount = 0
+
+    // :harvestingModeActive gates persisting the registry/history — matching
+    // and every other pipeline step still run in full either way, so a
+    // non-harvesting run's merged/final output is unaffected; only the
+    // write-once identity commit is skipped. Absent → true (existing behaviour).
+    const [harvestingRow] = await sparqlSelect(`
+        PREFIX : <${CDP}>
+        SELECT ?harvestingModeActive WHERE { :federation :harvestingModeActive ?harvestingModeActive }`, [defStore])
+    const harvesting = harvestingRow?.harvestingModeActive !== "false"
     // Identity events this run, appended to history.ttl (the registry's
     // provenance): when each entity was first minted, gained a member, or
     // absorbed/split off another. Append-only and written only when non-empty,
@@ -326,9 +335,13 @@ export const runMatch = async ({ store, defStore, abs }, outPath, registryPath, 
     await writeTurtleFile(abs(outPath), matchQuads, { cdp: CDP, cdf: rules[0].ns, ...COMMON_PREFIXES })
     console.log(`match: wrote cluster log → ${outPath}`)
 
-    await writeTurtleFile(abs(registryPath), [...registry].map(([member, minted]) =>
-        df.quad(df.namedNode(minted), HAS_MEMBER, df.namedNode(member))), { cdp: CDP, cdf: rules[0].ns })
-    console.log(`match: identity registry ${reusedCount} reused, ${mintedCount} minted → ${registryPath}`)
+    if (harvesting) {
+        await writeTurtleFile(abs(registryPath), [...registry].map(([member, minted]) =>
+            df.quad(df.namedNode(minted), HAS_MEMBER, df.namedNode(member))), { cdp: CDP, cdf: rules[0].ns })
+        console.log(`match: identity registry ${reusedCount} reused, ${mintedCount} minted → ${registryPath}`)
+    } else {
+        console.log(`match: identity registry ${reusedCount} reused, ${mintedCount} minted (harvesting mode off — not written)`)
+    }
 
     // Append this run's events to the history (the registry's provenance) as
     // one :Revision node carrying the timestamp, with each event hung off it as
@@ -337,7 +350,7 @@ export const runMatch = async ({ store, defStore, abs }, outPath, registryPath, 
     // appends nothing — so the next number is one past the highest on file. The
     // whole block is one append, so the named :Revision and its fresh blank
     // nodes never collide with earlier revisions when the file is re-parsed.
-    if (events.length) {
+    if (harvesting && events.length) {
         const prefixes = { cdp: CDP, cdf: rules[0].ns }
         const sh   = (iri) => shrink(iri, prefixes)
         const list = (arr) => arr.map(sh).join(", ")
