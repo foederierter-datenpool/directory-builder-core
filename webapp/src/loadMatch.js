@@ -44,7 +44,7 @@ const lighten = (hex, t) => {
 
 // ---- federation.ttl → schema model -------------------------------------
 
-function readSchemas(federationTtl) {
+export function readSchemas(federationTtl) {
     const q = parseTtl(federationTtl)
     const classPrefixes = prefixesOf(federationTtl)
     const order = []                  // schema IRIs in document order

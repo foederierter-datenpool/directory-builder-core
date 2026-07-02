@@ -12,13 +12,15 @@ import { CDP, groupBySubject, parseTtl, shrink } from "@directory-builder/core/u
 import React, { useMemo, useState } from "react"
 import ColumnGraph from "./ColumnGraph.jsx"
 import Modal from "./Modal.jsx"
-import { loadMatch } from "./loadMatch.js"
+import { loadMatch, readSchemas } from "./loadMatch.js"
 
 const SCHEMA_IDENTIFIER = "http://schema.org/identifier"
+const SCHEMA_NAME = "http://schema.org/name"
 const CDF_NS = "https://civic-data.de/federated-directory#"
 const HARD_CRITERION = `${CDP}hasHardCriterion`
 const WEIGHTED_CRITERION = `${CDP}hasWeightedCriterion`
 const ON = `${CDP}on`
+const FOR_TARGET = `${CDP}forTarget`
 const OWL_SAME_AS = "http://www.w3.org/2002/07/owl#sameAs"
 const OWL_DIFFERENT_FROM = "http://www.w3.org/2002/07/owl#differentFrom"
 
@@ -30,15 +32,46 @@ const sourceOfRecord = loadSourceOfRecord(mappedTtl)
 const sourceCode = (iri) => { const s = sourceOfRecord.get(iri); return (s && sourceMeta.get(s)?.notation) || "?" }
 const sourceLabel = (iri) => { const s = sourceOfRecord.get(iri); return (s && sourceMeta.get(s)?.label) || sourceCode(iri) }
 
-const criteriaPredicates = (() => {
+// Map<targetSchemaIri, [criterionPredicateIri]> — each match rule's own :on predicates,
+// scoped to the schema it's :forTarget of. Match rules are per-schema (Träger vs.
+// Einrichtung vs. Angebot each have their own), so a cluster's modal must only show
+// its own rule's criteria — pooling every rule's fields together mislabels a Service
+// as missing postalCode/streetAddress it was never supposed to have.
+const criteriaByTarget = (() => {
     const quads = parseTtl(federationTtl)
-    const bnodes = new Set()
-    for (const q of quads) if (q.predicate.value === HARD_CRITERION || q.predicate.value === WEIGHTED_CRITERION) bnodes.add(q.object.value)
-    return quads.filter(q => q.predicate.value === ON && bnodes.has(q.subject.value)).map(q => q.object.value)
+    const targetOfRule = new Map()
+    const ruleOfCriterion = new Map()
+    for (const q of quads) {
+        if (q.predicate.value === FOR_TARGET) targetOfRule.set(q.subject.value, q.object.value)
+        else if (q.predicate.value === HARD_CRITERION || q.predicate.value === WEIGHTED_CRITERION) ruleOfCriterion.set(q.object.value, q.subject.value)
+    }
+    const byTarget = new Map()
+    for (const q of quads) {
+        if (q.predicate.value !== ON) continue
+        const target = targetOfRule.get(ruleOfCriterion.get(q.subject.value))
+        if (!target) continue
+        if (!byTarget.has(target)) byTarget.set(target, [])
+        byTarget.get(target).push(q.object.value)
+    }
+    return byTarget
 })()
 
+const schemaOfLane = new Map(readSchemas(federationTtl).lanes.map((l) => [l.key, l.schema]))
+
+const mappedQuads = parseTtl(mappedTtl)
 // Map<recordIri, Map<predIri, [literalValue]>> for the per-member details modal.
-const entityInfo = groupBySubject(parseTtl(mappedTtl), { literalsOnly: true })
+const entityInfo = groupBySubject(mappedQuads, { literalsOnly: true })
+// Map<recordIri, Map<predIri, targetIri>> — relationship criteria (e.g. schema:provider)
+// point at another record rather than holding a literal; resolve them to that record's
+// name instead of leaving the cell blank.
+const relInfo = new Map()
+for (const q of mappedQuads) {
+    if (q.object.termType !== "NamedNode") continue
+    if (!relInfo.has(q.subject.value)) relInfo.set(q.subject.value, new Map())
+    relInfo.get(q.subject.value).set(q.predicate.value, q.object.value)
+}
+const cellValue = (iri, p) => entityInfo.get(iri)?.get(p)?.[0]
+    ?? (relInfo.get(iri)?.get(p) && (entityInfo.get(relInfo.get(iri).get(p))?.get(SCHEMA_NAME)?.[0] ?? prefixed(relInfo.get(iri).get(p))))
 
 const manualPairs = parseTtl(matchKnowledgeTtl)
     .filter(q => q.predicate.value === OWL_SAME_AS)
@@ -48,23 +81,28 @@ const distinctPairs = parseTtl(matchKnowledgeTtl)
     .filter(q => q.predicate.value === OWL_DIFFERENT_FROM)
     .map(q => [q.subject.value, q.object.value])
 
-function MemberDetailsModal({ clusterId, memberIris, onClose }) {
+function MemberDetailsModal({ clusterId, memberIris, type, onClose }) {
     const memberSet = new Set(memberIris)
     const manualHere = manualPairs.filter(([a, b]) => memberSet.has(a) && memberSet.has(b))
     const distinctHere = distinctPairs.filter(([a, b]) => memberSet.has(a) || memberSet.has(b))
+    const criteria = criteriaByTarget.get(schemaOfLane.get(type)) ?? []
     return (
         <Modal title={<>Cluster <code>{clusterId.startsWith(CDF_NS) ? `cdf:${clusterId.slice(CDF_NS.length)}` : prefixed(clusterId)}</code></>} onClose={onClose}>
+                <div style={{ fontSize: 11, color: "#999", marginBottom: 12 }}>
+                    {criteria.length > 0
+                        ? "Showing this schema's match criteria fields only, not the full record."
+                        : "This schema's match rule declares no criteria — nothing to show per member."}
+                </div>
                 {memberIris.map((iri) => {
-                    const info = entityInfo.get(iri)
                     return (
                         <div key={iri} style={{ marginBottom: 14 }}>
                             <div style={{ fontSize: 11, color: "#666", marginBottom: 4 }}><code>{prefixed(iri)}</code></div>
                             <table style={{ borderCollapse: "collapse", fontSize: 12, width: "100%" }}>
                                 <tbody>
-                                    {criteriaPredicates.map((p) => (
+                                    {criteria.map((p) => (
                                         <tr key={p}>
                                             <td style={{ padding: "2px 8px", color: "#555", whiteSpace: "nowrap", verticalAlign: "top", width: 1 }}>{prefixed(p)}</td>
-                                            <td style={{ padding: "2px 8px" }}>{info?.get(p)?.[0] ?? <span style={{ color: "#bbb" }}>—</span>}</td>
+                                            <td style={{ padding: "2px 8px" }}>{cellValue(iri, p) ?? <span style={{ color: "#bbb" }}>—</span>}</td>
                                         </tr>
                                     ))}
                                 </tbody>
@@ -101,10 +139,11 @@ export default function MatchGraph() {
     const [show1to1, setShow1to1] = useState(false)
     const [openCluster, setOpenCluster] = useState(null)
 
-    const { nodes, edges, members, clusterOf, columns, colors, columnTitles, columnBands, columnHeaderStyle, nodeY } = useMemo(() => {
+    const { nodes, edges, members, clusterOf, clusterType, columns, colors, columnTitles, columnBands, columnHeaderStyle, nodeY } = useMemo(() => {
         const r = loadMatch(federationTtl, matchesTtl, mergedTtl, { showDuplications, show1to1 })
         const clusterOf = new Map()
         for (const [c, ms] of r.members) for (const m of ms) clusterOf.set(m, c)
+        const clusterType = new Map(r.nodes.filter((n) => n.isCluster).map((n) => [n.id, n.type]))
 
         for (const n of r.nodes) {
             if (n.isCluster) n.subtitle = n.id.startsWith(CDF_NS) ? `cdf:${n.id.slice(CDF_NS.length)}` : prefixed(n.id)
@@ -116,13 +155,13 @@ export default function MatchGraph() {
         // Drop columns that ended up empty (schemas with no source duplication when
         // collapsed) so they don't leave a blank tinted band.
         const columns = r.columns.filter((c) => r.nodes.some((n) => n.type === c))
-        return { ...r, clusterOf, columns }
+        return { ...r, clusterOf, clusterType, columns }
     }, [showDuplications, show1to1])
 
     const handleNodeClick = (_, node) => {
         if (node.id.startsWith("__")) return            // header / band decoration
         const cid = members.has(node.id) ? node.id : clusterOf.get(node.id)
-        if (cid) setOpenCluster({ clusterId: cid, memberIris: members.get(cid) ?? [] })
+        if (cid) setOpenCluster({ clusterId: cid, memberIris: members.get(cid) ?? [], type: clusterType.get(cid) })
     }
 
     return (
@@ -143,7 +182,7 @@ export default function MatchGraph() {
                     columnTitles={columnTitles} columnBands={columnBands} columnHeaderStyle={columnHeaderStyle}
                     nodeWidth={150} colSpacing={236} onNodeClick={handleNodeClick} />
             </div>
-            {openCluster && <MemberDetailsModal clusterId={openCluster.clusterId} memberIris={openCluster.memberIris} onClose={() => setOpenCluster(null)} />}
+            {openCluster && <MemberDetailsModal clusterId={openCluster.clusterId} memberIris={openCluster.memberIris} type={openCluster.type} onClose={() => setOpenCluster(null)} />}
         </div>
     )
 }
