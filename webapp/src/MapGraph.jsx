@@ -7,6 +7,7 @@
 import { federationTtl as ttl, mappedTtl, cleanedByPath } from "./instanceData.js"
 import { loadMap, loadSources, loadEntitiesBySource, loadFieldValuesByEntity } from "./loadMap.js"
 import React, { useEffect, useMemo, useRef, useState } from "react"
+import { useSearchParams } from "react-router-dom"
 import { loadCleanedBySource } from "./sourceMeta.js"
 import { SkipBack, SkipForward } from "lucide-react"
 import ColumnGraph, { toFlow } from "./ColumnGraph.jsx"
@@ -45,6 +46,9 @@ const ENTITIES_BY_SOURCE = loadEntitiesBySource(ttl, mappedTtl)
 const FIELD_VALUES = loadFieldValuesByEntity(ttl, mappedTtl, loadCleanedBySource(ttl, cleanedByPath))
 
 const SOURCE_OPTS = SOURCES.map((s) => ({ key: s.iri, label: s.label }))
+const ALL_IRIS = SOURCES.map((s) => s.iri)
+const NOTATION_OF = new Map(SOURCES.map((s) => [s.iri, s.notation]))
+const IRI_OF = new Map(SOURCES.map((s) => [s.notation, s.iri]))
 function SourcesDropdown({ visible, onChange }) {
     return <CheckboxDropdown options={SOURCE_OPTS} selected={visible} onChange={onChange} noun="source" />
 }
@@ -144,7 +148,19 @@ function EntityCombobox({ entities, value, onChange, disabled }) {
 }
 
 export default function MapGraph() {
-    const [visible, setVisible] = useState(() => new Set(SOURCES.map(s => s.iri)))
+    // Source selection lives in the URL (?src=ca,dhs) so a view is shareable and
+    // survives navigation. Absent param means all sources; selecting all clears it.
+    const [searchParams, setSearchParams] = useSearchParams()
+    const visible = useMemo(() => {
+        if (!searchParams.has("src")) return new Set(ALL_IRIS)
+        return new Set(searchParams.get("src").split(",").filter(Boolean).map((c) => IRI_OF.get(c)).filter(Boolean))
+    }, [searchParams])
+    const setVisible = (next) => setSearchParams((prev) => {
+        const p = new URLSearchParams(prev)
+        const iris = ALL_IRIS.filter((i) => next.has(i))
+        iris.length === ALL_IRIS.length ? p.delete("src") : p.set("src", iris.map((i) => NOTATION_OF.get(i)).join(","))
+        return p
+    }, { replace: true })
     const [selectedEntity, setSelectedEntity] = useState(null)
     const [dataFlow, setDataFlow] = useState(false)
     const [showUnmapped, setShowUnmapped] = useState(false)

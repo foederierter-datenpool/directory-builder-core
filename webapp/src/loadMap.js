@@ -6,6 +6,7 @@
 import { CDP as NS, localName, parseTtl, prefixesOf, shrink, sourceName, subjectsOfType, typesOf } from "@directory-builder/core/utils"
 
 const RDFS_LABEL = "http://www.w3.org/2000/01/rdf-schema#label"
+const SKOS_NOTATION = "http://www.w3.org/2004/02/skos/core#notation"
 const NODE_TYPES = [`${NS}Source`, `${NS}SourceField`, `${NS}TargetField`, `${NS}TargetSchema`]
 const SUB_FIELD = `${NS}SubField`
 
@@ -147,8 +148,12 @@ export function loadSources(ttl) {
     const quads = parseTtl(ttl)
     const sourceIris = subjectsOfType(quads, `${NS}Source`)
     const labelOf = new Map()
-    for (const q of quads) if (q.predicate.value === RDFS_LABEL) labelOf.set(q.subject.value, q.object.value)
-    return [...sourceIris].map((iri) => ({ iri, label: labelOf.get(iri) ?? localName(iri) }))
+    const notationOf = new Map()
+    for (const q of quads) {
+        if (q.predicate.value === RDFS_LABEL) labelOf.set(q.subject.value, q.object.value)
+        else if (q.predicate.value === SKOS_NOTATION) notationOf.set(q.subject.value, q.object.value)
+    }
+    return [...sourceIris].map((iri) => ({ iri, label: labelOf.get(iri) ?? localName(iri), notation: notationOf.get(iri) ?? localName(iri) }))
 }
 
 export function loadMap(ttl, { hideUnmappedFields = true, hideUnmappedTargetFields = true, hiddenSources } = {}) {
