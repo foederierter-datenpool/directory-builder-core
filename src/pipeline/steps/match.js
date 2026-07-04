@@ -59,7 +59,7 @@ export const runMatch = async ({ store, defStore, abs }, outPath, registryPath, 
     // with its own prefix, and clusters only subjects of its :targetClass.
     const rules = await sparqlSelect(`
         PREFIX : <${CDP}>
-        SELECT ?match ?targetClass ?ns ?prefix ?minScore ?algo WHERE {
+        SELECT ?match ?target ?targetClass ?ns ?prefix ?minScore ?algo WHERE {
             ?match a :MatchRule ;
                 :forTarget           ?target ;
                 :targetNamespace     ?ns ;
@@ -98,6 +98,47 @@ export const runMatch = async ({ store, defStore, abs }, outPath, registryPath, 
         if (!hardByMatch.has(r.match)) hardByMatch.set(r.match, [])
         hardByMatch.get(r.match).push({ pred: df.namedNode(r.on) })
     }
+
+    // A criterion :on a relationship predicate (an entity link, e.g. schema:address
+    // or schema:provider) compares *minted* identities, so the rule owning the
+    // linked schema must run first. The dependencies follow from declarations that
+    // already exist — each mapping's :hasRelationship names the predicate and the
+    // schema it points at — and the rules are topologically sorted by them
+    // (declaration order breaks ties; a cycle warns and keeps declaration order).
+    const relPredRows = await sparqlSelect(`
+        PREFIX : <${CDP}>
+        SELECT DISTINCT ?pred ?toSchema WHERE {
+            [] :hasRelationship ?rel .
+            ?rel :toTargetField/:targetPredicate ?pred ; :toTargetSchema ?toSchema .
+        }`, [defStore])
+    const schemasOfPred = new Map()
+    for (const r of relPredRows) {
+        if (!schemasOfPred.has(r.pred)) schemasOfPred.set(r.pred, new Set())
+        schemasOfPred.get(r.pred).add(r.toSchema)
+    }
+    const ruleOfSchema = new Map(rules.map(r => [r.target, r]))
+    const depsOf = (rule) => {
+        const preds = [...(hardByMatch.get(rule.match) ?? []), ...(criteriaByMatch.get(rule.match) ?? [])]
+        return [...new Set(preds.flatMap(c => [...(schemasOfPred.get(c.pred.value) ?? [])]))]
+            .map(s => ruleOfSchema.get(s)).filter(r => r && r !== rule)
+    }
+    const orderedRules = []
+    const visitState = new Map()
+    const visit = (rule, stack = []) => {
+        if (visitState.get(rule.match) === "done") return
+        if (visitState.get(rule.match) === "visiting") {
+            console.warn(`match: rule dependency cycle (${[...stack, rule.match].map(m => m.split("#").pop()).join(" → ")}) — keeping declaration order`)
+            return
+        }
+        visitState.set(rule.match, "visiting")
+        for (const d of depsOf(rule)) visit(d, [...stack, rule.match])
+        visitState.set(rule.match, "done")
+        orderedRules.push(rule)
+    }
+    for (const r of rules) visit(r)
+    // Source IRI → minted IRI, filled as each pass mints; later passes' valOf
+    // resolves entity-link criterion values through it.
+    const mintedThisRun = new Map()
     // owl:sameAs assertions are shared; each pass only acts on the pairs whose
     // endpoints are in its own subject set (gated by parent.has below).
     const sameAsRows = await sparqlSelect(`
@@ -142,7 +183,7 @@ export const runMatch = async ({ store, defStore, abs }, outPath, registryPath, 
     const XSD_DECIMAL        = df.namedNode("http://www.w3.org/2001/XMLSchema#decimal")
     const XSD_BOOLEAN        = df.namedNode("http://www.w3.org/2001/XMLSchema#boolean")
 
-    for (const rule of rules) {
+    for (const rule of orderedRules) {
         const namespace    = rule.ns
         const mintedPrefix = rule.prefix
         const minScore     = parseFloat(rule.minScore)
@@ -159,7 +200,11 @@ export const runMatch = async ({ store, defStore, abs }, outPath, registryPath, 
 
         const valOf = (s, pred) => {
             const qs = store.getQuads(df.namedNode(s), pred, null, MAPPED_GRAPH)
-            return qs.length ? qs[0].object.value : null
+            if (!qs.length) return null
+            const o = qs[0].object
+            // Entity links compare by minted identity — the topological order
+            // guarantees the linked schema's pass already ran for criterion predicates.
+            return o.termType === "NamedNode" ? (mintedThisRun.get(o.value) ?? o.value) : o.value
         }
         const hardVals     = new Map(subjects.map(s => [s, hard.map(h => valOf(s, h.pred))]))
         const weightedVals = new Map(subjects.map(s => [s, weighted.map(c => valOf(s, c.pred))]))
@@ -289,7 +334,7 @@ export const runMatch = async ({ store, defStore, abs }, outPath, registryPath, 
                 if (!prior.length) events.push({ type: "Minted", entity: minted.value, member: members })
             }
             taken.add(minted.value)
-            for (const m of members) registry.set(m, minted.value)
+            for (const m of members) { registry.set(m, minted.value); mintedThisRun.set(m, minted.value) }
             clusterIriByRoot.set(find(members[0]), minted)
             if (members.length > 1) multiMember++
             store.addQuad(df.quad(minted, RDF_TYPE, MATCH_CLUSTER, MATCH_GRAPH))

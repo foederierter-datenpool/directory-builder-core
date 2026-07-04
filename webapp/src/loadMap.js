@@ -190,9 +190,11 @@ export function loadMap(ttl, { hideUnmappedFields = true, hideUnmappedTargetFiel
     const sourceOfEntity = new Map()  // :SourceEntity iri -> its :Source iri
     const fieldPairs = []             // (owner, field) — owner is a Source or SourceEntity
     const subPairs   = []
+    const derivedFromOf = new Map()   // field iri -> [raw origin fields] (:derivedFrom)
     for (const q of quads) {
         if (q.predicate.value === `${NS}hasField`)         fieldPairs.push([q.subject.value, q.object.value])
         else if (q.predicate.value === `${NS}hasSubField`) subPairs.push([q.subject.value, q.object.value])
+        else if (q.predicate.value === `${NS}derivedFrom`) appendTo(derivedFromOf, q.subject.value, q.object.value)
         else if (q.predicate.value === `${NS}hasEntity`)   sourceOfEntity.set(q.object.value, q.subject.value)
         else if (q.predicate.value === `${NS}hasTargetField`) schemaFields.push([q.subject.value, q.object.value])
         else if (q.predicate.value === `${NS}from`) appendTo(bnodeFrom, q.subject.value, q.object.value)
@@ -208,8 +210,15 @@ export function loadMap(ttl, { hideUnmappedFields = true, hideUnmappedTargetFiel
     // A field owned by a :SourceEntity gets its edge from the entity's source —
     // the entity renders not as a node but as a group rectangle around its
     // fields (sub-fields included), labelled with the entity's rdfs:label.
-    const groupOf = new Map()  // field iri -> entity iri
+    // A :derivedFrom field is NOT raw — the clean step computes it from the named
+    // raw field(s). It's still a declared :SourceField (so it's a real node), but
+    // its inbound edge comes from those raw origins, not the source, and it renders
+    // in its own column (typeFor → DerivedField) without a group box — so a computed
+    // field reads as computed, never as a native part of its origin.
+    const groupOf = new Map()  // field iri -> entity iri (raw fields only)
     for (const [owner, field] of fieldPairs) {
+        const origins = derivedFromOf.get(field)
+        if (origins) { for (const o of origins) push(o, field, "derivedFrom"); continue }
         const src = sourceOfEntity.get(owner)
         push(src ?? owner, field, "hasField")
         if (src) groupOf.set(field, owner)
@@ -256,8 +265,8 @@ export function loadMap(ttl, { hideUnmappedFields = true, hideUnmappedTargetFiel
                 const c = `${t}|${toTargetOf.get(q.subject.value)}`
                 return copyInfo.has(c) ? [c] : copiesOf.get(t) ?? [t]
             }
+            const name = sourceName(fromSourceOf.get(q.subject.value))
             if (viaName) {
-                const name = sourceName(fromSourceOf.get(q.subject.value))
                 const via = `transform:${name}:${viaName}`
                 if (!transformLabel.has(via)) { transformLabel.set(via, `${name}/${viaName}`); nodeSet.add(via) }
                 for (const f of froms) pushOnce(f, via, "mapsTo")
@@ -272,6 +281,8 @@ export function loadMap(ttl, { hideUnmappedFields = true, hideUnmappedTargetFiel
     const typeFor = (iri) => {
         if (transformLabel.has(iri)) return "TransformNode"
         if (copyInfo.has(iri)) return "TargetField"
+        // A :derivedFrom source field is computed by clean, not raw — its own column.
+        if (derivedFromOf.has(iri)) return "DerivedField"
         const ts = typeOf.get(iri)
         if (ts?.has(SUB_FIELD)) return "SourceField"
         for (const t of NODE_TYPES) if (ts?.has(t)) return localName(t)
@@ -303,6 +314,8 @@ export function loadMap(ttl, { hideUnmappedFields = true, hideUnmappedTargetFiel
     const mappedSources = new Set()
     const mappedTargets = new Set()
     for (const e of edges) if (e.label === "mapsTo" && nodeSet.has(e.from) && nodeSet.has(e.to)) { mappedSources.add(e.from); mappedTargets.add(e.to) }
+    // A raw origin whose derived field is mapped counts as mapped itself.
+    for (const e of edges) if (e.label === "derivedFrom" && mappedSources.has(e.to)) mappedSources.add(e.from)
     for (const e of edges) if (e.label === "hasSubField" && mappedSources.has(e.to)) mappedSources.add(e.from)
     const isField = (iri) => {
         const ts = typeOf.get(iri)
@@ -330,14 +343,18 @@ export function loadMap(ttl, { hideUnmappedFields = true, hideUnmappedTargetFiel
     const copyIndex = new Map([...copyInfo.keys()].map((c, i) => [c, i]))
     const directCopies = new Map()  // node -> [copy ids]
     const viasOf       = new Map()  // field -> [transform nodes]
+    const derivedInto  = new Map()  // raw origin -> [derived fields]
     for (const e of edges) {
+        if (e.label === "derivedFrom") { appendTo(derivedInto, e.from, e.to); continue }
         if (e.label !== "mapsTo") continue
         if (transformLabel.has(e.to)) appendTo(viasOf, e.from, e.to)
         else appendTo(directCopies, e.from, e.to)
     }
+    // A raw origin's barycenter follows its derived fields' targets (one hop on).
     const targetIndicesOf = (iri) => [
         ...(directCopies.get(iri) ?? []),
         ...(viasOf.get(iri) ?? []).flatMap((v) => directCopies.get(v) ?? []),
+        ...(derivedInto.get(iri) ?? []).flatMap((d) => directCopies.get(d) ?? []),
     ].map((c) => copyIndex.get(c)).filter((i) => i !== undefined)
     const barycenter = (idxs) => idxs.length ? idxs.reduce((a, b) => a + b, 0) / idxs.length : Infinity
     const byBarycenter = (xs, indices) =>

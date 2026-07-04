@@ -11,11 +11,13 @@ import { loadSourceMeta, loadSourceOfRecord } from "./sourceMeta.js"
 import { CDP, groupBySubject, parseTtl, shrink } from "@directory-builder/core/utils"
 import React, { useMemo, useState } from "react"
 import ColumnGraph from "./ColumnGraph.jsx"
+import CheckboxDropdown from "./CheckboxDropdown.jsx"
 import Modal from "./Modal.jsx"
 import { loadMatch, readSchemas } from "./loadMatch.js"
 
 const SCHEMA_IDENTIFIER = "http://schema.org/identifier"
 const SCHEMA_NAME = "http://schema.org/name"
+const SCHEMA_STREET = "http://schema.org/streetAddress"   // link-cell fallback for addresses (no name)
 const CDF_NS = "https://civic-data.de/federated-directory#"
 const HARD_CRITERION = `${CDP}hasHardCriterion`
 const WEIGHTED_CRITERION = `${CDP}hasWeightedCriterion`
@@ -56,7 +58,8 @@ const criteriaByTarget = (() => {
     return byTarget
 })()
 
-const schemaOfLane = new Map(readSchemas(federationTtl).lanes.map((l) => [l.key, l.schema]))
+const allLanes = readSchemas(federationTtl).lanes
+const schemaOfLane = new Map(allLanes.map((l) => [l.key, l.schema]))
 
 const mappedQuads = parseTtl(mappedTtl)
 // Map<recordIri, Map<predIri, [literalValue]>> for the per-member details modal.
@@ -70,8 +73,14 @@ for (const q of mappedQuads) {
     if (!relInfo.has(q.subject.value)) relInfo.set(q.subject.value, new Map())
     relInfo.get(q.subject.value).set(q.predicate.value, q.object.value)
 }
-const cellValue = (iri, p) => entityInfo.get(iri)?.get(p)?.[0]
-    ?? (relInfo.get(iri)?.get(p) && (entityInfo.get(relInfo.get(iri).get(p))?.get(SCHEMA_NAME)?.[0] ?? prefixed(relInfo.get(iri).get(p))))
+const cellValue = (iri, p) => {
+    const own = entityInfo.get(iri)?.get(p)?.[0]
+    if (own != null) return own
+    const target = relInfo.get(iri)?.get(p)
+    if (!target) return undefined
+    const t = entityInfo.get(target)
+    return t?.get(SCHEMA_NAME)?.[0] ?? t?.get(SCHEMA_STREET)?.[0] ?? prefixed(target)
+}
 
 const manualPairs = parseTtl(matchKnowledgeTtl)
     .filter(q => q.predicate.value === OWL_SAME_AS)
@@ -137,10 +146,12 @@ function MemberDetailsModal({ clusterId, memberIris, type, onClose }) {
 export default function MatchGraph() {
     const [showDuplications, setShowDuplications] = useState(true)
     const [show1to1, setShow1to1] = useState(false)
+    // Which lanes are shown, seeded from config (:hiddenByDefault lanes start off).
+    const [activeLanes, setActiveLanes] = useState(() => new Set(allLanes.filter((l) => !l.hidden).map((l) => l.key)))
     const [openCluster, setOpenCluster] = useState(null)
 
     const { nodes, edges, members, clusterOf, clusterType, columns, colors, columnTitles, columnBands, columnHeaderStyle, nodeY } = useMemo(() => {
-        const r = loadMatch(federationTtl, matchesTtl, mergedTtl, { showDuplications, show1to1 })
+        const r = loadMatch(federationTtl, matchesTtl, mergedTtl, { showDuplications, show1to1, activeLanes })
         const clusterOf = new Map()
         for (const [c, ms] of r.members) for (const m of ms) clusterOf.set(m, c)
         const clusterType = new Map(r.nodes.filter((n) => n.isCluster).map((n) => [n.id, n.type]))
@@ -156,7 +167,7 @@ export default function MatchGraph() {
         // collapsed) so they don't leave a blank tinted band.
         const columns = r.columns.filter((c) => r.nodes.some((n) => n.type === c))
         return { ...r, clusterOf, clusterType, columns }
-    }, [showDuplications, show1to1])
+    }, [showDuplications, show1to1, activeLanes])
 
     const handleNodeClick = (_, node) => {
         if (node.id.startsWith("__")) return            // header / band decoration
@@ -167,6 +178,8 @@ export default function MatchGraph() {
     return (
         <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
             <div style={{ display: "flex", gap: "1rem", alignItems: "center", padding: "0.5rem 1rem", fontSize: 13, borderBottom: "1px solid #ddd" }}>
+                <CheckboxDropdown options={allLanes.map((l) => ({ key: l.key, label: l.label }))}
+                    selected={activeLanes} onChange={setActiveLanes} noun="lane" />
                 <label style={{ display: "inline-flex", alignItems: "center", gap: "0.25rem" }}>
                     <input type="checkbox" checked={showDuplications} onChange={(e) => setShowDuplications(e.target.checked)} />
                     Show duplications across sources
@@ -177,7 +190,7 @@ export default function MatchGraph() {
                 </label>
             </div>
             <div style={{ flex: 1, minHeight: 0 }}>
-                <ColumnGraph key={`${showDuplications}-${show1to1}`} nodes={nodes} edges={edges}
+                <ColumnGraph key={`${showDuplications}-${show1to1}-${[...activeLanes].join()}`} nodes={nodes} edges={edges}
                     columns={columns} colors={colors} nodeY={nodeY}
                     columnTitles={columnTitles} columnBands={columnBands} columnHeaderStyle={columnHeaderStyle}
                     nodeWidth={150} colSpacing={236} onNodeClick={handleNodeClick} />

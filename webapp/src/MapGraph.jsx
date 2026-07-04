@@ -13,7 +13,7 @@ import ColumnGraph, { toFlow } from "./ColumnGraph.jsx"
 import CheckboxDropdown from "./CheckboxDropdown.jsx"
 import { buildMiroSnippet } from "./miroExport.js"
 
-const COLUMNS = ["Source", "SourceField", "TransformNode", "TargetField", "TargetSchema"]
+const COLUMNS = ["Source", "SourceField", "DerivedField", "TransformNode", "TargetField", "TargetSchema"]
 // The short columns anchor at the vertical middle of what they connect to —
 // a source at its fields, a schema at its target-field copies.
 const ANCHOR_COLUMNS = ["Source", "TransformNode", "TargetSchema"]
@@ -24,6 +24,7 @@ const VERTICAL_SPACING = { colSpacing: 160, siblingGap: 200 }
 const COLORS = {
     Source: "#d4e7ff",
     SourceField: "#e6f3d8",
+    DerivedField: "#cfe8e6",   // clean-derived source fields — teal, distinct from raw green
     TransformNode: "#fff1a8",
     TargetField: "#fde2c7",
     TargetSchema: "#f4cfe0",
@@ -32,6 +33,7 @@ const COLORS = {
 // column/moment without competing for attention against the nodes themselves.
 const VALUE_LABEL_BG = {
     SourceField:   "#f0f8e0",
+    DerivedField:  "#e4f4f2",
     TransformNode: "#fff8c8",
 }
 const BTN = { padding: "0.25rem 0.6rem", border: "1px solid #aaa", borderRadius: 4, background: "white", cursor: "pointer", fontSize: 13 }
@@ -178,8 +180,10 @@ export default function MapGraph() {
             // behind the "Also show 1:1 flows" toggle.
             if (e.direct && !showDirectFlows) return e
             const fromType = typeOf.get(e.from)
+            // Source/derived fields carry their own value; a transform emits the
+            // post-transform value that lands in its target field.
             const v = fromType === "TransformNode" ? valueByField.get(e.toField ?? e.to)
-                : fromType === "SourceField"       ? valueByField.get(e.from)
+                : (fromType === "SourceField" || fromType === "DerivedField") ? valueByField.get(e.from)
                 : undefined
             return v ? { ...e, value: v, valueBg: VALUE_LABEL_BG[fromType] } : e
         })

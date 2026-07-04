@@ -21,10 +21,13 @@ const HAS_RELATIONSHIP  = `${NS}hasRelationship`
 const TO_TARGET_SCHEMA  = `${NS}toTargetSchema`
 const TO_TARGET_FIELD   = `${NS}toTargetField`
 const TARGET_PREDICATE  = `${NS}targetPredicate`
+// Optional per-schema view hint: :hiddenByDefault true starts the lane deselected.
+const HIDDEN_BY_DEFAULT = `${NS}hiddenByDefault`
 const MATCH_CLUSTER = `${NS}MatchCluster`
 const HAS_MEMBER    = `${NS}hasMember`
 const NAME = `${S}name`
 const CATEGORY = `${S}category`   // label fallback for entities with no name (e.g. AWO services)
+const STREET = `${S}streetAddress`   // label fallback for addresses (a PostalAddress has no name)
 
 // Lane colours, assigned by hierarchy position; cycles if there are more lanes.
 const PALETTE = ["#cdddff", "#f7d2e3", "#cfe9d4", "#ffe2b8", "#e3d4f7", "#cfeef0", "#f3d9c0"]
@@ -55,6 +58,7 @@ export function readSchemas(federationTtl) {
     const relToSchema = new Map()     // rel bnode → :toTargetSchema
     const relToField = new Map()      // rel bnode → :toTargetField
     const fieldPred = new Map()       // target field → :targetPredicate
+    const hidden = new Set()          // schemas with :hiddenByDefault true
     for (const { subject: s, predicate: p, object: o } of q) {
         switch (p.value) {
             case HAS_TARGET_SCHEMA: order.push(o.value); break
@@ -65,6 +69,7 @@ export function readSchemas(federationTtl) {
             case TO_TARGET_SCHEMA:  relToSchema.set(s.value, o.value); break
             case TO_TARGET_FIELD:   relToField.set(s.value, o.value); break
             case TARGET_PREDICATE:  fieldPred.set(s.value, o.value); break
+            case HIDDEN_BY_DEFAULT: if (o.value === "true") hidden.add(s.value); break
         }
     }
 
@@ -107,6 +112,7 @@ export function readSchemas(federationTtl) {
             label: name,
             title: `${name}\n${cls ? shrink(cls, classPrefixes) : ""}`,
             color: PALETTE[i % PALETTE.length],
+            hidden: hidden.has(schema),
         }
     })
     return { lanes, relPreds }
@@ -114,8 +120,12 @@ export function readSchemas(federationTtl) {
 
 // ---- main ---------------------------------------------------------------
 
-export function loadMatch(federationTtl, matchesTtl, mergedTtl, { showDuplications = false, show1to1 = false } = {}) {
-    const { lanes, relPreds } = readSchemas(federationTtl)
+export function loadMatch(federationTtl, matchesTtl, mergedTtl, { showDuplications = false, show1to1 = false, activeLanes = null } = {}) {
+    const all = readSchemas(federationTtl)
+    // activeLanes (Set of lane keys) narrows the view: deselected lanes lose their
+    // columns and entities, and cross-lane edges to them drop with the entities.
+    const lanes = activeLanes ? all.lanes.filter((l) => activeLanes.has(l.key)) : all.lanes
+    const relPreds = all.relPreds
     const keyOfClass = new Map(lanes.filter((l) => l.cls).map((l) => [l.cls, l.key]))
     const laneIdx = new Map(lanes.map((l, i) => [l.key, i]))
 
@@ -130,11 +140,12 @@ export function loadMatch(federationTtl, matchesTtl, mergedTtl, { showDuplicatio
 
     const merged = parseTtl(mergedTtl)
     const tierOf = new Map()           // entity → lane key, via its rdf:type
-    const nameOf = new Map(), catOf = new Map()
+    const nameOf = new Map(), catOf = new Map(), streetOf = new Map()
     for (const q of merged) {
         if (q.predicate.value === RDF_TYPE && keyOfClass.has(q.object.value)) tierOf.set(q.subject.value, keyOfClass.get(q.object.value))
         else if (q.predicate.value === NAME && !nameOf.has(q.subject.value)) nameOf.set(q.subject.value, q.object.value)
         else if (q.predicate.value === CATEGORY && !catOf.has(q.subject.value)) catOf.set(q.subject.value, q.object.value)
+        else if (q.predicate.value === STREET && !streetOf.has(q.subject.value)) streetOf.set(q.subject.value, q.object.value)
     }
 
     const quads = parseTtl(matchesTtl)
@@ -151,7 +162,7 @@ export function loadMatch(federationTtl, matchesTtl, mergedTtl, { showDuplicatio
     for (const c of clusters) {
         const tier = tierOf.get(c)
         if (!tier) continue
-        nodes.push({ id: c, type: tier, label: nameOf.get(c) ?? catOf.get(c) ?? localName(c), isCluster: true })
+        nodes.push({ id: c, type: tier, label: nameOf.get(c) ?? catOf.get(c) ?? streetOf.get(c) ?? localName(c), isCluster: true })
         nodeIds.add(c)
         const ms = members.get(c) ?? []
         if (!showDuplications || (!show1to1 && ms.length <= 1)) continue   // master off → no source cols; hide 1:1 unless "show 1:1"
