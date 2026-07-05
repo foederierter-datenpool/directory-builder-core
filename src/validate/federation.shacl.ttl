@@ -1,40 +1,214 @@
 @prefix :    <https://civic-data.de/pipeline#> .
 @prefix sh:  <http://www.w3.org/ns/shacl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
 
-# The engine's contract for a well-formed federation.ttl
-# expressed as SHACL and enforced by ../validate.js
+# The engine's contract for a well-formed federation.ttl, expressed as SHACL and
+# enforced by ../validate.js. Everything checkable from the config alone lives
+# here; the filesystem-dependent rules (a source's fetch/clean inputs must exist
+# on disk, and no undeclared sources/ folder) live in validate.js instead.
 
+# ---- Federation ---------------------------------------------------------
+
+# Only :hasSource is required — the engine discovers target schemas and match
+# rules by type and defaults the resolve strategy, so those federation-level
+# links are optional; when present they must point at the right kind of node.
 :federationShape a sh:NodeShape ;
     sh:targetNode :federation ;
     sh:property [
-        sh:path :hasSource ;
-        sh:minCount 1 ;
-        sh:nodeKind sh:IRI ;
-        sh:message "needs at least one :hasSource"
-    ] .
-
-:sourceShape a sh:NodeShape ;
-    sh:targetObjectsOf :hasSource ;
+        sh:path :hasSource ; sh:minCount 1 ; sh:nodeKind sh:IRI ; sh:class :Source ;
+        sh:message "needs at least one :hasSource, each a :Source"
+    ] ;
     sh:property [
-        sh:path :format ;
-        sh:minCount 1 ;
-        sh:maxCount 1 ;
-        sh:nodeKind sh:IRI ;
-        sh:message "needs exactly one :format"
+        sh:path :hasTargetSchema ; sh:nodeKind sh:IRI ; sh:class :TargetSchema ;
+        sh:message ":hasTargetSchema must point to :TargetSchema nodes"
+    ] ;
+    sh:property [
+        sh:path :hasMatchRule ; sh:nodeKind sh:IRI ; sh:class :MatchRule ;
+        sh:message ":hasMatchRule must point to :MatchRule nodes"
+    ] ;
+    sh:property [
+        sh:path :hasResolveRule ; sh:maxCount 1 ; sh:nodeKind sh:IRI ; sh:class :ResolveRule ;
+        sh:message ":hasResolveRule must be a single :ResolveRule"
     ] .
 
-# A SourceField's mint-key flag, the pure-config slice of the identity
-# contract. The companion rule — every clean-less source needs an :iriSource
-# field — is filesystem-dependent (it hinges on clean.sparql's presence) and
-# lives in validate.js, not here.
+# ---- Sources ------------------------------------------------------------
+
+# The engine only needs a source's :format and its fields; the human label and
+# ?src= short code (skos:notation) are optional here (the minimal fixture omits
+# them), enforced only for cardinality when present.
+:sourceShape a sh:NodeShape ;
+    sh:targetClass :Source ;
+    sh:property [
+        sh:path skos:notation ; sh:maxCount 1 ;
+        sh:message "at most one skos:notation (its ?src= short code)"
+    ] ;
+    sh:property [
+        sh:path :format ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ;
+        sh:message "needs exactly one :format"
+    ] ;
+    sh:property [
+        sh:path :hasEntity ; sh:nodeKind sh:IRI ; sh:class :SourceEntity ;
+        sh:message ":hasEntity must point to :SourceEntity nodes"
+    ] ;
+    sh:property [
+        sh:path :hasField ; sh:nodeKind sh:IRI ; sh:class :SourceField ;
+        sh:message ":hasField must point to :SourceField nodes"
+    ] .
+
+# A source must expose its fields somehow: directly via :hasField (flat sources)
+# or through typed entities via :hasEntity (sources the clean step splits).
+:sourceExposesFieldsShape a sh:NodeShape ;
+    sh:targetClass :Source ;
+    sh:message "a source must declare fields via :hasField or entities via :hasEntity" ;
+    sh:or (
+        [ sh:path :hasField  ; sh:minCount 1 ]
+        [ sh:path :hasEntity ; sh:minCount 1 ]
+    ) .
+
+# A SourceEntity is a typed slice of a multi-entity source; its label names it in
+# the Entities view, and it must own at least one field.
+:sourceEntityShape a sh:NodeShape ;
+    sh:targetClass :SourceEntity ;
+    sh:property [
+        sh:path rdfs:label ; sh:minCount 1 ;
+        sh:message "needs an rdfs:label (shown as the entity's name)"
+    ] ;
+    sh:property [
+        sh:path :hasField ; sh:minCount 1 ; sh:nodeKind sh:IRI ; sh:class :SourceField ;
+        sh:message "needs at least one :hasField, each a :SourceField"
+    ] .
+
+# A SourceField's JSON path plus the pure-config slice of the identity contract
+# (:iriSource) and the derivation origin (:derivedFrom, which the Map view starts
+# the flow at). The companion rule — every clean-less source needs an :iriSource
+# field — is filesystem-dependent and lives in validate.js, not here.
 :sourceFieldShape a sh:NodeShape ;
     sh:targetClass :SourceField ;
     sh:property [
-        sh:path :iriSource ;
-        sh:maxCount 1 ;
-        sh:datatype xsd:boolean ;
+        sh:path :fieldPath ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ;
+        sh:message "needs exactly one :fieldPath string"
+    ] ;
+    sh:property [
+        sh:path :iriSource ; sh:maxCount 1 ; sh:datatype xsd:boolean ;
         sh:message ":iriSource must be a single boolean"
+    ] ;
+    sh:property [
+        sh:path :derivedFrom ; sh:maxCount 1 ; sh:nodeKind sh:IRI ;
+        sh:message ":derivedFrom must be a single IRI"
+    ] ;
+    sh:property [
+        sh:path :hasSubField ; sh:nodeKind sh:IRI ; sh:class :SubField ;
+        sh:message ":hasSubField must point to :SubField nodes"
     ] .
 
-# TODO: add the rest
+:subFieldShape a sh:NodeShape ;
+    sh:targetClass :SubField ;
+    sh:property [
+        sh:path :fieldPath ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ;
+        sh:message "needs exactly one :fieldPath string"
+    ] .
+
+# ---- Target schemas -----------------------------------------------------
+
+:targetSchemaShape a sh:NodeShape ;
+    sh:targetClass :TargetSchema ;
+    sh:property [
+        sh:path :targetClass ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ;
+        sh:message "needs exactly one :targetClass"
+    ] ;
+    sh:property [
+        sh:path :hasTargetField ; sh:nodeKind sh:IRI ; sh:class :TargetField ;
+        sh:message ":hasTargetField must point to :TargetField nodes"
+    ] .
+
+:targetFieldShape a sh:NodeShape ;
+    sh:targetClass :TargetField ;
+    sh:property [
+        sh:path :targetPredicate ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ;
+        sh:message "needs exactly one :targetPredicate"
+    ] ;
+    sh:property [
+        sh:path :multiValued ; sh:maxCount 1 ; sh:datatype xsd:boolean ;
+        sh:message ":multiValued must be a single boolean"
+    ] .
+
+# ---- Mappings -----------------------------------------------------------
+
+# A Mapping wires one source to one target schema through its field mappings.
+# The map/extract steps and the Entities view all rely on this being complete,
+# so an incomplete Mapping is a config error, not a silent no-op.
+:mappingShape a sh:NodeShape ;
+    sh:targetClass :Mapping ;
+    sh:property [
+        sh:path :fromSource ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ; sh:class :Source ;
+        sh:message "needs exactly one :fromSource (a :Source)"
+    ] ;
+    sh:property [
+        sh:path :toTarget ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ; sh:class :TargetSchema ;
+        sh:message "needs exactly one :toTarget (a :TargetSchema)"
+    ] ;
+    sh:property [
+        sh:path :hasFieldMapping ; sh:minCount 1 ;
+        sh:message "needs at least one :hasFieldMapping"
+    ] .
+
+# Each field mapping wires one source field (or sub-field, so :from is only
+# checked for being an IRI) to one or more target fields — a single :to normally,
+# or several when a transform splits one raw field across fields (e.g. an address
+# string into street/postcode/locality via :via "address").
+:fieldMappingShape a sh:NodeShape ;
+    sh:targetObjectsOf :hasFieldMapping ;
+    sh:property [
+        sh:path :from ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ;
+        sh:message "needs exactly one :from"
+    ] ;
+    sh:property [
+        sh:path :to ; sh:minCount 1 ; sh:nodeKind sh:IRI ; sh:class :TargetField ;
+        sh:message "needs at least one :to, each a :TargetField"
+    ] ;
+    sh:property [
+        sh:path :via ; sh:maxCount 1 ; sh:datatype xsd:string ;
+        sh:message ":via must be a single string"
+    ] .
+
+# Each relationship links the mapping's target entity to another target schema.
+:relationshipShape a sh:NodeShape ;
+    sh:targetObjectsOf :hasRelationship ;
+    sh:property [
+        sh:path :sourcePredicate ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ;
+        sh:message "needs exactly one :sourcePredicate"
+    ] ;
+    sh:property [
+        sh:path :toTargetField ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ; sh:class :TargetField ;
+        sh:message "needs exactly one :toTargetField (a :TargetField)"
+    ] ;
+    sh:property [
+        sh:path :toTargetSchema ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ; sh:class :TargetSchema ;
+        sh:message "needs exactly one :toTargetSchema (a :TargetSchema)"
+    ] .
+
+# ---- Match & resolve rules ----------------------------------------------
+
+:matchRuleShape a sh:NodeShape ;
+    sh:targetClass :MatchRule ;
+    sh:property [
+        sh:path :forTarget ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ; sh:class :TargetSchema ;
+        sh:message "needs exactly one :forTarget (a :TargetSchema)"
+    ] ;
+    sh:property [
+        sh:path :targetNamespace ; sh:minCount 1 ; sh:maxCount 1 ;
+        sh:message "needs exactly one :targetNamespace"
+    ] ;
+    sh:property [
+        sh:path :mintedSubjectPrefix ; sh:minCount 1 ; sh:maxCount 1 ;
+        sh:message "needs exactly one :mintedSubjectPrefix"
+    ] .
+
+:resolveRuleShape a sh:NodeShape ;
+    sh:targetClass :ResolveRule ;
+    sh:property [
+        sh:path :defaultStrategy ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ;
+        sh:message "needs exactly one :defaultStrategy"
+    ] .

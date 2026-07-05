@@ -1,5 +1,6 @@
 import { newStore, parser as n3Parser, storeFromTurtles } from "@foerderfunke/sem-ops-utils"
 import { CDP, enabledSources, parseTtl, PATHS, sourceGraph, sourceName, stepIri, stepJournal } from "../utils.js"
+import { cleanedOutputHasMappedFields } from "../validate.js"
 import { COMMON_PREFIXES, writeTurtleFile } from "./write-turtle.js"
 import { MAPPED_GRAPH, runMap } from "./steps/map.js"
 import { runClean } from "./steps/clean.js"
@@ -40,6 +41,11 @@ export async function federate(root = process.cwd()) {
         cleanSteps.push(await journal.step("clean", { source: src, after: [stepIri("lift", sourceName(src))] },
             () => runClean(ctx, src)))
     }
+
+    // Guard the freshly-cleaned output before map consumes it: every field a
+    // mapping reads must have survived clean, or it would map to nothing.
+    const drift = cleanedOutputHasMappedFields(ctx)
+    if (drift.length) throw new Error(`cleaned output drifted from config at ${root}:\n  ${drift.join("\n  ")}`)
 
     // Load each source's cleaned TTL into its own graph — plain mechanics, not a
     // pipeline step.

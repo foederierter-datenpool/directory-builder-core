@@ -180,3 +180,34 @@ test("harvest rounds keep minted IRIs stable (write-once identity registry)", as
     assert.deepEqual(revisionNodes(artifact(PATHS.registryHistory)), [src("revision-1"), src("revision-2")],
         "the changing harvest opens revision 2; the no-op round 2 added none")
 })
+
+// ---- Test 3: the post-clean drift check ------------------------------------
+// A mapping reads a field the source data doesn't carry: shape-valid config, but
+// clean produces no xyz:ghost, so map would silently drop it. federate catches
+// the drift after clean, before map.
+
+test("federate rejects when a mapped field never reaches the cleaned output", async () => {
+    const drifted = `
+@prefix :       <https://civic-data.de/pipeline#> .
+@prefix schema: <http://schema.org/> .
+@prefix ft:     <http://publications.europa.eu/resource/authority/file-type/> .
+
+:federation a :Federation ; :hasSource :alphaSource .
+:thingSchema a :TargetSchema ; :targetClass schema:Thing .
+:t-id   a :TargetField ; :targetPredicate schema:identifier .
+:t-name a :TargetField ; :targetPredicate schema:name .
+
+:alphaSource a :Source ; :format ft:JSON ; :hasField :alpha-id, :alpha-ghost .
+:alpha-id    a :SourceField ; :fieldPath "id"    ; :iriSource true .
+:alpha-ghost a :SourceField ; :fieldPath "ghost" .   # never present in the data below
+
+:alpha-mapping a :Mapping ; :fromSource :alphaSource ; :toTarget :thingSchema ;
+    :hasFieldMapping [ :from :alpha-id ; :to :t-id ] , [ :from :alpha-ghost ; :to :t-name ] .
+
+:match a :MatchRule ; :forTarget :thingSchema ; :targetNamespace "urn:test:" ; :mintedSubjectPrefix "thing-" .
+`
+    const root = makeInstance("drift", { federation: drifted, sources: { alpha: [{ id: "a1" }] } })
+    // config is shape-valid (the field is declared) — the drift only shows post-clean
+    assert.deepEqual(await validate(root), [])
+    await assert.rejects(new Pipeline({ root }).run(), /drifted from config[\s\S]*:alpha-ghost[\s\S]*"ghost"/)
+})
