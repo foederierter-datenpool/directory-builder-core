@@ -10,6 +10,7 @@ import React, { lazy, Suspense, useState } from "react"
 const Directory   = lazy(() => import("./Directory.jsx"))
 const Download    = lazy(() => import("./Download.jsx"))
 const Pipeline    = lazy(() => import("./Pipeline.jsx"))
+const EntitiesGraph = lazy(() => import("./EntitiesGraph.jsx"))
 const MapGraph    = lazy(() => import("./MapGraph.jsx"))
 const MatchGraph  = lazy(() => import("./MatchGraph.jsx"))
 const MergeTables = lazy(() => import("./MergeTables.jsx"))
@@ -38,6 +39,7 @@ function Nav() {
                     <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", border: "1px solid #aaa", borderRadius: 4, padding: "0.3rem 0.6rem" }}>
                         <NavLink to="/sources">Sources</NavLink>
                         <NavLink to="/pipeline">Pipeline</NavLink>
+                        <NavLink to="/entities">Entities</NavLink>
                         <NavLink to="/map">Map</NavLink>
                         <NavLink to="/match">Match</NavLink>
                         <NavLink to="/merge">Merge</NavLink>
@@ -82,6 +84,7 @@ export default function App() {
                             <Route path="/" element={<About />} />
                             <Route path="/pipeline" element={<Pipeline />} />
                             <Route path="/sources" element={<Sources />} />
+                            <Route path="/entities" element={<EntitiesGraph />} />
                             <Route path="/map" element={<MapGraph />} />
                             <Route path="/match" element={<MatchGraph />} />
                             <Route path="/merge" element={<MergeTables />} />

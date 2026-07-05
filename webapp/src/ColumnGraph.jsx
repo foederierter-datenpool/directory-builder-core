@@ -307,9 +307,10 @@ export function toFlow({ nodes, edges, columns, colors, centerColumns, anchorCol
     const flowEdges = edges.map((e, i) => {
         const base = { id: `e-${i}`, source: e.from, target: e.to, markerEnd: { type: MarkerType.ArrowClosed } }
         if (e.value !== undefined) { base.type = "value"; base.data = { value: e.value, idx: i, bg: e.valueBg, centered: e.centered } }
-        if (e.rel) {
-            base.style = { stroke: REL_COLOR, strokeWidth: 1.5 }
-            base.markerEnd = { type: MarkerType.ArrowClosed, color: REL_COLOR }
+        const stroke = e.stroke ?? (e.rel ? REL_COLOR : null)
+        if (stroke) {
+            base.style = { stroke, strokeWidth: 1.5 }
+            base.markerEnd = { type: MarkerType.ArrowClosed, color: stroke }
             base.zIndex = 4
         }
         return base
