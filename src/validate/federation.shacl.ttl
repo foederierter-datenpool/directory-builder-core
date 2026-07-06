@@ -6,7 +6,7 @@
 
 # The engine's contract for a well-formed federation.ttl, expressed as SHACL and
 # enforced by ../validate.js. Everything checkable from the config alone lives
-# here; the filesystem-dependent rules (a source's fetch/clean inputs must exist
+# here; the filesystem-dependent rules (a source's fetch/extract inputs must exist
 # on disk, and no undeclared sources/ folder) live in validate.js instead.
 
 # ---- Federation ---------------------------------------------------------
@@ -58,7 +58,7 @@
     ] .
 
 # A source must expose its fields somehow: directly via :hasField (flat sources)
-# or through typed entities via :hasEntity (sources the clean step splits).
+# or through typed entities via :hasEntity (sources the extract step splits).
 :sourceExposesFieldsShape a sh:NodeShape ;
     sh:targetClass :Source ;
     sh:message "a source must declare fields via :hasField or entities via :hasEntity" ;
@@ -82,7 +82,7 @@
 
 # A SourceField's JSON path plus the pure-config slice of the identity contract
 # (:iriSource) and the derivation origin (:derivedFrom, which the Map view starts
-# the flow at). The companion rule — every clean-less source needs an :iriSource
+# the flow at). The companion rule — every extract-less source needs an :iriSource
 # field — is filesystem-dependent and lives in validate.js, not here.
 :sourceFieldShape a sh:NodeShape ;
     sh:targetClass :SourceField ;

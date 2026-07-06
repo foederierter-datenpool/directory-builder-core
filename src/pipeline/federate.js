@@ -1,9 +1,9 @@
 import { newStore, parser as n3Parser, storeFromTurtles } from "@foerderfunke/sem-ops-utils"
 import { CDP, enabledSources, parseTtl, PATHS, sourceGraph, sourceName, stepIri, stepJournal } from "../utils.js"
-import { cleanedOutputHasMappedFields } from "../validate.js"
+import { extractedOutputHasMappedFields } from "../validate.js"
 import { COMMON_PREFIXES, writeTurtleFile } from "./write-turtle.js"
 import { MAPPED_GRAPH, runMap } from "./steps/map.js"
-import { runClean } from "./steps/clean.js"
+import { runExtract } from "./steps/extract.js"
 import { runPreparation } from "./steps/preparation.js"
 import { runMatch } from "./steps/match.js"
 import { runMerge } from "./steps/merge.js"
@@ -15,13 +15,13 @@ import fs from "fs"
 const df = DataFactory
 
 // ---- Federate engine -----------------------------------------------------
-// Clean per source, load, then map → match → merge → resolve (one module per
+// Extract per source, load, then map → match → merge → resolve (one module per
 // step under steps/, sharing the ctx of store + config + path resolver). The
 // step sequence is the engine's own shape; config declares only the sources,
 // processed in :hasSource declaration order. Paths follow from the source
 // name (PATHS), resolved against the instance `root`. Each step runs through
 // the journal, which records what executed and is rendered by the webapp's
-// Pipeline page. The clean steps' predecessors are the other engine's lift
+// Pipeline page. The extract steps' predecessors are the other engine's lift
 // steps, referenced by their conventional stepIri.
 
 export async function federate(root = process.cwd()) {
@@ -37,33 +37,33 @@ export async function federate(root = process.cwd()) {
     const journal = stepJournal()
     const ctx = { store, defStore, abs, quads: federationQuads }
 
-    const cleanSteps = []
+    const extractSteps = []
     for (const src of sources) {
-        cleanSteps.push(await journal.step("clean", { source: src, after: [stepIri("lift", sourceName(src))] },
-            () => runClean(ctx, src)))
+        extractSteps.push(await journal.step("extract", { source: src, after: [stepIri("lift", sourceName(src))] },
+            () => runExtract(ctx, src)))
     }
 
-    // Guard the freshly-cleaned output before map consumes it: every field a
-    // mapping reads must have survived clean, or it would map to nothing.
-    const drift = cleanedOutputHasMappedFields(ctx)
-    if (drift.length) throw new Error(`cleaned output drifted from config at ${root}:\n  ${drift.join("\n  ")}`)
+    // Guard the freshly-extracted output before map consumes it: every field a
+    // mapping reads must have survived extract, or it would map to nothing.
+    const drift = extractedOutputHasMappedFields(ctx)
+    if (drift.length) throw new Error(`extracted output drifted from config at ${root}:\n  ${drift.join("\n  ")}`)
 
-    // Project clean's value-hygiene effects (matchString + derived before→after)
+    // Project extract's value-hygiene effects (matchString + derived before→after)
     // into a per-source artifact for the webapp's Prepare view.
     await runPreparation(ctx, sources)
 
-    // Load each source's cleaned TTL into its own graph — plain mechanics, not a
+    // Load each source's extracted TTL into its own graph — plain mechanics, not a
     // pipeline step.
     for (const src of sources) {
         const name = sourceName(src)
-        console.log(`load   ${PATHS.cleaned(name)} → <${sourceGraph(name)}>`)
+        console.log(`load   ${PATHS.extracted(name)} → <${sourceGraph(name)}>`)
         const graph = df.namedNode(sourceGraph(name))
-        for (const quad of n3Parser.parse(fs.readFileSync(abs(PATHS.cleaned(name)), "utf8"))) {
+        for (const quad of n3Parser.parse(fs.readFileSync(abs(PATHS.extracted(name)), "utf8"))) {
             store.addQuad(df.quad(quad.subject, quad.predicate, quad.object, graph))
         }
     }
 
-    const mapStep = await journal.step("map", { after: cleanSteps }, async () => {
+    const mapStep = await journal.step("map", { after: extractSteps }, async () => {
         await runMap(ctx, PATHS.mappingQueries)
         const mappedQuads = store.getQuads(null, null, null, MAPPED_GRAPH)
         await writeTurtleFile(abs(PATHS.mapped), mappedQuads, { ...COMMON_PREFIXES, cdp: CDP })

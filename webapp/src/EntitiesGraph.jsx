@@ -5,7 +5,7 @@
 //   "Target entity relationships" (links) — the output relationships
 //           (:hasRelationship) between the resulting entities, as a
 //           source-independent schema↔schema graph
-//   "Cleanup" (prepare) — what the clean step changed: per entity, the raw
+//   "Cleanup" (prepare) — what the extract step changed: per entity, the raw
 //           fields it split into several targets and the values it normalised,
 //           plus the (otherwise invisible) match key
 // The entity DIMENSION, complementing the Map view's field-level journey.
@@ -78,12 +78,12 @@ const VIEW_GUIDE = [
         label: "Cleanup",
         body: (
             <>
-                What the <strong>clean</strong> step changed on the way in, per entity, in two
+                What the <strong>extract</strong> step changed on the way in, per entity, in two
                 kinds: a <em>split</em>, where one raw field fans out into several targets (a
                 Teaser into street, PLZ and city), and a <em>normalised</em> value, where a field
                 is cleaned but not split (whitespace collapsed, phone reduced to digits,
                 “Str.” → “Straße”). Each <em>split</em>/<em>normalised</em> tag links to the
-                <code> clean.sparql</code> that does the work. Plus the <em>match key</em> — the
+                <code> extract.sparql</code> that does the work. Plus the <em>match key</em> — the
                 normalised string the match step compares on, invisible in every other view.
             </>
         ),
@@ -143,18 +143,18 @@ const TAG_LINK = { color: "#6b7a99", cursor: "pointer", textDecoration: "none" }
 const RAW = { color: "#9a3412" }     // before / raw value
 const CLEAN = { color: "#166534" }   // after / cleaned value
 
-// The split/normalised tag, linked to the clean.sparql that did the work when
+// The split/normalised tag, linked to the extract.sparql that did the work when
 // the instance declares a repo (both kinds live in that one file — we can't pin
 // the exact rule/lines, since the config doesn't map fields to query lines).
 function Tag({ kind, href, style }) {
     const s = { ...TAG, ...style }
     return href
-        ? <a href={href} target="_blank" rel="noreferrer" title="Open the clean.sparql that does this on GitHub" style={{ ...s, ...TAG_LINK }}>{kind}</a>
+        ? <a href={href} target="_blank" rel="noreferrer" title="Open the extract.sparql that does this on GitHub" style={{ ...s, ...TAG_LINK }}>{kind}</a>
         : <span style={s}>{kind}</span>
 }
 
 // Prepare mode: a scrollable, per-source list of entities, each showing what
-// clean changed — in two visually distinct kinds:
+// extract changed — in two visually distinct kinds:
 //   split      — one raw field fanned out into ≥2 target fields (a Teaser into
 //                street/PLZ/city, a "PLZ city" into two). Shown as one
 //                representative raw value → an indented list of the fields it

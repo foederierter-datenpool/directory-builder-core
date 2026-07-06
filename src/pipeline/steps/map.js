@@ -44,8 +44,8 @@ const buildDirectInsert = ({ sourceGraph, source, targetClass, target }, fields)
     const topLevel  = fields.filter(f => !f.parentPath)
     const subFields = fields.filter(f => f.parentPath)
 
-    // Source subjects = federation IRIs after the clean step, identified via
-    // cdp:fromSource — no minting from a key field. Where clean reshapes one
+    // Source subjects = federation IRIs after the extract step, identified via
+    // cdp:fromSource — no minting from a key field. Where extract reshapes one
     // source into several entity kinds it tags each subject with cdp:targetSchema;
     // select only those for this mapping's schema. Subjects with no marker
     // (single-entity sources like caritas/dhs) match unconditionally.
@@ -69,7 +69,7 @@ const buildDirectInsert = ({ sourceGraph, source, targetClass, target }, fields)
     }
 
     // The target schema's :targetClass becomes the record's rdf:type here in the
-    // mapped graph — this is where schema: vocabulary first enters; the clean step
+    // mapped graph — this is where schema: vocabulary first enters; the extract step
     // stays in xyz:/cdp: only.
     const typeClause = targetClass ? `a ${short(targetClass)} ; ` : ""
 
@@ -136,7 +136,7 @@ export const runMap = async ({ store, defStore, abs }, queriesDir) => {
         }
     }
 
-    // A mapping's :hasRelationship turns the clean step's source-level link
+    // A mapping's :hasRelationship turns the extract step's source-level link
     // (e.g. :providedBy) into a target predicate (schema:provider), matching the
     // two ends by their cdp:targetSchema. Both ends are still source IRIs here;
     // the merge step rewrites them to the minted cluster IRIs.
@@ -153,7 +153,7 @@ export const runMap = async ({ store, defStore, abs }, queriesDir) => {
             ?field :targetPredicate ?targetPredicate .
         } ORDER BY ?mapping`, [defStore])
 
-    // cdp:matchString — clean's optional normalised matching surface. Not a target field,
+    // cdp:matchString — extract's optional normalised matching surface. Not a target field,
     // so copy it straight from each source graph to the mapped graph, where a criterion's
     // :on can match on it. The match step deletes it afterwards, so it never reaches merged.ttl.
     for (const source of [...new Set(mappings.map(m => m.source))]) {

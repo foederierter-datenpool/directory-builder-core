@@ -1,6 +1,6 @@
 // Helpers for the Map view: build the schema-mapping graph and resolve per-entity
 // source/target field values. Pure (ttl in → data out).
-// Reads:  TTL strings passed by MapGraph.jsx (federation, mapped, cleaned source TTL)
+// Reads:  TTL strings passed by MapGraph.jsx (federation, mapped, extracted source TTL)
 // Does:   returns { nodes, edges } plus per-source / per-entity value maps
 
 import { CDP as NS, localName, parseTtl, prefixesOf, shrink, sourceName, subjectsOfType, typesOf } from "@directory-builder/core/utils"
@@ -42,7 +42,7 @@ export function loadEntitiesBySource(_federationTtl, mappedTtl) {
 }
 
 // For each entity in mapped.ttl, resolve the literal value of each of its
-// source fields/sub-fields (from the source's lifted/cleaned TTL) AND each
+// source fields/sub-fields (from the source's lifted/extracted TTL) AND each
 // target field (from mapped.ttl, indirected via the field's :targetPredicate).
 // Returns Map<entityIri, Map<fieldIri, string>>.
 export function loadFieldValuesByEntity(federationTtl, mappedTtl, liftedBySource) {
@@ -100,7 +100,7 @@ export function loadFieldValuesByEntity(federationTtl, mappedTtl, liftedBySource
         const fields = fieldsBySource.get(sourceIri) ?? []
         for (const [entityIri, src] of entitySource) {
             if (src !== sourceIri) continue
-            // Source subject IS the federation IRI post-clean — no lookup needed.
+            // Source subject IS the federation IRI post-extract — no lookup needed.
             const subjectPreds = graph.get(entityIri)
             if (!subjectPreds) continue
 
@@ -215,7 +215,7 @@ export function loadMap(ttl, { hideUnmappedFields = true, hideUnmappedTargetFiel
     // A field owned by a :SourceEntity gets its edge from the entity's source —
     // the entity renders not as a node but as a group rectangle around its
     // fields (sub-fields included), labelled with the entity's rdfs:label.
-    // A :derivedFrom field is NOT raw — the clean step computes it from the named
+    // A :derivedFrom field is NOT raw — the extract step computes it from the named
     // raw field(s). It's still a declared :SourceField (so it's a real node), but
     // its inbound edge comes from those raw origins, not the source, and it renders
     // in its own column (typeFor → DerivedField) without a group box — so a computed
@@ -286,7 +286,7 @@ export function loadMap(ttl, { hideUnmappedFields = true, hideUnmappedTargetFiel
     const typeFor = (iri) => {
         if (transformLabel.has(iri)) return "TransformNode"
         if (copyInfo.has(iri)) return "TargetField"
-        // A :derivedFrom source field is computed by clean, not raw — its own column.
+        // A :derivedFrom source field is computed by extract, not raw — its own column.
         if (derivedFromOf.has(iri)) return "DerivedField"
         const ts = typeOf.get(iri)
         if (ts?.has(SUB_FIELD)) return "SourceField"

@@ -23,10 +23,10 @@ export async function validate(root = process.cwd()) {
 }
 
 // Every :hasSource in federation.ttl has what its engine steps need: a
-// fetch.js or static/ to default to, a clean.sparql or an :iriSource field to
-// derive the default clean from - and no sources/ folder exists that the
+// fetch.js or static/ to default to, a extract.sparql or an :iriSource field to
+// derive the default extract from - and no sources/ folder exists that the
 // federation doesn't declare. Checks all declared sources, enabled or not:
-// folder presence is a repo-layout contract. This "key OR clean.sparql" rule
+// folder presence is a repo-layout contract. This "key OR extract.sparql" rule
 // is filesystem-dependent, so it lives here, not in the SHACL shape.
 function sourcesFoldersInSync({ abs, quads }) {
     const declared = objectsOf(quads, `${CDP}hasSource`)
@@ -35,8 +35,8 @@ function sourcesFoldersInSync({ abs, quads }) {
         const name = sourceName(iri)
         if (![PATHS.fetchScript(name), PATHS.staticDir(name)].some((f) => fs.existsSync(abs(f))))
             problems.push(`${PATHS.fetchScript(name)} missing and no ${PATHS.staticDir(name)} to default to`)
-        if (!fs.existsSync(abs(PATHS.cleanQuery(name))) && !identifierField(quads, iri))
-            problems.push(`${PATHS.cleanQuery(name)} missing and no :iriSource field to derive the default clean from`)
+        if (!fs.existsSync(abs(PATHS.extractQuery(name))) && !identifierField(quads, iri))
+            problems.push(`${PATHS.extractQuery(name)} missing and no :iriSource field to derive the default extract from`)
     }
     // The other direction: every folder in sources/ must be declared in federation.ttl.
     const declaredNames = declared.map(sourceName)
@@ -60,22 +60,22 @@ async function federationConformsToShape({ ttl }) {
         `${PATHS.federation}: ${shrink(r.focusNode.value, { "": CDP })} ${r.message.map((m) => m.value).join("; ")}`)
 }
 
-// Post-clean drift check (config ↔ real data): the map step reads xyz:<fieldPath>
-// for every field a mapping consumes (:from), so a mapped field the cleaned output
-// no longer carries would map to nothing. Catches the source data or a clean.sparql
+// Post-extract drift check (config ↔ real data): the map step reads xyz:<fieldPath>
+// for every field a mapping consumes (:from), so a mapped field the extracted output
+// no longer carries would map to nothing. Catches the source data or a extract.sparql
 // drifting away from what the config still maps — invisible to the config-shape
 // check, which only sees the config. Presence is checked file-wide (not per entity)
 // so field-path reuse and sub-field nesting don't false-positive; a path entirely
-// absent is the real signal. federate() runs this after clean, before map — never
+// absent is the real signal. federate() runs this after extract, before map — never
 // pre-ingest, where it would flag stale output the run is about to regenerate.
-// Sources without a cleaned file yet (not run) are skipped.
-export function cleanedOutputHasMappedFields({ abs, quads }) {
+// Sources without a extracted file yet (not run) are skipped.
+export function extractedOutputHasMappedFields({ abs, quads }) {
     const o = (s, p) => quads.filter((q) => q.subject.value === s && q.predicate.value === `${CDP}${p}`).map((q) => q.object.value)
     const problems = []
     for (const src of enabledSources(quads)) {
-        const cleaned = abs(PATHS.cleaned(sourceName(src)))
-        if (!fs.existsSync(cleaned)) continue
-        const present = new Set(parseTtl(fs.readFileSync(cleaned, "utf8"))
+        const extracted = abs(PATHS.extracted(sourceName(src)))
+        if (!fs.existsSync(extracted)) continue
+        const present = new Set(parseTtl(fs.readFileSync(extracted, "utf8"))
             .filter((q) => q.predicate.value.startsWith(XYZ))
             .map((q) => q.predicate.value.slice(XYZ.length)))
         const mappedFields = new Set(quads
@@ -85,7 +85,7 @@ export function cleanedOutputHasMappedFields({ abs, quads }) {
         for (const field of mappedFields) {
             const fieldPath = o(field, "fieldPath")[0]
             if (fieldPath && !present.has(fieldPath))
-                problems.push(`${PATHS.cleaned(sourceName(src))}: ${shrink(field, { "": CDP })} maps :fieldPath "${fieldPath}", missing from the cleaned output (source data or clean.sparql drifted)`)
+                problems.push(`${PATHS.extracted(sourceName(src))}: ${shrink(field, { "": CDP })} maps :fieldPath "${fieldPath}", missing from the extracted output (source data or extract.sparql drifted)`)
         }
     }
     return problems

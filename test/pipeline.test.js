@@ -7,7 +7,7 @@ import path from "path"
 import fs from "fs"
 
 // ---- Shared fixture: the ultra-minimal instance both tests run on ----------
-// federation.ttl + two static JSON sources, nothing else — fetch, clean and
+// federation.ttl + two static JSON sources, nothing else — fetch, extract and
 // resolve all run on engine defaults. The sources share one record by name
 // ("Entry One"), so the pipeline should merge a1+b1 and leave a2 and b2 as
 // their own entities.
@@ -155,7 +155,7 @@ test("harvest rounds keep minted IRIs stable (write-once identity registry)", as
 
     // round 2 — harmless upstream edit: b2 renames to "Entry Drei", membership
     // unchanged. The directory carries the new name under the same IRI, and both
-    // registry and history stay byte-identical (a no-change harvest, clean diff).
+    // registry and history stay byte-identical (a no-change harvest, extract diff).
     writeSource("beta", [beta[0], { id: "b2", label: "Entry Drei" }])
     await pipeline.run()
     const expectedRenamed = expectedFinal.replace(`"Entry Three"`, `"Entry Drei"`)
@@ -181,12 +181,12 @@ test("harvest rounds keep minted IRIs stable (write-once identity registry)", as
         "the changing harvest opens revision 2; the no-op round 2 added none")
 })
 
-// ---- Test 3: the post-clean drift check ------------------------------------
+// ---- Test 3: the post-extract drift check ------------------------------------
 // A mapping reads a field the source data doesn't carry: shape-valid config, but
-// clean produces no xyz:ghost, so map would silently drop it. federate catches
-// the drift after clean, before map.
+// extract produces no xyz:ghost, so map would silently drop it. federate catches
+// the drift after extract, before map.
 
-test("federate rejects when a mapped field never reaches the cleaned output", async () => {
+test("federate rejects when a mapped field never reaches the extracted output", async () => {
     const drifted = `
 @prefix :       <https://civic-data.de/pipeline#> .
 @prefix schema: <http://schema.org/> .
@@ -207,7 +207,7 @@ test("federate rejects when a mapped field never reaches the cleaned output", as
 :match a :MatchRule ; :forTarget :thingSchema ; :targetNamespace "urn:test:" ; :mintedSubjectPrefix "thing-" .
 `
     const root = makeInstance("drift", { federation: drifted, sources: { alpha: [{ id: "a1" }] } })
-    // config is shape-valid (the field is declared) — the drift only shows post-clean
+    // config is shape-valid (the field is declared) — the drift only shows post-extract
     assert.deepEqual(await validate(root), [])
     await assert.rejects(new Pipeline({ root }).run(), /drifted from config[\s\S]*:alpha-ghost[\s\S]*"ghost"/)
 })

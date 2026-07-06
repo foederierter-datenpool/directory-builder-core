@@ -1,5 +1,5 @@
 // Source identity lives in config: federation.ttl declares each :Source (label,
-// skos:notation, order); its cleaned-data file follows from the source name by
+// skos:notation, order); its extracted-data file follows from the source name by
 // the PATHS conventions. JS never hardcodes a source name — it resolves records
 // to a :Source via cdp:fromSource.
 // Reads:  TTL strings passed in (federation, mapped, ingest-log)
@@ -64,17 +64,17 @@ export function loadHarvestBySource(logTtl) {
     return out
 }
 
-// Map<SourceIRI, cleaned-TTL raw string> for every source a :Mapping draws
-// from (:fromSource); the file is the conventional cleaned path's basename.
-// `rawByPath` comes from import.meta.glob(".../cleaned/*.ttl", ...).
-export function loadCleanedBySource(federationTtl, rawByPath) {
+// Map<SourceIRI, extracted-TTL raw string> for every source a :Mapping draws
+// from (:fromSource); the file is the conventional extracted path's basename.
+// `rawByPath` comes from import.meta.glob(".../extracted/*.ttl", ...).
+export function loadExtractedBySource(federationTtl, rawByPath) {
     const basename = (p) => p.split("/").pop()
     const rawByBase = new Map(Object.entries(rawByPath).map(([path, raw]) => [basename(path), raw]))
 
     const out = new Map()
     for (const q of parseTtl(federationTtl)) {
         if (q.predicate.value !== FROM_SOURCE) continue
-        const raw = rawByBase.get(basename(PATHS.cleaned(sourceName(q.object.value))))
+        const raw = rawByBase.get(basename(PATHS.extracted(sourceName(q.object.value))))
         if (raw) out.set(q.object.value, raw)
     }
     return out

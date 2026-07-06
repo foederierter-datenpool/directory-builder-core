@@ -1,14 +1,14 @@
 // Map view: the source-schema → target-schema mapping graph, optionally animated
 // with one entity's field values flowing through the transform nodes.
 // Reads:  config/federation.ttl, data/pipeline/mapped.ttl,
-//         data/pipeline/cleaned/*.ttl (via loadMap.js + sourceMeta.js)
+//         data/pipeline/extracted/*.ttl (via loadMap.js + sourceMeta.js)
 // Does:   renders the Map page (horizontal <ColumnGraph>)
 
-import { federationTtl as ttl, mappedTtl, cleanedByPath } from "./instanceData.js"
+import { federationTtl as ttl, mappedTtl, extractedByPath } from "./instanceData.js"
 import { loadMap, loadSources, loadEntitiesBySource, loadFieldValuesByEntity } from "./loadMap.js"
 import React, { useEffect, useMemo, useRef, useState } from "react"
 import { useSourceParam } from "./useSourceParam.js"
-import { loadCleanedBySource } from "./sourceMeta.js"
+import { loadExtractedBySource } from "./sourceMeta.js"
 import { SkipBack, SkipForward } from "lucide-react"
 import ColumnGraph, { toFlow } from "./ColumnGraph.jsx"
 import CheckboxDropdown from "./CheckboxDropdown.jsx"
@@ -25,7 +25,7 @@ const VERTICAL_SPACING = { colSpacing: 160, siblingGap: 200 }
 const COLORS = {
     Source: "#d4e7ff",
     SourceField: "#e6f3d8",
-    DerivedField: "#cfe8e6",   // clean-derived source fields — teal, distinct from raw green
+    DerivedField: "#cfe8e6",   // extract-derived source fields — teal, distinct from raw green
     TransformNode: "#fff1a8",
     TargetField: "#fde2c7",
     TargetSchema: "#f4cfe0",
@@ -42,8 +42,8 @@ const BTN = { padding: "0.25rem 0.6rem", border: "1px solid #aaa", borderRadius:
 const SOURCES = loadSources(ttl)
 const ENTITIES_BY_SOURCE = loadEntitiesBySource(ttl, mappedTtl)
 // Source-to-file mapping is resolved from config: instanceData enumerates the
-// cleaned TTLs from :hasSource, so a new source needs no edit here.
-const FIELD_VALUES = loadFieldValuesByEntity(ttl, mappedTtl, loadCleanedBySource(ttl, cleanedByPath))
+// extracted TTLs from :hasSource, so a new source needs no edit here.
+const FIELD_VALUES = loadFieldValuesByEntity(ttl, mappedTtl, loadExtractedBySource(ttl, extractedByPath))
 
 const SOURCE_OPTS = SOURCES.map((s) => ({ key: s.iri, label: s.label }))
 function SourcesDropdown({ visible, onChange }) {

@@ -370,7 +370,7 @@ export const runMatch = async ({ store, defStore, abs }, outPath, registryPath, 
         console.log(`match: ${rule.match.split("#").pop()} ${subjects.length} entities in ${buckets.size} bucket(s) → ${clusters.size} clusters (${multiMember} multi-member, ${sameAsUnions} sameAs unions, ${keptDistinct} kept distinct)`)
     }
 
-    // cdp:matchString was clean's private matching surface (a normalised name the
+    // cdp:matchString was extract's private matching surface (a normalised name the
     // criteria compared on). Now that matching is done it has served its purpose, so
     // drop it from the mapped graph — it would otherwise ride into merged.ttl and the
     // Merge view, where it means nothing to a reviewer.

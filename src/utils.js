@@ -63,16 +63,16 @@ export const PATHS = {
     fetchScript: (name) => `sources/${name}/fetch.js`,
     exporter:    (name) => `webapp/exporters/${name}.js`,
     staticDir:   (name) => `sources/${name}/static/`,
-    cleanQuery:  (name) => `sources/${name}/clean.sparql`,
+    extractQuery:  (name) => `sources/${name}/extract.sparql`,
     transform:   (name, t) => `sources/${name}/transform-${t}.sparql`,
     raw:         (name) => `data/ingest/raw/${name}/`,
     lifted:      (name) => `data/ingest/lifted/${name}/`,
-    cleaned:     (name) => `data/pipeline/cleaned/${name}.ttl`,
+    extracted:     (name) => `data/pipeline/extracted/${name}.ttl`,
     preparation: (name) => `data/pipeline/preparation/${name}.ttl`,
     ingestLog:   "data/ingest/ingest-log.ttl",
     federateLog: "data/pipeline/federate-log.ttl",
     mappingQueries: "data/pipeline/direct-mapping-queries/",
-    defaultCleanQuery: (name) => `data/pipeline/default-clean-queries/${name}.sparql`,
+    defaultExtractQuery: (name) => `data/pipeline/default-extract-queries/${name}.sparql`,
     mapped:      "data/pipeline/mapped.ttl",
     matches:     "data/pipeline/matches.ttl",
     merged:      "data/pipeline/merged.ttl",
@@ -119,7 +119,7 @@ export const enabledSources = (quads) => {
     return objectsOf(quads, `${CDP}hasSource`).filter((iri) => !disabled.has(iri))
 }
 
-// The source's skolem key for the default clean: the :fieldPath of the
+// The source's skolem key for the default extract: the :fieldPath of the
 // SourceField flagged :iriSource true. The flag names the mint key directly,
 // decoupled from output semantics: a field can be the IRI key without being
 // mapped to schema:identifier (e.g. a record minted from its postal code), and
@@ -127,8 +127,8 @@ export const enabledSources = (quads) => {
 // it declares. Undefined when no field is flagged.
 //
 // Source granularity (first flagged field wins) is enough: a multi-entity
-// source mints via a custom clean.sparql, so only clean-less (single-entity,
-// flat) sources reach the default clean — and those have one key field.
+// source mints via a custom extract.sparql, so only extract-less (single-entity,
+// flat) sources reach the default extract — and those have one key field.
 export const identifierField = (quads, sourceIri) => {
     const o = (s, p) => quads.filter((q) => q.subject.value === s && q.predicate.value === `${CDP}${p}`).map((q) => q.object.value)
     const fields = [

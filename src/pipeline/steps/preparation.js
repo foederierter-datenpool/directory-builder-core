@@ -21,20 +21,20 @@ const liftedNodes = (dir) => {
     return [...byNode.values()]
 }
 
-// Preparation artifact: the value-hygiene surface of the clean step, per source —
-// the changes clean makes that are invisible in every other view. For each entity
-// it records the otherwise-hidden cdp:matchString (the match step's comparison
-// key) and two kinds of before→after value change:
+// Preparation artifact: the value surface of the extract step, per source — the
+// changes it makes to field values that are invisible in every other view. For
+// each entity it records the otherwise-hidden cdp:matchString (the match step's
+// comparison key) and two kinds of before→after value change:
 //   • parsed: a :derivedFrom field's raw origin value → its cleaned value. Both
-//     live in the cleaned output — clean copies the origin field verbatim onto
-//     the parent entity and links it — so this is a pure projection.
-//   • normalised in place: a field clean rewrote under the same xyz:<fieldPath>
+//     live in the extracted output — extract copies the origin field verbatim
+//     onto the parent entity and links it — so this is a pure projection.
+//   • normalised in place: a field extract rewrote under the same xyz:<fieldPath>
 //     (whitespace collapsed, phone reduced to digits, …). Its raw value survives
 //     only in the lifted input, so each entity is paired to its progenitor lifted
 //     node(s) — the ones sharing the most identical field values — and same-named
 //     fields are diffed. The two kinds never overlap: parsed changes a value's
 //     fieldPath, in-place keeps it.
-// Reads cleaned/<name>.ttl (+ lifted/<name>/ for the in-place raw side);
+// Reads extracted/<name>.ttl (+ lifted/<name>/ for the in-place raw side);
 // writes preparation/<name>.ttl.
 export async function runPreparation({ abs, quads }, sources) {
     const litOf = (s, p) => quads.find((q) => q.subject.value === s && q.predicate.value === `${CDP}${p}`)?.object.value
@@ -46,7 +46,7 @@ export async function runPreparation({ abs, quads }, sources) {
 
     for (const src of sources) {
         const name = sourceName(src)
-        const cq = parseTtl(fs.readFileSync(abs(PATHS.cleaned(name)), "utf8"))
+        const cq = parseTtl(fs.readFileSync(abs(PATHS.extracted(name)), "utf8"))
         const entities = new Set(cq.filter((q) => q.predicate.value === `${CDP}targetSchema`).map((q) => q.subject.value))
         const fieldsOf = new Map()   // entity → Map(fieldPath → value)
         const matchStrOf = new Map()

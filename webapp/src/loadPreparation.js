@@ -37,9 +37,9 @@ export function loadPreparation(ttl, { hiddenSources } = {}) {
         return {
             iri: s.iri,
             label: s.label,
-            // The clean.sparql that produced these splits/normalisations, on the
+            // The extract.sparql that produced these splits/normalisations, on the
             // repo's default branch (/blob/HEAD/); null when no repo is declared.
-            queryHref: repositoryUrl ? `${repositoryUrl}/blob/HEAD/${PATHS.cleanQuery(sourceName(s.iri))}` : null,
+            queryHref: repositoryUrl ? `${repositoryUrl}/blob/HEAD/${PATHS.extractQuery(sourceName(s.iri))}` : null,
             entities: [...entities].map(([iri, v]) => ({ iri, label: localName(iri), matchString: v.matchString, diffs: v.diffs })),
         }
     }).filter((s) => s.entities.length)

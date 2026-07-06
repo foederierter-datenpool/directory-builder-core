@@ -4,13 +4,13 @@
 //         Pipeline.jsx
 // Does:   returns { nodes, edges } — Source lane-header nodes (transparent
 //         fill, light-gray border) above each Fetch step, step nodes labelled
-//         by their type (fetch/lift/clean/map/match/merge/resolve), and an
+//         by their type (fetch/lift/extract/map/match/merge/resolve), and an
 //         End sink so resolve's output is shown on a visible edge, plus a
 //         boundary node feeding the Match step with the conventional
 //         match-knowledge file. Edge labels come from federation.ttl —
 //         a source's :format (uppercased) and :retrieval — or from the
 //         conventions: Lift emits Turtle (LIFTED_FORMAT), other steps their
-//         output file(s) per PATHS, resolved per source for Clean steps.
+//         output file(s) per PATHS, resolved per source for Extract steps.
 //         Multiple outputs (merge's provenance) stack as newlines.
 
 import { CDP as NS, formatFamily, LIFTED_FORMAT, localName, parseTtl, PATHS, sourceName } from "@directory-builder/core/utils"
@@ -28,7 +28,7 @@ const basename = (path) => path.replace(/^.*\//, "")
 
 // Output file(s) per step type, by the PATHS conventions (name = source name).
 const STEP_OUTPUTS = {
-    Clean:   (name) => [PATHS.cleaned(name)],
+    Extract:   (name) => [PATHS.extracted(name)],
     Map:     () => [PATHS.mapped],
     Match:   () => [PATHS.matches],
     Merge:   () => [PATHS.merged, PATHS.provenance],
