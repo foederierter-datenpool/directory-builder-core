@@ -1,8 +1,8 @@
 # Skolemise each entry from its JSON `uid` into a stable cdp:civichub-<id> IRI.
 # This source has a different shape from cityopen: German keys and a nested
-# `anschrift` (address) object. Clean copies the top-level scalars and carries
+# `anschrift` (address) object. Extract copies the top-level scalars and carries
 # the address node through unflattened (as xyz:anschrift) — the map reads its
-# parts via :hasSubField. Clean stays in xyz:/cdp:; schema: enters at the map.
+# parts via :hasSubField. Extract stays in xyz:/cdp:; schema: enters at the map.
 
 PREFIX xyz: <http://sparql.xyz/facade-x/data/>
 PREFIX cdp: <https://civic-data.de/pipeline#>

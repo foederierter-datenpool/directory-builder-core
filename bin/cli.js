@@ -5,7 +5,7 @@
 //   directory-builder                          run the full pipeline (ingest + federate)
 //   directory-builder init                      scaffold config/ + sources/ from the bundled example
 //   directory-builder ingest                   fetch + lift only
-//   directory-builder federate                 clean → map → match → merge → resolve only
+//   directory-builder federate                 extract → map → match → merge → resolve only
 //   directory-builder validate                 check the instance's config ↔ sources/ integrity
 //   directory-builder webapp                   dev server for the instance's webapp
 //   directory-builder webapp build [--base /x/]  build the webapp → <instance>/webapp/dist/

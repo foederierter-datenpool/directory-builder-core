@@ -16,9 +16,9 @@ function parseFederation(ttl) {
     const push = (m, k, v) => { if (!m.has(k)) m.set(k, []); m.get(k).push(v) }
     const f = {
         labelOf: new Map(), schemaOrder: [], entitiesOfSource: new Map(),
-        fieldToEntity: new Map(), subToParent: new Map(),
+        fieldToEntity: new Map(), subToParent: new Map(), targetPredicate: new Map(),
         fromSource: new Map(), toTarget: new Map(), fieldMappings: new Map(),
-        relationships: new Map(), bFrom: new Map(), bPredicate: new Map(), bToSchema: new Map(),
+        relationships: new Map(), bFrom: new Map(), bPredicate: new Map(), bToField: new Map(), bToSchema: new Map(),
     }
     for (const q of quads) {
         const p = q.predicate.value, s = q.subject.value, o = q.object.value
@@ -27,12 +27,14 @@ function parseFederation(ttl) {
         else if (p === P("hasEntity"))       push(f.entitiesOfSource, s, o)
         else if (p === P("hasField"))        f.fieldToEntity.set(o, s)
         else if (p === P("hasSubField"))     f.subToParent.set(o, s)
+        else if (p === P("targetPredicate")) f.targetPredicate.set(s, o)
         else if (p === P("fromSource"))      f.fromSource.set(s, o)
         else if (p === P("toTarget"))        f.toTarget.set(s, o)
         else if (p === P("hasFieldMapping")) push(f.fieldMappings, s, o)
         else if (p === P("hasRelationship")) push(f.relationships, s, o)
         else if (p === P("from"))            f.bFrom.set(s, o)
         else if (p === P("sourcePredicate")) f.bPredicate.set(s, o)
+        else if (p === P("toTargetField"))   f.bToField.set(s, o)
         else if (p === P("toTargetSchema"))  f.bToSchema.set(s, o)
     }
     f.sources = [...subjectsOfType(quads, P("Source"))]
@@ -81,7 +83,10 @@ export function loadEntities(ttl, { hiddenSources } = {}) {
 }
 
 // The output relationships (:hasRelationship), collapsed to schema↔schema: the
-// subject is the mapping's :toTarget, the object its :toTargetSchema. Deduped
+// subject is the mapping's :toTarget, the object its :toTargetSchema. Each edge is
+// labelled by the OUTPUT predicate (:toTargetField's :targetPredicate, e.g.
+// schema:address) — the data model's own vocabulary — not the source-side
+// :sourcePredicate that feeds it, which belongs to the extract mechanics. Deduped
 // across the selected sources, so it reads as the output data model rather than
 // per-source. Schemas are layered by longest path so links flow left→right, with
 // an odd/even vertical stagger (nodeY) that keeps skip-edges clear of the nodes
@@ -100,7 +105,8 @@ export function loadEntityLinks(ttl, { hiddenSources } = {}) {
         for (const rel of f.relationships.get(mapping) ?? []) {
             const to = f.bToSchema.get(rel)
             if (!to) continue
-            const relType = localName(f.bPredicate.get(rel) ?? "")
+            // Label by the output predicate; fall back to the source predicate.
+            const relType = localName(f.targetPredicate.get(f.bToField.get(rel)) ?? f.bPredicate.get(rel) ?? "")
             const k = `${from}|${to}|${relType}`
             if (seen.has(k)) continue
             seen.add(k)

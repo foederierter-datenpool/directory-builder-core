@@ -5,7 +5,7 @@ A minimal, self-contained example use case that exercises the whole pipeline wit
 with **deliberately different schemas** that partly overlap, so the field
 mappings, then Match/Merge/Resolve, all have visible work to do, plus a
 **multi-entity source** (`readcity`) whose rows each denormalise a reading
-programme *and* its host library, split by its clean step into two source
+programme *and* its host library, split by its extract step into two source
 entities mapped to two target schemas.
 
 It doubles as the engine's smoke test and as the dataset a scaffolded use case can start from.
@@ -19,14 +19,14 @@ example/
                           # field mappings, match/merge/resolve rules
     match-knowledge.ttl   # curated owl:sameAs pairs (empty here)
   sources/
-    cityopen/  { clean.sparql, static/libraries.json }
-    civichub/  { clean.sparql, static/libraries.json }
-    readcity/  { clean.sparql, static/programs.json }
+    cityopen/  { extract.sparql, static/libraries.json }
+    civichub/  { extract.sparql, static/libraries.json }
+    readcity/  { extract.sparql, static/programs.json }
 ```
 
 That's everything a use case is: config + one folder per source. Each source
-folder is self-contained — how to fetch it, how to clean it, and (for static
-sources) the data itself.
+folder is self-contained — how to fetch it, how to extract from it, and (for
+static sources) the data itself.
 
 ## Run it
 
@@ -55,13 +55,13 @@ Outputs land in `data/` (git-ignored, regenerable):
 data/ingest/raw/<source>/        raw JSON copied in by fetch.js
 data/ingest/lifted/<source>/     RDF after the generic JSON lift
 data/ingest/ingest-log.ttl       journaled fetch/lift steps + harvest times
-data/pipeline/cleaned/<source>.ttl
+data/pipeline/extracted/<source>.ttl
 data/pipeline/mapped.ttl         schema: vocabulary, both sources
 data/pipeline/matches.ttl        cross-source match evidence
 data/pipeline/merged.ttl         clustered, minted cluster IRIs
 data/pipeline/provenance.ttl     which source said what
 data/pipeline/final.ttl          one resolved record per organisation
-data/pipeline/federate-log.ttl   journaled clean→…→resolve steps
+data/pipeline/federate-log.ttl   journaled extract→…→resolve steps
 ```
 
 The two `*-log.ttl` files are the engines' p-plan step journals — written as a

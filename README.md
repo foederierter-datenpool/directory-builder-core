@@ -1,8 +1,9 @@
 # directory-builder-core
 
 Use-case-agnostic engine for config-driven federation pipelines: fetch
-heterogeneous sources, lift them to RDF, clean, map them onto a unified target
-schema, then match, merge and resolve them into one federated directory.
+heterogeneous sources, lift them to RDF, extract typed entities, map them onto a
+unified target schema, then match, merge and resolve them into one federated
+directory.
 
 An **instance** is a repo holding only declarative config and per-source
 artefacts — no engine code:
@@ -14,7 +15,7 @@ config/
   match-knowledge.ttl   # optional: curated owl:sameAs pairs
 sources/<name>/
   fetch.js              # how to fetch this source
-  clean.sparql          # how to clean its lifted RDF
+  extract.sparql        # how to extract entities from its lifted RDF
   static/               # the data itself, for static-file sources
 registry/
   identity.ttl          # engine-maintained: minted entity IRIs and their
@@ -58,7 +59,7 @@ a worked example and [`src/validate/federation.shacl.ttl`](src/validate/federati
 for the full contract it must satisfy. Then, per source:
 
 - create `sources/<name>/fetch.js` (optional — static sources default to copying `static/`)
-- create `sources/<name>/clean.sparql` (optional when a field maps to `schema:identifier`)
+- create `sources/<name>/extract.sparql` (optional when a field maps to `schema:identifier`)
 - for static-file sources, put the data in `sources/<name>/static/`
 
 Optionally add curated `owl:sameAs` / `owl:differentFrom` pairs in
@@ -75,7 +76,7 @@ Via command (root = where you invoke):
 ```sh
 npx directory-builder            # full pipeline: ingest + federate
 npx directory-builder ingest     # fetch + lift only
-npx directory-builder federate   # clean → map → match → merge → resolve only
+npx directory-builder federate   # extract → map → match → merge → resolve only
 ```
 
 Or programmatically:
@@ -95,11 +96,11 @@ Each source's `fetch.js` is invoked as `node fetch.js <outDir> <fetchUrl-or-stat
 <runParamsJson>` — the JSON holds all `:hasRunParam` values grouped by name;
 each fetcher picks the parameters it needs. For static-file sources `fetch.js`
 is optional: without one, the default fetch copies `sources/<name>/static/`
-verbatim. `clean.sparql` is likewise optional when the source flags one of its
-fields `:iriSource true`: the engine derives a default clean from that field —
+verbatim. `extract.sparql` is likewise optional when the source flags one of its
+fields `:iriSource true`: the engine derives a default extract from that field —
 skolemise on it (URI-escaped, so any value mints a valid IRI), copy the scalar
 fields — and puts the resolved query on record under
-`data/pipeline/default-clean-queries/`. `:iriSource` names the mint key
+`data/pipeline/default-extract-queries/`. `:iriSource` names the mint key
 directly, independent of whether that field is also mapped to
 `schema:identifier` in the output.
 

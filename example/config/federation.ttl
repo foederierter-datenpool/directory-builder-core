@@ -10,7 +10,7 @@
 # entities (a reading programme + its host library) — the multi-entity case.
 # Config declares decisions only — sources and their facts, target schemas,
 # mappings, match/resolve rules. The engines own the step shape (fetch → lift,
-# clean → map → match → merge → resolve) and resolve all file paths by
+# extract → map → match → merge → resolve) and resolve all file paths by
 # convention from the source names.
 
 :federation a :Federation ;
@@ -92,7 +92,7 @@
 :ch-ort     a :SubField ; :fieldPath "ort"     .
 
 # A third shape again: each row denormalises TWO entities — a reading programme
-# and the library hosting it. The clean step splits the row (program_* /
+# and the library hosting it. The extract step splits the row (program_* /
 # library_* prefixes); :hasEntity declares that split so views can show it.
 :readcitySource a :Source ;
     rdfs:label    "ReadCity Programmes" ;

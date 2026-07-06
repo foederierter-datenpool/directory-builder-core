@@ -3,7 +3,7 @@
 # minted from program_id, library_* onto a library entity minted from its plz
 # (this toy source's stand-in id: one library per postal code, so repeated
 # libraries across rows collapse onto one IRI). cdp:targetSchema routes each
-# entity to its tier at the map step. Clean stays in xyz:/cdp: vocabulary.
+# entity to its tier at the map step. Extract stays in xyz:/cdp: vocabulary.
 
 PREFIX xyz: <http://sparql.xyz/facade-x/data/>
 PREFIX cdp: <https://civic-data.de/pipeline#>

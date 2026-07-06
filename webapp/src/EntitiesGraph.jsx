@@ -34,10 +34,10 @@ const SCHEMA_FILL = "#f4cfe0"
 // Wider than the default so edge labels between columns have room to spread.
 const COL_SPACING = 380
 
-// Each :hasRelationship predicate gets its own link colour (and a light label
-// tint to match) so the different link kinds read apart at a glance.
-const REL_COLORS = { locatedAt: "#0d9488", providedBy: "#d97706", hasParent: "#4f46e5" }
-const REL_BG     = { locatedAt: "#d7f0ed", providedBy: "#fdebd3", hasParent: "#e2e0fb" }
+// Each relationship's output predicate gets its own link colour (and a light
+// label tint to match) so the different link kinds read apart at a glance.
+const REL_COLORS = { address: "#0d9488", provider: "#d97706", parentOrganization: "#4f46e5" }
+const REL_BG     = { address: "#d7f0ed", provider: "#fdebd3", parentOrganization: "#e2e0fb" }
 const REL_FALLBACK = "#9333ea"
 const relColor = (t) => REL_COLORS[t] ?? REL_FALLBACK
 const relBg = (t) => REL_BG[t] ?? "#efe6fb"
