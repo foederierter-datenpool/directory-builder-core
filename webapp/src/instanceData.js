@@ -17,6 +17,7 @@ export const federationTtl = await fetchText(PATHS.federation)
 
 const fedQuads = parseTtl(federationTtl)
 const cleanedPaths = enabledSources(fedQuads).map((iri) => PATHS.cleaned(sourceName(iri)))
+const preparationPaths = enabledSources(fedQuads).map((iri) => PATHS.preparation(sourceName(iri)))
 // The instance's repo URL (:federation :repository …) — undefined when not
 // declared; pages hide their GitHub links then.
 export const repositoryUrl = objectsOf(fedQuads, `${CDP}repository`)[0]
@@ -30,10 +31,12 @@ export const federationLabel = fedQuads.find((q) =>
 
 const FIXED = [PATHS.matchKnowledge, PATHS.ingestLog, PATHS.federateLog, PATHS.mapped,
                PATHS.matches, PATHS.merged, PATHS.provenance, PATHS.final, PATHS.about, PATHS.query]
-const [fixedTexts, cleanedTexts] = await Promise.all([
+const [fixedTexts, cleanedTexts, preparationTexts] = await Promise.all([
     Promise.all(FIXED.map(fetchText)),
     Promise.all(cleanedPaths.map(fetchText)),
+    Promise.all(preparationPaths.map(fetchText)),
 ])
 
 export const [matchKnowledgeTtl, ingestLogTtl, federateLogTtl, mappedTtl, matchesTtl, mergedTtl, provenanceTtl, finalTtl, aboutMd, querySparql] = fixedTexts
 export const cleanedByPath = Object.fromEntries(cleanedPaths.map((p, i) => [p, cleanedTexts[i]]))
+export const preparationByPath = Object.fromEntries(preparationPaths.map((p, i) => [p, preparationTexts[i]]))

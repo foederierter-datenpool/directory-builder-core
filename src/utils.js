@@ -68,6 +68,7 @@ export const PATHS = {
     raw:         (name) => `data/ingest/raw/${name}/`,
     lifted:      (name) => `data/ingest/lifted/${name}/`,
     cleaned:     (name) => `data/pipeline/cleaned/${name}.ttl`,
+    preparation: (name) => `data/pipeline/preparation/${name}.ttl`,
     ingestLog:   "data/ingest/ingest-log.ttl",
     federateLog: "data/pipeline/federate-log.ttl",
     mappingQueries: "data/pipeline/direct-mapping-queries/",

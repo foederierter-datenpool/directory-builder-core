@@ -4,6 +4,7 @@ import { cleanedOutputHasMappedFields } from "../validate.js"
 import { COMMON_PREFIXES, writeTurtleFile } from "./write-turtle.js"
 import { MAPPED_GRAPH, runMap } from "./steps/map.js"
 import { runClean } from "./steps/clean.js"
+import { runPreparation } from "./steps/preparation.js"
 import { runMatch } from "./steps/match.js"
 import { runMerge } from "./steps/merge.js"
 import { runResolve } from "./steps/resolve.js"
@@ -46,6 +47,10 @@ export async function federate(root = process.cwd()) {
     // mapping reads must have survived clean, or it would map to nothing.
     const drift = cleanedOutputHasMappedFields(ctx)
     if (drift.length) throw new Error(`cleaned output drifted from config at ${root}:\n  ${drift.join("\n  ")}`)
+
+    // Project clean's value-hygiene effects (matchString + derived before→after)
+    // into a per-source artifact for the webapp's Prepare view.
+    await runPreparation(ctx, sources)
 
     // Load each source's cleaned TTL into its own graph — plain mechanics, not a
     // pipeline step.

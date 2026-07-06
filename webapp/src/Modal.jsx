@@ -1,9 +1,14 @@
 // Reusable modal shell: dim backdrop (click to close) + a white box with a titled
 // header and an × button. Used by the Match cluster popup and the Merge stats popup.
 
-import React from "react"
+import React, { useEffect } from "react"
 
 export default function Modal({ title, onClose, children }) {
+    useEffect(() => {
+        const onKey = (e) => { if (e.key === "Escape") onClose() }
+        window.addEventListener("keydown", onKey)
+        return () => window.removeEventListener("keydown", onKey)
+    }, [onClose])
     return (
         <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", zIndex: 9999, display: "flex", justifyContent: "center", alignItems: "flex-start", paddingTop: 60, overflowY: "auto" }}>
             <div onClick={(e) => e.stopPropagation()} style={{ background: "white", borderRadius: 6, padding: 20, minWidth: 480, maxWidth: 800, boxShadow: "0 8px 24px rgba(0,0,0,0.3)" }}>
