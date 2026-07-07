@@ -1,5 +1,5 @@
 // Map view: the source-schema → target-schema mapping graph, optionally animated
-// with one entity's field values flowing through the transform nodes.
+// with one entity's field values flowing along the edges.
 // Reads:  config/federation.ttl, data/pipeline/mapped.ttl,
 //         data/pipeline/extracted/*.ttl (via loadMap.js + sourceMeta.js)
 // Does:   renders the Map page (horizontal <ColumnGraph>)
@@ -42,6 +42,9 @@ const VALUE_LABEL_BG = {
 const BTN = { padding: "0.25rem 0.6rem", border: "1px solid #aaa", borderRadius: 4, background: "white", cursor: "pointer", fontSize: 13 }
 
 const SOURCES = loadSources(ttl)
+// Whether any mapping routes through a :via transform — decides if the help
+// text mentions the yellow nodes at all.
+const HAS_TRANSFORMS = loadMap(ttl, {}).nodes.some((n) => n.type === "TransformNode")
 const ENTITIES_BY_SOURCE = loadEntitiesBySource(ttl, mappedTtl)
 // Source-to-file mapping is resolved from config: instanceData enumerates the
 // extracted TTLs from :hasSource, so a new source needs no edit here.
@@ -161,10 +164,13 @@ export default function MapGraph() {
         const hiddenSources = new Set(SOURCES.filter(s => !visible.has(s.iri)).map(s => s.iri))
         return loadMap(ttl, { hiddenSources, hideUnmappedFields: !showUnmapped, hideUnmappedTargetFields: !showAllTargets })
     }, [visible, showUnmapped, showAllTargets])
+    // A column no visible node uses (e.g. TransformNode in a federation without
+    // :via transforms) doesn't reserve horizontal space.
+    const columns = useMemo(() => COLUMNS.filter((c) => nodes.some((n) => n.type === c)), [nodes])
 
     // The export mirrors the rendered view: same loadMap output, same layout.
     const miroSnippet = useMemo(() => {
-        const { flowNodes, flowEdges } = toFlow({ nodes, edges: rawEdges, columns: COLUMNS, colors: COLORS, anchorColumns: ANCHOR_COLUMNS, ...layout })
+        const { flowNodes, flowEdges } = toFlow({ nodes, edges: rawEdges, columns, colors: COLORS, anchorColumns: ANCHOR_COLUMNS, ...layout })
         return buildMiroSnippet(flowNodes, flowEdges, direction)
     }, [nodes, rawEdges, direction])
 
@@ -237,39 +243,33 @@ export default function MapGraph() {
                     <div>
                         <strong>Map relabels; extract does everything else.</strong> Each source
                         works in its own vocabulary; extract cleans, splits and shapes its data, and
-                        map's one job is to translate those fields onto the shared schema vocabulary,
-                        carrying every value across unchanged. So this view is that dictionary: on the
-                        left a source's own <strong>fields</strong> (green), on the right the shared
-                        {" "}<strong>target fields</strong> (blue, schema.org predicates) grouped by
-                        target schema. A dashed box groups source fields that arrive nested under one
-                        object (an address carrying street, PLZ and city together).
+                        map's one job is to translate the resulting fields onto the shared schema
+                        vocabulary, carrying every value across unchanged. So this view is that
+                        dictionary: on the left a source's own <strong>fields</strong>, on the right
+                        the shared <strong>target fields</strong> (orange, schema.org predicates)
+                        grouped by target schema. A dashed box groups the fields of one entity (an
+                        address carrying street, PLZ and city together).
                     </div>
                     <div>
-                        The arrows come in three kinds:
-                        <ul style={{ margin: "4px 0 0", paddingLeft: "1.2rem" }}>
-                            <li>a plain arrow: the field is simply <em>renamed</em> to its target predicate, and the value passes through unchanged.</li>
-                            <li>through a yellow <em>transform</em> node: the value is computed there. Turn on <strong>Show data flow</strong> to watch one entity's values move through.</li>
-                            <li>a teal <em>derived field</em>: a field extract produced on a different entity from its origin, then mapped on.</li>
-                        </ul>
+                        Source fields come in two colors: a <strong>green</strong> field was
+                        {" "}<em>found</em> in the source; a <strong>teal</strong> field was
+                        {" "}<em>made</em> by extract, with teal arrows pointing from the fields it
+                        was made from. Extract makes a field for two reasons: to <em>split</em> one
+                        packed field into several (a Teaser into street, PLZ and city), or to
+                        {" "}<em>relocate</em> a value onto another entity (an office's address
+                        parts onto the shared, deduplicated Adresse). Every plain arrow is a pure
+                        {" "}<em>rename</em>: same value, new name.
+                        {HAS_TRANSFORMS && <> A yellow <em>transform</em> node is the exception:
+                        it rewrites values on their way through map.</>}
                     </div>
                     <div>
-                        A field is <em>derived</em> (teal) when it lands on a
-                        {" "}<strong>different entity</strong> than the one it came from, not because
-                        its value changed. That happens two ways: one field <em>split</em> into
-                        several (a Teaser into street, PLZ and city), or existing fields
-                        {" "}<em>relocated</em> onto a separate, deduplicated entity (an office's
-                        address parts collected onto the shared Adresse), where the values pass
-                        through unchanged. Either way the extract step mints it, which a
-                        {" "}<em>transform</em> (a value rewrite that stays on the
-                        {" "}<strong>same</strong> entity, like a phone tidied to digits) structurally
-                        can't do. Rule of thumb: field stays on the record, a transform can do it;
-                        field lands on a new entity, it must be derived.
-                    </div>
-                    <div>
-                        Value-level cleaning (whitespace collapsed, “Str.” → “Straße”, house
-                        numbers tidied) happens earlier, in the <strong>extract</strong> step. The
-                        {" "}<strong>Cleanup</strong> view (on the Entities page) shows exactly what
-                        it changed.
+                        A value merely <em>cleaned in place</em> (whitespace collapsed,
+                        “Str.” → “Straße”, a phone reduced to digits) makes no new field, so it
+                        stays green and nothing changes shape here: the Map draws fields and where
+                        they go. The <strong>Cleanup</strong> view (on the Entities page) lists
+                        every before → after value change the extract step made. Turn on
+                        {" "}<strong>Show data flow</strong> here to watch one record's values
+                        travel the arrows.
                     </div>
                 </HelpTip>
                 <SourcesDropdown visible={visible} onChange={setVisible} />
@@ -300,7 +300,7 @@ export default function MapGraph() {
                 <MiroExport snippet={miroSnippet} />
             </div>
             <div style={{ flex: 1, minHeight: 0 }}>
-                <ColumnGraph key={graphKey} nodes={nodes} edges={edges} columns={COLUMNS} colors={COLORS} anchorColumns={ANCHOR_COLUMNS} {...layout} />
+                <ColumnGraph key={graphKey} nodes={nodes} edges={edges} columns={columns} colors={COLORS} anchorColumns={ANCHOR_COLUMNS} {...layout} />
             </div>
         </div>
     )

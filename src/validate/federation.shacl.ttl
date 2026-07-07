@@ -156,8 +156,12 @@
 
 # Each field mapping wires one source field (or sub-field, so :from is only
 # checked for being an IRI) to one or more target fields — a single :to normally,
-# or several when a transform splits one raw field across fields (e.g. an address
-# string into street/postcode/locality via :via "address").
+# or several when a :via transform splits one raw field across fields (e.g. an
+# address string into street/postcode/locality via :via "address"). :via is a
+# legacy pathway kept for instances that still declare it: it rewrites values
+# inside the otherwise value-neutral map step, where extract owns that work
+# (clean in place, or split/relocate via :derivedFrom). Evaluate against those
+# before reaching for it in new configs.
 :fieldMappingShape a sh:NodeShape ;
     sh:targetObjectsOf :hasFieldMapping ;
     sh:property [

@@ -123,6 +123,10 @@ export const runMap = async ({ store, defStore, abs }, queriesDir) => {
 
         // :via names a transform of the mapping's source — the script path
         // follows by convention (sources/<source>/transform-<via>.sparql).
+        // Legacy pathway: a transform rewrites values inside the map step, which
+        // is otherwise value-neutral (extract owns all value work, map only
+        // renames). Kept for instances that still declare :via; evaluate against
+        // an extract-side clean or :derivedFrom before using it in new configs.
         const viaRows = await sparqlSelect(`
             PREFIX : <${CDP}>
             SELECT DISTINCT ?via WHERE {

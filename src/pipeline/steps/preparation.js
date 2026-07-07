@@ -5,20 +5,35 @@ import fs from "fs"
 
 const df = DataFactory
 const XYZ = "http://sparql.xyz/facade-x/data/"
+const XHTML_CLASS = "http://www.w3.org/1999/xhtml#class"
+const HTML_INNER_TEXT = "https://html.spec.whatwg.org/#innerText"
 const P = (x) => df.namedNode(`${CDP}${x}`)
 
-// All the xyz:<fieldPath> → literal values a lifted-input directory holds, one
-// entry per node — the raw side of an in-place normalisation.
+// The fieldPath → raw-value maps a lifted-input directory holds — the raw side
+// of an in-place normalisation. Two lift shapes: JSON-shaped lifts carry
+// xyz:<fieldPath> literals, one map per node; HTML-shaped lifts carry field
+// values as element innerText named by the element's class attribute, one map
+// per lifted page (one page is one record).
 const liftedNodes = (dir) => {
     if (!fs.existsSync(dir)) return []
     const byNode = new Map()
-    for (const f of fs.readdirSync(dir).filter((f) => f.endsWith(".ttl")))
-        for (const q of parseTtl(fs.readFileSync(`${dir}/${f}`, "utf8")))
-            if (q.object.termType === "Literal" && q.predicate.value.startsWith(XYZ)) {
+    const htmlRecords = []
+    for (const f of fs.readdirSync(dir).filter((f) => f.endsWith(".ttl"))) {
+        const classOf = new Map(), textOf = new Map()
+        for (const q of parseTtl(fs.readFileSync(`${dir}/${f}`, "utf8"))) {
+            if (q.object.termType !== "Literal") continue
+            if (q.predicate.value.startsWith(XYZ)) {
                 const m = byNode.get(q.subject.value) ?? byNode.set(q.subject.value, new Map()).get(q.subject.value)
                 m.set(q.predicate.value.slice(XYZ.length), q.object.value)
             }
-    return [...byNode.values()]
+            else if (q.predicate.value === XHTML_CLASS)     classOf.set(q.subject.value, q.object.value)
+            else if (q.predicate.value === HTML_INNER_TEXT) textOf.set(q.subject.value, q.object.value)
+        }
+        const rec = new Map()
+        for (const [el, cls] of classOf) if (textOf.has(el)) rec.set(cls, textOf.get(el))
+        if (rec.size) htmlRecords.push(rec)
+    }
+    return [...byNode.values(), ...htmlRecords]
 }
 
 // Preparation artifact: the value surface of the extract step, per source — the
