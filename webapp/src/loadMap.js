@@ -453,7 +453,10 @@ export function loadMap(ttl, { hideUnmappedFields = true, hideUnmappedTargetFiel
         id: iri,
         label: labelFor(iri),
         type: typeFor(iri),
-        ...(copyInfo.has(iri) && { subtitle: schemaLabel(copyInfo.get(iri).schema) }),
+        // Target-field copies box per schema, mirroring the source-side entity
+        // rectangles; the box label carries the schema so the nodes don't need a
+        // subtitle.
+        ...(copyInfo.has(iri) && { group: copyInfo.get(iri).schema, groupLabel: schemaLabel(copyInfo.get(iri).schema) }),
         ...(groupOf.has(iri) && { group: groupOf.get(iri), groupLabel: groupLabelOf.get(groupOf.get(iri)) }),
         ...(((isField(iri) && !mappedSources.has(iri)) || (isTargetField(iri) && !mappedTargets.has(iri))) && { dashed: true }),
     }))
