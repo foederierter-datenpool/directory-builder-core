@@ -211,3 +211,27 @@ test("federate rejects when a mapped field never reaches the extracted output", 
     assert.deepEqual(await validate(root), [])
     await assert.rejects(new Pipeline({ root }).run(), /drifted from config[\s\S]*:alpha-ghost[\s\S]*"ghost"/)
 })
+
+// ---- Test 4: curated value corrections --------------------------------------
+// beta misspells b1 as "Entry Ohne" — a typo that sorts before "Entry One", so
+// alphabeticFirst would pick it. match-knowledge.ttl forces the merge
+// (owl:sameAs; the typo also breaks the fuzzy match) and pins the correction to
+// the source record carrying the typo (:beta-b1, translated to its minted
+// cluster at resolve): the wrong literal is rewritten, the conflict collapses,
+// and final.ttl comes out byte-identical to the clean fixture's.
+
+test("a curated :ValueCorrection rewrites a known-wrong literal at resolve", async () => {
+    const matchKnowledge = `
+@prefix :       <https://civic-data.de/pipeline#> .
+@prefix owl:    <http://www.w3.org/2002/07/owl#> .
+@prefix schema: <http://schema.org/> .
+
+:alpha-a1 owl:sameAs :beta-b1 .
+[] a :ValueCorrection ; :entity :beta-b1 ;
+    :on schema:name ; :wrong "Entry Ohne" ; :right "Entry One" .
+`
+    const root = makeInstance("correction", { federation, matchKnowledge,
+        sources: { alpha, beta: [{ id: "b1", label: "Entry Ohne" }, beta[1]] } })
+    await new Pipeline({ root }).run()
+    assert.equal(fs.readFileSync(path.join(root, PATHS.final), "utf8"), expectedFinal)
+})

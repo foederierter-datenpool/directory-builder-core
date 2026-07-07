@@ -7,13 +7,15 @@ import fs from "fs"
 const TOOLS_CACHE = path.join(import.meta.dirname, "../../example/tools")
 
 // Materialize an in-test instance definition (federation.ttl string + records
-// per source) into test/tmp/<name>/ — a real instance folder the engines run
-// against, wiped at setup and left in place afterwards for inspection.
-export const makeInstance = (name, { federation, sources }) => {
+// per source, optionally a match-knowledge.ttl string) into test/tmp/<name>/ —
+// a real instance folder the engines run against, wiped at setup and left in
+// place afterwards for inspection.
+export const makeInstance = (name, { federation, sources, matchKnowledge }) => {
     const root = path.join(import.meta.dirname, "../tmp", name)
     fs.rmSync(root, { recursive: true, force: true })
     fs.mkdirSync(path.join(root, "config"), { recursive: true })
     fs.writeFileSync(path.join(root, PATHS.federation), federation)
+    if (matchKnowledge) fs.writeFileSync(path.join(root, PATHS.matchKnowledge), matchKnowledge)
     for (const [source, records] of Object.entries(sources)) {
         fs.mkdirSync(path.join(root, PATHS.staticDir(source)), { recursive: true })
         fs.writeFileSync(path.join(root, PATHS.staticDir(source), "data.json"), JSON.stringify(records, null, 4))

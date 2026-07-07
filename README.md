@@ -12,7 +12,7 @@ artefacts — no engine code:
 config/
   federation.ttl        # the decisions: sources + facts, target schemas,
                         # field mappings, match/merge/resolve rules
-  match-knowledge.ttl   # optional: curated owl:sameAs pairs
+  match-knowledge.ttl   # optional: curated owl:sameAs pairs, value corrections
 sources/<name>/
   fetch.js              # how to fetch this source
   extract.sparql        # how to extract entities from its lifted RDF
@@ -62,7 +62,8 @@ for the full contract it must satisfy. Then, per source:
 - create `sources/<name>/extract.sparql` (optional when a field maps to `schema:identifier`)
 - for static-file sources, put the data in `sources/<name>/static/`
 
-Optionally add curated `owl:sameAs` / `owl:differentFrom` pairs in
+Optionally add curated `owl:sameAs` / `owl:differentFrom` pairs and
+`:ValueCorrection` entries (known-wrong literals, rewritten at resolve) in
 `config/match-knowledge.ttl`.
 
 Check the setup before running: `npx directory-builder validate`.

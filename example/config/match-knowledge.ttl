@@ -7,5 +7,13 @@
 #   :cityopen-co-3 owl:sameAs       :civichub-ch-102 .   # force into one cluster
 #   :cityopen-co-3 owl:differentFrom :civichub-ch-104 .  # veto a merge, never cluster
 #
+#   [] a :ValueCorrection ;                               # pin a known-wrong literal
+#       :entity :cityopen-co-3 ;                          # (a source typo) to the record
+#       :on    schema:name ;                              # carrying it; omit :entity to
+#       :wrong "Comunity Garden" ;                        # rewrite corpus-wide
+#       :right "Community Garden" .
+#
 # owl:sameAs forces two records together regardless of score; owl:differentFrom
-# pins two apart even when they clear the match rule.
+# pins two apart even when they clear the match rule. A :ValueCorrection is
+# applied at resolve, so merged.ttl keeps showing the source conflict and only
+# final.ttl carries the fix.

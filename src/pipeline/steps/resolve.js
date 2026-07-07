@@ -1,5 +1,6 @@
 import { sparqlSelect } from "@foerderfunke/sem-ops-utils"
 import { COMMON_PREFIXES, writeTurtleFile } from "../write-turtle.js"
+import { HAS_MEMBER, MATCH_GRAPH } from "./match.js"
 import { MERGED_GRAPH } from "./merge.js"
 import { CDP } from "../../utils.js"
 import { DataFactory } from "n3"
@@ -49,13 +50,38 @@ export const runResolve = async ({ store, defStore, abs }, outPath) => {
         }`, [defStore])
     const overrides = new Map(overrideRows.map(r => [r.on, lookupStrategy(r.strategy)]))
 
+    // Curated corrections (match-knowledge.ttl): a :wrong literal is a known
+    // source error (e.g. a typo) beyond algorithmic reach. Every occurrence
+    // under the :on predicate — scoped by :entity when present, corpus-wide
+    // when absent — is rewritten to :right before the strategies pick, so when
+    // another source carries the right value the conflict collapses instead of
+    // the wrong spelling winning a sort. Applied here, not at merge —
+    // merged.ttl stays faithful to what the sources say.
+    const corrections = await sparqlSelect(`
+        PREFIX : <${CDP}>
+        SELECT ?entity ?on ?wrong ?right WHERE {
+            ?c a :ValueCorrection ; :on ?on ; :wrong ?wrong ; :right ?right .
+            OPTIONAL { ?c :entity ?entity }
+        }`, [defStore])
+    // :entity names the source record carrying the wrong value (the idiom —
+    // its IRI lives and dies with the source saying it) or a minted entity;
+    // a member IRI is translated to its cluster via the match graph.
+    const mintedOf = new Map(store.getQuads(null, HAS_MEMBER, null, MATCH_GRAPH)
+        .map(q => [q.object.value, q.subject.value]))
+    for (const c of corrections) if (c.entity) c.entity = mintedOf.get(c.entity) ?? c.entity
+    let corrected = 0
+
     const groups = new Map()
-    for (const q of store.getQuads(null, null, null, MERGED_GRAPH)) {
+    for (let q of store.getQuads(null, null, null, MERGED_GRAPH)) {
         if (RESOLVE_EXCLUDE.has(q.predicate.value)) continue
+        const c = corrections.find(c => c.on === q.predicate.value && c.wrong === q.object.value
+            && (c.entity == null || c.entity === q.subject.value))
+        if (c) { q = df.quad(q.subject, q.predicate, df.literal(c.right)); corrected++ }
         const k = `${q.subject.value}\t${q.predicate.value}`
         if (!groups.has(k)) groups.set(k, [])
         groups.get(k).push(q)
     }
+    if (corrected) console.log(`resolve: rewrote ${corrected} literal(s) via curated corrections`)
     const finalQuads = [...groups.values()].flatMap(quads => {
         const picked = (overrides.get(quads[0].predicate.value) ?? defaultPick)(quads)
         return Array.isArray(picked) ? picked : [picked]
