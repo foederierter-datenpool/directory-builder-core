@@ -7,6 +7,7 @@
 import { federationTtl, ingestLogTtl as logTtl } from "./instanceData.js"
 import Card, { KeyValueTable } from "./Card.jsx"
 import { loadHarvestBySource, loadSourceMeta } from "./sourceMeta.js"
+import { resolutionOf } from "./resolvePlan.js"
 import { CDP, parseTtl } from "@directory-builder/core/utils"
 import React, { useState } from "react"
 
@@ -58,7 +59,7 @@ function SourceTags({ sources }) {
     )
 }
 
-function ValueCell({ values, highlight }) {
+function ValueCell({ values, highlight, resolution }) {
     const [idx, setIdx] = useState(0)
     // idx persists across re-renders, so clamp when `values` shrinks (e.g.
     // rendering final.ttl where every (s,p) has exactly one value).
@@ -75,14 +76,40 @@ function ValueCell({ values, highlight }) {
                     <button className="flip-btn" onClick={() => setIdx((safeIdx + 1) % values.length)}>▶</button>
                 </span>
             )}
-            <span className="value-text" title={cur.raw ?? cur.value} style={style}>{cur.value}</span>
+            <span className="tip-anchor">
+                <span className="value-text" title={resolution ? undefined : (cur.raw ?? cur.value)} style={style}>{cur.value}</span>
+                {resolution && <ResolveTip resolution={resolution} />}
+            </span>
             <SourceTags sources={cur.sources} />
         </>
     )
 }
 
+// A conflict's resolution as an instant tooltip (hovering the .tip-anchor
+// reveals it without the native title delay), credited to the stage that
+// decided: curated :ValueCorrections (teal, the made-not-found colour) rewrite
+// values first; the strategy line shows only when disagreement remains after
+// them. Shown on conflicted values of the Merge view only (entities with
+// contributing columns).
+function ResolveTip({ resolution }) {
+    return (
+        <span className="resolve-tip">
+            {resolution.corrections.map((c, i) => (
+                <div key={i} style={{ color: "#5eead4" }}>✎ curated: "{c.wrong}" → "{c.right}"</div>
+            ))}
+            {resolution.strategyDecides && <div>→ {resolution.strategy}: {resolution.finals.join(" · ")}</div>}
+        </span>
+    )
+}
+const resolveTip = (entity, f) => {
+    if (!isConflict(f) || !(entity.columns?.length)) return null
+    const r = resolutionOf(entity.iri, f)
+    return r.finals.length ? r : null
+}
+
 function EntityCardNarrow({ entity, highlight }) {
-    return <KeyValueTable rows={entity.fields.map((f) => ({ key: f.predicate, label: f.predLabel, value: <ValueCell values={f.values} highlight={highlight && isConflict(f)} /> }))} />
+    return <KeyValueTable rows={entity.fields.map((f) => ({ key: f.predicate, label: f.predLabel,
+        value: <ValueCell values={f.values} highlight={highlight && isConflict(f)} resolution={resolveTip(entity, f)} /> }))} />
 }
 
 function EntityCardWide({ entity, highlight }) {
@@ -102,12 +129,22 @@ function EntityCardWide({ entity, highlight }) {
             <tbody>
                 {entity.fields.map((f) => {
                     const conflict = highlight && isConflict(f) ? conflictStyle(f.values.length) : undefined
+                    const resolution = resolveTip(entity, f)
                     return (
                         <tr key={f.predicate}>
                             <td>{f.predLabel}</td>
                             {columns.map((c) => {
                                 const v = f.values.find((val) => val.records.includes(c.record))
-                                return <td key={c.record} title={v?.raw ?? v?.value}>{v && <span className="value-text" style={{ maxWidth: "50ch", ...conflict }}>{v.value}</span>}</td>
+                                return (
+                                    <td key={c.record} title={resolution ? undefined : (v?.raw ?? v?.value)}>
+                                        {v && (
+                                            <span className="tip-anchor">
+                                                <span className="value-text" style={{ maxWidth: "50ch", ...conflict }}>{v.value}</span>
+                                                {resolution && <ResolveTip resolution={resolution} />}
+                                            </span>
+                                        )}
+                                    </td>
+                                )
                             })}
                         </tr>
                     )

@@ -125,7 +125,10 @@ export default function MergeTables() {
                     <div>
                         Every resolved entity with its field values laid out
                         {" "}<strong>per contributing source</strong>, so you can see where the
-                        sources agreed and where they conflicted (highlighted).
+                        sources agreed and where they conflicted (highlighted). Hovering a
+                        conflicted value shows what settles it: a curated correction (teal ✎),
+                        the resolve strategy picking the value that reaches the directory, or
+                        both when disagreement remains after the correction.
                         {" "}<em>Group by hierarchy</em> nests an entity under the one it links to.
                     </div>
                     <div>
