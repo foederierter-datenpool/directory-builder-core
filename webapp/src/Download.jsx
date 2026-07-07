@@ -11,6 +11,7 @@ import { sparqlSelect } from "@foerderfunke/sem-ops-utils/sparql"
 import { CDP, groupBySubject, localName, objectsOf, parseTtl, PATHS, shrink, subjectsOfType } from "@directory-builder/core/utils"
 import { displayPrefixes, federationTtl, finalTtl } from "./instanceData.js"
 import { strToU8, zipSync } from "fflate"
+import HelpTip from "./HelpTip.jsx"
 import React, { useState } from "react"
 
 const SCHEMA_IDENTIFIER = "http://schema.org/identifier"
@@ -224,7 +225,21 @@ export default function Download() {
 
     return (
         <div className="page" style={{ fontSize: 14 }}>
-            <h3 style={{ margin: "0 0 0.75rem" }}>Federated directory</h3>
+            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", margin: "0 0 0.75rem" }}>
+                <HelpTip title="Download" label="About downloads">
+                    <div>
+                        Export the directory. Pick the fields to include and a format
+                        (Turtle, JSON-LD, JSON or CSV).
+                    </div>
+                    <div>
+                        Instances can add more: <strong>Map to other schema</strong> runs a provided
+                        exporter to a different vocabulary, and <strong>Target schemas</strong>
+                        {" "}downloads the schema <em>definitions</em> (one file per schema plus an
+                        overview), not the data.
+                    </div>
+                </HelpTip>
+                <h3 style={{ margin: 0 }}>Federated directory</h3>
+            </div>
             <div style={{ marginBottom: "0.5rem" }}>Fields to include:</div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", columnGap: "1rem", rowGap: "0.25rem" }}>
                 {TARGET_FIELDS.map((f) => (

@@ -14,6 +14,7 @@ import { schemaOptions } from "./filters.js"
 import CheckboxDropdown from "./CheckboxDropdown.jsx"
 import Dropdown from "./Dropdown.jsx"
 import EntityCard, { isConflict } from "./EntityCard.jsx"
+import HelpTip from "./HelpTip.jsx"
 import Modal from "./Modal.jsx"
 import React, { useMemo, useState } from "react"
 
@@ -120,6 +121,18 @@ export default function MergeTables() {
         <div className="page" style={{ overflowY: "auto", height: "100%" }}>
             {showStats && <StatsModal onClose={() => setShowStats(false)} />}
             <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "0.75rem", marginBottom: "0.75rem" }}>
+                <HelpTip title="The Merge view" label="About the Merge view">
+                    <div>
+                        Every resolved entity with its field values laid out
+                        {" "}<strong>per contributing source</strong>, so you can see where the
+                        sources agreed and where they conflicted (highlighted).
+                        {" "}<em>Group by hierarchy</em> nests an entity under the one it links to.
+                    </div>
+                    <div>
+                        The bar above counts how many entities were deduplicated and how many carry
+                        conflicts; click it for a per-type breakdown.
+                    </div>
+                </HelpTip>
                 <CheckboxDropdown options={SCHEMA_OPTS} selected={selected} onChange={setSelected} noun="type" />
                 <Dropdown label="View">
                     <label style={menuItem}>

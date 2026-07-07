@@ -16,11 +16,11 @@ import { loadEntities, loadEntityLinks } from "./loadEntities.js"
 import { loadPreparation } from "./loadPreparation.js"
 import { loadSources } from "./loadMap.js"
 import { useSourceParam } from "./useSourceParam.js"
-import React, { useMemo, useState } from "react"
+import React, { useMemo } from "react"
 import { useSearchParams } from "react-router-dom"
 import ColumnGraph from "./ColumnGraph.jsx"
 import CheckboxDropdown from "./CheckboxDropdown.jsx"
-import Modal from "./Modal.jsx"
+import HelpTip from "./HelpTip.jsx"
 
 const SOURCES = loadSources(ttl)
 const SOURCE_OPTS = SOURCES.map((s) => ({ key: s.iri, label: s.label }))
@@ -33,6 +33,11 @@ const FLOW_TITLES = { Source: "Source", Entity: "Entity", TargetSchema: "Target 
 const SCHEMA_FILL = "#f4cfe0"
 // Wider than the default so edge labels between columns have room to spread.
 const COL_SPACING = 380
+// The target-schema column has few nodes, so give it its own generous vertical
+// gap (via columnGap) to spread them out; orderColumns puts it in crossing-
+// minimising order and it renders as a block centred against the taller entity
+// column, which keeps the default compact spacing.
+const FLOW_TARGET_GAP = 160
 
 // Each relationship's output predicate gets its own link colour (and a light
 // label tint to match) so the different link kinds read apart at a glance.
@@ -67,7 +72,7 @@ const VIEW_GUIDE = [
         label: "Target entity relationships",
         body: (
             <>
-                How the resulting entity types relate to one another — each coloured arrow a
+                How the resulting entity types relate to one another: each coloured arrow a
                 declared relationship (labelled with its kind) from one target schema to another.
                 Declared in the config and true across all sources, so it's the shared output data
                 model.
@@ -83,34 +88,24 @@ const VIEW_GUIDE = [
                 Teaser into street, PLZ and city), and a <em>normalised</em> value, where a field
                 is cleaned but not split (whitespace collapsed, phone reduced to digits,
                 “Str.” → “Straße”). Each <em>split</em>/<em>normalised</em> tag links to the
-                <code> extract.sparql</code> that does the work. Plus the <em>match key</em> — the
+                <code> extract.sparql</code> that does the work. Plus the <em>match key</em>: the
                 normalised string the match step compares on, invisible in every other view.
             </>
         ),
     },
 ]
 
-const HELP_ICON = { display: "inline-flex", alignItems: "center", justifyContent: "center", width: 16, height: 16, borderRadius: "50%", border: "1px solid #bbb", background: "white", color: "#777", fontSize: 11, lineHeight: 1, cursor: "pointer", userSelect: "none", fontWeight: 700, padding: 0 }
-
 // The ? next to the mode switch: opens a modal describing all three views at once.
 function ViewsHelp() {
-    const [open, setOpen] = useState(false)
     return (
-        <>
-            <button style={HELP_ICON} onClick={() => setOpen(true)} aria-label="About these views" title="About these views">?</button>
-            {open && (
-                <Modal title="The three entity views" onClose={() => setOpen(false)}>
-                    <div style={{ display: "flex", flexDirection: "column", gap: 14, fontSize: 13, lineHeight: 1.55, color: "#444", maxWidth: 600 }}>
-                        {VIEW_GUIDE.map((v) => (
-                            <div key={v.label}>
-                                <div style={{ fontWeight: 600, marginBottom: 3 }}>{v.label}</div>
-                                <div>{v.body}</div>
-                            </div>
-                        ))}
-                    </div>
-                </Modal>
-            )}
-        </>
+        <HelpTip title="The three entity views" label="About these views">
+            {VIEW_GUIDE.map((v) => (
+                <div key={v.label}>
+                    <div style={{ fontWeight: 600, marginBottom: 3 }}>{v.label}</div>
+                    <div>{v.body}</div>
+                </div>
+            ))}
+        </HelpTip>
     )
 }
 
@@ -304,8 +299,8 @@ export default function EntitiesGraph() {
         <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
             <div style={{ display: "flex", alignItems: "center", gap: "1.25rem", padding: "0.5rem 1rem", fontSize: 13, borderBottom: "1px solid #ddd" }}>
                 <span style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem" }}>
-                    <ModeSwitch mode={mode} onChange={setMode} />
                     <ViewsHelp />
+                    <ModeSwitch mode={mode} onChange={setMode} />
                 </span>
                 <CheckboxDropdown options={SOURCE_OPTS} selected={visible} onChange={setVisible} noun="source" />
             </div>
@@ -313,7 +308,7 @@ export default function EntitiesGraph() {
                 {mode === "prepare"
                     ? <PrepareView data={prep} />
                     : mode === "flow"
-                        ? <ColumnGraph key={graphKey} nodes={flow.nodes} edges={flow.edges} columns={FLOW_COLUMNS} colors={FLOW_COLORS} anchorColumns={["Source"]} colSpacing={COL_SPACING} columnTitles={FLOW_TITLES} />
+                        ? <ColumnGraph key={graphKey} nodes={flow.nodes} edges={flow.edges} columns={FLOW_COLUMNS} colors={FLOW_COLORS} anchorColumns={["Source"]} orderColumns={["TargetSchema"]} colSpacing={COL_SPACING} columnGap={{ TargetSchema: FLOW_TARGET_GAP }} columnTitles={FLOW_TITLES} />
                         : <ColumnGraph key={graphKey} nodes={links.nodes} edges={links.edges} columns={links.columns} colors={links.colors} colSpacing={COL_SPACING} nodeY={links.nodeY} />}
             </div>
         </div>

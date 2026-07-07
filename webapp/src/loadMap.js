@@ -9,6 +9,7 @@ const RDFS_LABEL = "http://www.w3.org/2000/01/rdf-schema#label"
 const SKOS_NOTATION = "http://www.w3.org/2004/02/skos/core#notation"
 const NODE_TYPES = [`${NS}Source`, `${NS}SourceField`, `${NS}TargetField`, `${NS}TargetSchema`]
 const SUB_FIELD = `${NS}SubField`
+const DERIVED_EDGE = "#0d9488"   // teal stroke for :derivedFrom lineage (raw origin → derived field), distinct from plain map relabels
 
 // Group entities by source. Each entity carries a cdp:fromSource triple in mapped.ttl
 // pointing at its Source IRI, so this is a single-pass scan with no prefix
@@ -52,10 +53,13 @@ export function loadFieldValuesByEntity(federationTtl, mappedTtl, liftedBySource
     const subFieldsOf       = new Map()
     const targetPredicateOf = new Map()
     const entitiesOf        = new Map()
+    const derivedFields     = new Set()   // :SourceField iris that carry :derivedFrom
+    const derivedOrigins    = new Set()   // the raw fields those derive from (:derivedFrom objects)
     for (const q of fedQuads) {
         const p = q.predicate.value
         if      (p === `${NS}fieldPath`)        fieldPathOf.set(q.subject.value, q.object.value)
         else if (p === `${NS}targetPredicate`)  targetPredicateOf.set(q.subject.value, q.object.value)
+        else if (p === `${NS}derivedFrom`)      { derivedFields.add(q.subject.value); derivedOrigins.add(q.object.value) }
         else if (p === `${NS}hasField`) {
             if (!fieldsBySource.has(q.subject.value)) fieldsBySource.set(q.subject.value, [])
             fieldsBySource.get(q.subject.value).push(q.object.value)
@@ -74,14 +78,25 @@ export function loadFieldValuesByEntity(federationTtl, mappedTtl, liftedBySource
     }
 
     const FROM_SOURCE = `${NS}fromSource`
+    const mappedQuads      = parseTtl(mappedTtl)
     const entitySource     = new Map() // entityIri -> sourceIri
     const literalsByEntity = new Map() // entityIri -> Map<predicateIri, string>
-    for (const q of parseTtl(mappedTtl)) {
+    for (const q of mappedQuads) {
         if (q.predicate.value === FROM_SOURCE) entitySource.set(q.subject.value, q.object.value)
         if (q.object.termType === "Literal") {
             if (!literalsByEntity.has(q.subject.value)) literalsByEntity.set(q.subject.value, new Map())
             literalsByEntity.get(q.subject.value).set(q.predicate.value, q.object.value)
         }
+    }
+    // Entity → entity links (schema:address, schema:provider, …): the object is
+    // another mapped entity. Used below to fold a linked sub-entity's derived
+    // values into the record that points at it.
+    const linkedEntities = new Map() // entityIri -> [linked entityIri]
+    for (const q of mappedQuads) {
+        if (q.object.termType !== "NamedNode") continue
+        if (!entitySource.has(q.subject.value) || !entitySource.has(q.object.value)) continue
+        if (!linkedEntities.has(q.subject.value)) linkedEntities.set(q.subject.value, [])
+        linkedEntities.get(q.subject.value).push(q.object.value)
     }
 
     const result = new Map()
@@ -108,20 +123,18 @@ export function loadFieldValuesByEntity(federationTtl, mappedTtl, liftedBySource
             for (const fieldIri of fields) {
                 const fp = fieldPathOf.get(fieldIri)
                 if (!fp) continue
-                const vs = subjectPreds.get(fp)
-                if (!vs?.length) continue
-                const v = vs[0]
-                if (v.isLiteral && v.value) valueMap.set(fieldIri, v.value)
-                // Sub-fields hang off the parent field's blank-node value.
-                if (subFieldsOf.has(fieldIri) && !v.isLiteral) {
-                    const childPreds = graph.get(v.value)
-                    if (childPreds) {
-                        for (const subIri of subFieldsOf.get(fieldIri)) {
-                            const subFp = fieldPathOf.get(subIri)
-                            if (!subFp) continue
-                            const subVs = childPreds.get(subFp)
-                            if (subVs?.length && subVs[0].isLiteral && subVs[0].value) valueMap.set(subIri, subVs[0].value)
-                        }
+                const v = subjectPreds.get(fp)?.[0]
+                if (v?.isLiteral && v.value) valueMap.set(fieldIri, v.value)
+                // Sub-fields resolve from the parent field's blank-node value when
+                // present, else flat on the subject — the extract may surface them
+                // flat (e.g. sp office_address → address_line1 on the office).
+                if (subFieldsOf.has(fieldIri)) {
+                    const childPreds = v && !v.isLiteral ? graph.get(v.value) : null
+                    for (const subIri of subFieldsOf.get(fieldIri)) {
+                        const subFp = fieldPathOf.get(subIri)
+                        if (!subFp) continue
+                        const subVs = childPreds?.get(subFp) ?? subjectPreds.get(subFp)
+                        if (subVs?.length && subVs[0].isLiteral && subVs[0].value) valueMap.set(subIri, subVs[0].value)
                     }
                 }
             }
@@ -139,6 +152,25 @@ export function loadFieldValuesByEntity(federationTtl, mappedTtl, liftedBySource
         for (const [tfIri, predIri] of targetPredicateOf) {
             const v = preds.get(predIri)
             if (v) valueMap.set(tfIri, v)
+        }
+    }
+
+    // Fold the whole derivation lineage across a record's links, so the Map
+    // data-flow lights up end to end regardless of which entity is selected: the
+    // DERIVED results (street/PLZ/city, on the linked Adresse) and their raw ORIGINS
+    // (office_address sub-fields, on the linked office reached via schema:provider).
+    // Only lineage fields are pulled — an entity's own non-lineage fields stay put —
+    // and the record's own values win, so nothing it already has is masked.
+    for (const [entityIri, links] of linkedEntities) {
+        let own = result.get(entityIri)
+        for (const linked of links) {
+            const linkedMap = result.get(linked)
+            if (!linkedMap) continue
+            for (const [fieldIri, value] of linkedMap) {
+                if (!derivedFields.has(fieldIri) && !derivedOrigins.has(fieldIri)) continue
+                if (!own) { own = new Map(); result.set(entityIri, own) }
+                if (!own.has(fieldIri)) own.set(fieldIri, value)
+            }
         }
     }
     return result
@@ -215,18 +247,24 @@ export function loadMap(ttl, { hideUnmappedFields = true, hideUnmappedTargetFiel
     // A field owned by a :SourceEntity gets its edge from the entity's source —
     // the entity renders not as a node but as a group rectangle around its
     // fields (sub-fields included), labelled with the entity's rdfs:label.
-    // A :derivedFrom field is NOT raw — the extract step computes it from the named
-    // raw field(s). It's still a declared :SourceField (so it's a real node), but
-    // its inbound edge comes from those raw origins, not the source, and it renders
-    // in its own column (typeFor → DerivedField) without a group box — so a computed
-    // field reads as computed, never as a native part of its origin.
-    const groupOf = new Map()  // field iri -> entity iri (raw fields only)
+    // A :derivedFrom field is NOT raw — the extract step produced it from the named
+    // raw field(s). Its inbound edge comes from those raw origins, not the source,
+    // and it renders in its own column (typeFor → DerivedField). It's boxed with its
+    // OWN entity (a separate `#derived` group, e.g. the Adresse record), not its
+    // origin's box, so it reads as a field of the entity it landed on rather than a
+    // native part of the record it came from.
+    const groupOf = new Map()       // field iri -> group key (drives the box)
+    const groupLabelOf = new Map()  // group key -> box label (the entity's rdfs:label)
+    const boxWith = (field, entity, key) => { groupOf.set(field, key); groupLabelOf.set(key, labelOf.get(entity) ?? localName(entity)) }
     for (const [owner, field] of fieldPairs) {
         const origins = derivedFromOf.get(field)
-        if (origins) { for (const o of origins) push(o, field, "derivedFrom"); continue }
-        const src = sourceOfEntity.get(owner)
-        push(src ?? owner, field, "hasField")
-        if (src) groupOf.set(field, owner)
+        if (origins) {
+            for (const o of origins) push(o, field, "derivedFrom", { stroke: DERIVED_EDGE })
+            if (sourceOfEntity.has(owner)) boxWith(field, owner, `${owner}#derived`)
+        } else {
+            push(sourceOfEntity.get(owner) ?? owner, field, "hasField")
+            if (sourceOfEntity.has(owner)) boxWith(field, owner, owner)
+        }
     }
     for (const [parent, sub] of subPairs) {
         push(parent, sub, "hasSubField")
@@ -416,7 +454,7 @@ export function loadMap(ttl, { hideUnmappedFields = true, hideUnmappedTargetFiel
         label: labelFor(iri),
         type: typeFor(iri),
         ...(copyInfo.has(iri) && { subtitle: schemaLabel(copyInfo.get(iri).schema) }),
-        ...(groupOf.has(iri) && { group: groupOf.get(iri), groupLabel: labelOf.get(groupOf.get(iri)) ?? localName(groupOf.get(iri)) }),
+        ...(groupOf.has(iri) && { group: groupOf.get(iri), groupLabel: groupLabelOf.get(groupOf.get(iri)) }),
         ...(((isField(iri) && !mappedSources.has(iri)) || (isTargetField(iri) && !mappedTargets.has(iri))) && { dashed: true }),
     }))
     return { nodes, edges: visibleEdges }

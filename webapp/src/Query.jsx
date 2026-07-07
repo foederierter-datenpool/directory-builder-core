@@ -6,6 +6,7 @@
 import { storeFromTurtles } from "@foerderfunke/sem-ops-utils/core"
 import { queryEngine } from "@foerderfunke/sem-ops-utils/sparql"
 import { finalTtl, querySparql } from "./instanceData.js"
+import HelpTip from "./HelpTip.jsx"
 import React, { useEffect, useRef } from "react"
 import "@zazuko/yasgui/build/yasgui.min.css"
 import Yasgui from "@zazuko/yasgui"
@@ -149,12 +150,22 @@ export default function Query() {
         return () => { el.innerHTML = ""; y?.destroy?.() }
     }, [])
     return (
-        <>
+        <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
             <style>{`
                 .yasgui .controlbar { display: none; }
                 .yasr .dataTable td > div.rowNumber { margin-right: 8px; }
             `}</style>
-            <div ref={ref} className="page" style={{ height: "100%", overflow: "auto" }} />
-        </>
+            <div style={{ display: "flex", padding: "0.5rem 1rem", borderBottom: "1px solid #ddd" }}>
+                <HelpTip title="Query" label="About the query editor">
+                    <div>
+                        A SPARQL editor running entirely in your browser against the finished
+                        directory, with no server and no endpoint. Write a query, run it, and the
+                        results come straight from the final data. Share links carry the query in
+                        the URL.
+                    </div>
+                </HelpTip>
+            </div>
+            <div ref={ref} className="page" style={{ flex: 1, minHeight: 0, overflow: "auto" }} />
+        </div>
     )
 }

@@ -10,6 +10,8 @@ import "@xyflow/react/dist/style.css"
 const DEFAULT_COL_SPACING = 260
 const DEFAULT_SIBLING_GAP = 80
 const DEFAULT_NODE_WIDTH = 160
+// Screen-space grace-space above the top node when the graph first opens.
+const TOP_MARGIN = 56
 
 function SideNode({ data, style }) {
     const targetPos = data.targetPos ?? Position.Left
@@ -134,7 +136,7 @@ const edgeTypes = { value: ValueEdge }
 // Pure layout: graph data in, positioned React Flow nodes/edges out. Exported
 // so callers (e.g. the Map view's Miro export) can compute the same layout the
 // component renders.
-export function toFlow({ nodes, edges, columns, colors, centerColumns, anchorColumns, direction = "horizontal", colSpacing = DEFAULT_COL_SPACING, siblingGap = DEFAULT_SIBLING_GAP, nodeWidth = DEFAULT_NODE_WIDTH, columnTitles, columnBands, nodeY, columnHeaderStyle }) {
+export function toFlow({ nodes, edges, columns, colors, centerColumns, orderColumns, anchorColumns, direction = "horizontal", colSpacing = DEFAULT_COL_SPACING, siblingGap = DEFAULT_SIBLING_GAP, columnGap, nodeWidth = DEFAULT_NODE_WIDTH, columnTitles, columnBands, nodeY, columnHeaderStyle }) {
     // direction: left-right | right-left | top-down | down-top, with
     // "horizontal"/"vertical" as legacy aliases for left-right/top-down.
     const isVertical = direction === "vertical" || direction === "top-down" || direction === "down-top"
@@ -145,10 +147,22 @@ export function toFlow({ nodes, edges, columns, colors, centerColumns, anchorCol
     const BASE_NODE_H = 36
     const estHeight = (n) => BASE_NODE_H + (String(n.label ?? "").length > (nodeWidth - 12) / 6.2 ? 15 : 0)
     const centered = new Set(centerColumns ?? [])
+    // orderColumns sort their nodes by incoming barycenter (crossing-minimising
+    // order) but still render as an evenly-spaced centred block — unlike centered
+    // columns, which also position each node AT its barycenter.
+    const orderByBary = new Set(orderColumns ?? [])
+    // Per-column sibling gap: a column named in columnGap gets its own vertical
+    // spacing (e.g. a few target nodes spread wide) while the rest stay compact.
+    const gapOf = (col) => columnGap?.[col] ?? siblingGap
     const buckets = Object.fromEntries(columns.map((c) => [c, []]))
     for (const n of nodes) (buckets[n.type] ??= []).push(n)
 
     const maxColSize = Math.max(...columns.map((c) => buckets[c]?.length ?? 0))
+    // Tallest column's rendered height (its node count at its own gap). Plain
+    // columns centre their block against this shared midline, so a column that
+    // opts into a wider columnGap still sits centred, not hanging low.
+    const colHeight = (c) => Math.max(0, (buckets[c]?.length ?? 0) - 1) * gapOf(c)
+    const maxHeight = Math.max(0, ...columns.map(colHeight))
     // Logical layout in (col-axis, sibling-axis) coords; swapped at the end for
     // vertical mode. Reversed directions mirror the column sequence here, so
     // everything downstream (anchoring, group rects, export) inherits it.
@@ -160,10 +174,10 @@ export function toFlow({ nodes, edges, columns, colors, centerColumns, anchorCol
     // top-down at max(target, previous + siblingGap) — keeping the barycenter
     // order while enforcing a minimum gap.
     const mean = (xs) => xs?.length ? xs.reduce((a, b) => a + b, 0) / xs.length : undefined
-    const placeByBarycenter = (items) => {  // [{ id, x, target }]
+    const placeByBarycenter = (items, gap = siblingGap) => {  // [{ id, x, target }]
         let last = -Infinity
         for (const { id, x, target } of [...items].sort((a, b) => a.target - b.target)) {
-            const y = Math.max(target, last + siblingGap)
+            const y = Math.max(target, last + gap)
             positions.set(id, { x, y })
             last = y
         }
@@ -189,13 +203,26 @@ export function toFlow({ nodes, edges, columns, colors, centerColumns, anchorCol
                 if (!incomingYs.has(e.to)) incomingYs.set(e.to, [])
                 incomingYs.get(e.to).push(fromPos.y)
             }
-            placeByBarycenter(colNodes.map((n) => ({ id: n.id, x, target: mean(incomingYs.get(n.id)) ?? 0 })))
+            placeByBarycenter(colNodes.map((n) => ({ id: n.id, x, target: mean(incomingYs.get(n.id)) ?? 0 })), gapOf(col))
         } else {
-            const yOffset = ((maxColSize - colNodes.length) / 2) * siblingGap
-            let y = yOffset
-            for (const n of colNodes) {
+            const gap = gapOf(col)
+            // Crossing-minimising order when opted in: sort by incoming barycenter
+            // (earlier columns are already placed), else keep declaration order.
+            let ordered = colNodes
+            if (colNodes.length > 1 && orderByBary.has(col)) {
+                const inY = new Map()
+                for (const e of edges) {
+                    const fromPos = positions.get(e.from)
+                    if (!fromPos) continue
+                    if (!inY.has(e.to)) inY.set(e.to, [])
+                    inY.get(e.to).push(fromPos.y)
+                }
+                ordered = [...colNodes].sort((a, b) => (mean(inY.get(a.id)) ?? Infinity) - (mean(inY.get(b.id)) ?? Infinity))
+            }
+            let y = maxHeight / 2 - ((ordered.length - 1) * gap) / 2   // block centred on the shared midline
+            for (const n of ordered) {
                 positions.set(n.id, { x, y })
-                y += siblingGap + (isVertical ? 0 : estHeight(n) - BASE_NODE_H)
+                y += gap + (isVertical ? 0 : estHeight(n) - BASE_NODE_H)
             }
         }
     })
@@ -231,7 +258,7 @@ export function toFlow({ nodes, edges, columns, colors, centerColumns, anchorCol
             placeByBarycenter((buckets[col] ?? []).flatMap((n) => {
                 const pos = positions.get(n.id)
                 return pos ? [{ id: n.id, x: pos.x, target: mean(neighbourYs.get(n.id)) ?? pos.y }] : []
-            }))
+            }), gapOf(col))
         }
     }
 
@@ -319,8 +346,8 @@ export function toFlow({ nodes, edges, columns, colors, centerColumns, anchorCol
     return { flowNodes, flowEdges }
 }
 
-export default function ColumnGraph({ nodes, edges, columns, colors, centerColumns, anchorColumns, direction = "horizontal", colSpacing = DEFAULT_COL_SPACING, siblingGap = DEFAULT_SIBLING_GAP, nodeWidth = DEFAULT_NODE_WIDTH, columnTitles, columnBands, nodeY, columnHeaderStyle, onNodeClick }) {
-    const { flowNodes, flowEdges } = useMemo(() => toFlow({ nodes, edges, columns, colors, centerColumns, anchorColumns, direction, colSpacing, siblingGap, nodeWidth, columnTitles, columnBands, nodeY, columnHeaderStyle }), [nodes, edges, columns, colors, centerColumns, anchorColumns, direction, colSpacing, siblingGap, nodeWidth, columnTitles, columnBands, nodeY, columnHeaderStyle])
+export default function ColumnGraph({ nodes, edges, columns, colors, centerColumns, orderColumns, anchorColumns, direction = "horizontal", colSpacing = DEFAULT_COL_SPACING, siblingGap = DEFAULT_SIBLING_GAP, columnGap, nodeWidth = DEFAULT_NODE_WIDTH, columnTitles, columnBands, nodeY, columnHeaderStyle, onNodeClick }) {
+    const { flowNodes, flowEdges } = useMemo(() => toFlow({ nodes, edges, columns, colors, centerColumns, orderColumns, anchorColumns, direction, colSpacing, siblingGap, columnGap, nodeWidth, columnTitles, columnBands, nodeY, columnHeaderStyle }), [nodes, edges, columns, colors, centerColumns, orderColumns, anchorColumns, direction, colSpacing, siblingGap, columnGap, nodeWidth, columnTitles, columnBands, nodeY, columnHeaderStyle])
     const [rfNodes, , onNodesChange] = useNodesState(flowNodes)
     const [rfEdges, setRfEdges, onEdgesChange] = useEdgesState(flowEdges)
     const [draggingId, setDraggingId] = useState(null)
@@ -344,13 +371,13 @@ export default function ColumnGraph({ nodes, edges, columns, colors, centerColum
         const minY = Math.min(...ns.map((n) => n.position.y))
         const cx = (minX + maxX) / 2
         // Fit the full WIDTH (fitting the full height would shrink this tall graph to
-        // nothing), capped at a comfortable zoom, then centre horizontally and pin to
-        // the top so we open on the first lane, readable.
+        // nothing), capped at a comfortable zoom, then centre horizontally and pin
+        // near the top (with a little grace-space) so we open on the first lane, readable.
         await instance.fitBounds({ x: minX, y: minY, width: maxX - minX, height: 10 }, { padding: 0.06 })
         const vp = instance.getViewport()
         const paneW = 2 * (vp.x + cx * vp.zoom)        // fitBounds centres content → its centre sits at paneW/2
         const zoom = Math.min(vp.zoom, 1)
-        instance.setViewport({ x: paneW / 2 - cx * zoom, y: 20 - minY * zoom, zoom })
+        instance.setViewport({ x: paneW / 2 - cx * zoom, y: TOP_MARGIN - minY * zoom, zoom })
     }
 
     return (

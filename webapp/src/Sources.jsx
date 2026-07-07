@@ -5,6 +5,7 @@
 
 import { federationTtl, mappedTtl, ingestLogTtl, repositoryUrl } from "./instanceData.js"
 import Card, { KeyValueTable } from "./Card.jsx"
+import HelpTip from "./HelpTip.jsx"
 import { loadSources } from "./loadSources.js"
 import React from "react"
 
@@ -36,6 +37,17 @@ const freshnessRow = (s) => s.staticSource
 export default function Sources() {
     return (
         <div className="page" style={{ overflowY: "auto", height: "100%" }}>
+            <div style={{ display: "flex", marginBottom: "0.5rem" }}>
+                <HelpTip title="Sources" label="About sources">
+                    <div>
+                        One card per source the federation declares: where its data comes from
+                        (a live URL or committed static files), its format, when it was last
+                        harvested or added, and how many records and schema fields it contributes
+                        {" "}(<em>mapped</em> of <em>total</em>). All read from the configuration and
+                        the ingest log.
+                    </div>
+                </HelpTip>
+            </div>
             {sources.map((s) => (
                 <Card key={s.iri} title={s.label ?? s.iri}>
                     <KeyValueTable rows={[

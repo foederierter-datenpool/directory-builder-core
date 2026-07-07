@@ -76,8 +76,9 @@ export function loadEntities(ttl, { hiddenSources } = {}) {
         const schema = f.toTarget.get(mapping)
         if (subject && schema) { addEdge(subject, schema); usedSchemas.add(schema) }
     }
-    // Emit reached schemas in :hasTargetSchema declaration order so the column
-    // reads in the federation's canonical tier order, not layout happenstance.
+    // Emit reached schemas in :hasTargetSchema declaration order; ColumnGraph
+    // (orderColumns) then reorders the column into crossing-minimising order,
+    // rendered as an evenly-spaced block centred against the entity column.
     for (const schema of f.schemaOrder) if (usedSchemas.has(schema)) nodes.push({ id: schema, label: f.label(schema), type: "TargetSchema" })
     return { nodes, edges }
 }

@@ -8,6 +8,7 @@
 import { federationTtl, ingestLogTtl, federateLogTtl } from "./instanceData.js"
 import { loadPipeline } from "./loadPipeline.js"
 import ColumnGraph from "./ColumnGraph.jsx"
+import HelpTip from "./HelpTip.jsx"
 import React from "react"
 
 const COLUMNS = ["Source", "Fetch", "Lift", "Extract", "Map", "Input", "Match", "Merge", "Resolve", "End"]
@@ -26,16 +27,41 @@ const { nodes, edges } = loadPipeline([ingestLogTtl, federateLogTtl], federation
 
 export default function Pipeline() {
     return (
-        <ColumnGraph
-            nodes={nodes}
-            edges={edges}
-            columns={COLUMNS}
-            colors={COLORS}
-            centerColumns={CENTER_COLUMNS}
-            direction="vertical"
-            colSpacing={120}
-            siblingGap={240}
-            nodeWidth={150}
-        />
+        <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+            <div style={{ display: "flex", padding: "0.5rem 1rem", borderBottom: "1px solid #ddd" }}>
+                <HelpTip title="The Pipeline view" label="About the Pipeline view">
+                    <div>
+                        The steps the engines actually ran, journaled as they executed. Each source
+                        is <em>fetched</em> and <em>lifted</em> into RDF, then
+                        {" "}<em>extract → map → match → merge → resolve</em> fold every source into the
+                        final directory. Edge labels show what passed between steps.
+                    </div>
+                    <div>
+                        Each step has one concern. <strong>Extract</strong> normalizes values and
+                        shapes the entities (cleaning, splitting, deduplication);
+                        {" "}<strong>map</strong> renames each source's fields onto the shared schema
+                        vocabulary and is value-neutral; <strong>match</strong> and
+                        {" "}<strong>merge</strong> fold duplicate records into one;
+                        {" "}<strong>resolve</strong> writes the final directory.
+                    </div>
+                    <div>
+                        It's a record of the last run: evidence of the pipeline, not a live process.
+                    </div>
+                </HelpTip>
+            </div>
+            <div style={{ flex: 1, minHeight: 0 }}>
+                <ColumnGraph
+                    nodes={nodes}
+                    edges={edges}
+                    columns={COLUMNS}
+                    colors={COLORS}
+                    centerColumns={CENTER_COLUMNS}
+                    direction="vertical"
+                    colSpacing={120}
+                    siblingGap={240}
+                    nodeWidth={150}
+                />
+            </div>
+        </div>
     )
 }

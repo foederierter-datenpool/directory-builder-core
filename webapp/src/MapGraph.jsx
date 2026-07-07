@@ -12,12 +12,14 @@ import { loadExtractedBySource } from "./sourceMeta.js"
 import { SkipBack, SkipForward } from "lucide-react"
 import ColumnGraph, { toFlow } from "./ColumnGraph.jsx"
 import CheckboxDropdown from "./CheckboxDropdown.jsx"
+import HelpTip from "./HelpTip.jsx"
 import { buildMiroSnippet } from "./miroExport.js"
 
 const COLUMNS = ["Source", "SourceField", "DerivedField", "TransformNode", "TargetField", "TargetSchema"]
-// The short columns anchor at the vertical middle of what they connect to —
-// a source at its fields, a schema at its target-field copies.
-const ANCHOR_COLUMNS = ["Source", "TransformNode", "TargetSchema"]
+// The short columns anchor at the vertical middle of what they connect to: a
+// source at its fields, a derived field between its raw origin and its targets,
+// and a schema at its target-field copies.
+const ANCHOR_COLUMNS = ["Source", "DerivedField", "TransformNode", "TargetSchema"]
 const DIRECTIONS = ["left-right", "right-left", "top-down", "down-top"]
 // Vertical directions: columns become rows; siblings sit side by side, so
 // their gap must clear the node width (160) instead of the node height.
@@ -145,7 +147,7 @@ function EntityCombobox({ entities, value, onChange, disabled }) {
 }
 
 export default function MapGraph() {
-    const [visible, setVisible] = useSourceParam(SOURCES)
+    const [visible, setVisible] = useSourceParam(SOURCES, { defaultFirst: true })
     const [selectedEntity, setSelectedEntity] = useState(null)
     const [dataFlow, setDataFlow] = useState(false)
     const [showUnmapped, setShowUnmapped] = useState(false)
@@ -173,16 +175,14 @@ export default function MapGraph() {
         if (!valueByField) return rawEdges
         const typeOf = new Map(nodes.map(n => [n.id, n.type]))
         return rawEdges.map(e => {
-            // Source-field outgoing: source literal. Transform outgoing: the
-            // post-transform target field value (the value that lands in `to`).
-            // The label tints with the from-node's column color so labels read
-            // as belonging to the same "moment" in the transformation.
-            // Direct (no-:via) source-field → target-field edges are gated
-            // behind the "Also show 1:1 flows" toggle.
-            if (e.direct && !showDirectFlows) return e
             const fromType = typeOf.get(e.from)
-            // Source/derived fields carry their own value; a transform emits the
-            // post-transform value that lands in its target field.
+            // Direct (no-:via) source-field → target-field renames are gated behind
+            // the "Also show 1:1 flows" toggle — except a derived field's outgoing
+            // edge, whose value is the split result (street / PLZ / city) and is the
+            // point of the flow here. Source/derived fields carry their own value; a
+            // transform emits the post-transform value that lands in its target. The
+            // label tints with the from-node's column color.
+            if (e.direct && !showDirectFlows && fromType !== "DerivedField") return e
             const v = fromType === "TransformNode" ? valueByField.get(e.toField ?? e.to)
                 : (fromType === "SourceField" || fromType === "DerivedField") ? valueByField.get(e.from)
                 : undefined
@@ -233,6 +233,45 @@ export default function MapGraph() {
     return (
         <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
             <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", padding: "0.5rem 1rem", fontSize: 13, borderBottom: "1px solid #ddd" }}>
+                <HelpTip title="The Map view" label="About the Map view">
+                    <div>
+                        <strong>Map relabels; extract does everything else.</strong> Each source
+                        works in its own vocabulary; extract cleans, splits and shapes its data, and
+                        map's one job is to translate those fields onto the shared schema vocabulary,
+                        carrying every value across unchanged. So this view is that dictionary: on the
+                        left a source's own <strong>fields</strong> (green), on the right the shared
+                        {" "}<strong>target fields</strong> (blue, schema.org predicates) grouped by
+                        target schema. A dashed box groups source fields that arrive nested under one
+                        object (an address carrying street, PLZ and city together).
+                    </div>
+                    <div>
+                        The arrows come in three kinds:
+                        <ul style={{ margin: "4px 0 0", paddingLeft: "1.2rem" }}>
+                            <li>a plain arrow: the field is simply <em>renamed</em> to its target predicate, and the value passes through unchanged.</li>
+                            <li>through a yellow <em>transform</em> node: the value is computed there. Turn on <strong>Show data flow</strong> to watch one entity's values move through.</li>
+                            <li>a teal <em>derived field</em>: a field extract produced on a different entity from its origin, then mapped on.</li>
+                        </ul>
+                    </div>
+                    <div>
+                        A field is <em>derived</em> (teal) when it lands on a
+                        {" "}<strong>different entity</strong> than the one it came from, not because
+                        its value changed. That happens two ways: one field <em>split</em> into
+                        several (a Teaser into street, PLZ and city), or existing fields
+                        {" "}<em>relocated</em> onto a separate, deduplicated entity (an office's
+                        address parts collected onto the shared Adresse), where the values pass
+                        through unchanged. Either way the extract step mints it, which a
+                        {" "}<em>transform</em> (a value rewrite that stays on the
+                        {" "}<strong>same</strong> entity, like a phone tidied to digits) structurally
+                        can't do. Rule of thumb: field stays on the record, a transform can do it;
+                        field lands on a new entity, it must be derived.
+                    </div>
+                    <div>
+                        Value-level cleaning (whitespace collapsed, “Str.” → “Straße”, house
+                        numbers tidied) happens earlier, in the <strong>extract</strong> step. The
+                        {" "}<strong>Cleanup</strong> view (on the Entities page) shows exactly what
+                        it changed.
+                    </div>
+                </HelpTip>
                 <SourcesDropdown visible={visible} onChange={setVisible} />
                 <label style={{ display: "inline-flex", alignItems: "center", gap: "0.3rem" }}>
                     <input type="checkbox" checked={showUnmapped} onChange={(e) => setShowUnmapped(e.target.checked)} />

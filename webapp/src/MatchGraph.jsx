@@ -12,6 +12,7 @@ import { CDP, groupBySubject, parseTtl, shrink } from "@directory-builder/core/u
 import React, { useMemo, useState } from "react"
 import ColumnGraph from "./ColumnGraph.jsx"
 import CheckboxDropdown from "./CheckboxDropdown.jsx"
+import HelpTip from "./HelpTip.jsx"
 import Modal from "./Modal.jsx"
 import { loadMatch, readSchemas } from "./loadMatch.js"
 
@@ -178,6 +179,20 @@ export default function MatchGraph() {
     return (
         <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
             <div style={{ display: "flex", gap: "1rem", alignItems: "center", padding: "0.5rem 1rem", fontSize: 13, borderBottom: "1px solid #ddd" }}>
+                <HelpTip title="The Match view" label="About the Match view">
+                    <div>
+                        Where duplicate records become one entity. Each lane is one
+                        {" "}<strong>target schema</strong>; inside it sits every entity the match
+                        step formed. The tinted column before a lane shows the
+                        {" "}<em>source duplications</em>: which source records collapsed onto that
+                        entity.
+                    </div>
+                    <div>
+                        Arrows across lanes are the declared <em>relationships</em> between
+                        entities. Click any cluster to see the fields its match rule compared on.
+                        Lanes, order, colours and relationships all come from the configuration.
+                    </div>
+                </HelpTip>
                 <CheckboxDropdown options={allLanes.map((l) => ({ key: l.key, label: l.label }))}
                     selected={activeLanes} onChange={setActiveLanes} noun="lane" />
                 <label style={{ display: "inline-flex", alignItems: "center", gap: "0.25rem" }}>
