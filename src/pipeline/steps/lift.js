@@ -34,10 +34,13 @@ export async function ensureJar(abs) {
 // Lift step: SPARQL Anything turns each raw file into TTL, via the bundled
 // query for the source's :format, with the source's :hasLiftParam variables.
 export const runLift = ({ abs }, { jar, name, format, params }) => {
-    // TODO: directory mode spawns one JVM per file (~1s startup each).
-    // Fine at small N; revisit if a source crosses ~50 items. SPARQL Anything
-    // accepts VALUES ?_location { … } in the lift query, which would let one
-    // invocation handle the whole batch.
+    // One JVM per raw file (~1s startup each): fine at small N, costly at
+    // nationwide scale. The lever is fewer raw files, not fewer JVMs per file —
+    // SPARQL Anything v1.1.0 binds one constant fx:location per invocation
+    // (VALUES / -v / directory / archive all fail to feed a per-file location),
+    // so a source keeps JVM starts down by having its fetch emit few large files
+    // (JSON: merge records into one array; HTML: wrap N entries per file and
+    // scope the extract to each wrapper).
     const liftQuery = liftQueryFor(format)
     const liftOne = (location, outPath) => {
         const args = ["-jar", jar, "-q", liftQuery,
