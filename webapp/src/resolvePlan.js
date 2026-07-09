@@ -13,9 +13,9 @@ const local = (iri) => iri.split("#").pop()
 const objOf = (quads, subj, pred) => quads.find((q) => q.subject.value === subj && q.predicate.value === `${CDP}${pred}`)?.object.value
 
 // :ResolveRule strategy per predicate: :hasOverride [ :on ; :strategy ],
-// else :defaultStrategy, else the engine's alphabeticFirst fallback.
+// else :defaultStrategy, else the engine's longestValue fallback.
 const fedQuads = parseTtl(federationTtl)
-const defaultStrategy = fedQuads.find((q) => q.predicate.value === `${CDP}defaultStrategy`)?.object.value ?? `${CDP}alphabeticFirst`
+const defaultStrategy = fedQuads.find((q) => q.predicate.value === `${CDP}defaultStrategy`)?.object.value ?? `${CDP}longestValue`
 const overrides = new Map(fedQuads.filter((q) => q.predicate.value === `${CDP}hasOverride`)
     .map((q) => [objOf(fedQuads, q.object.value, "on"), objOf(fedQuads, q.object.value, "strategy")]))
 

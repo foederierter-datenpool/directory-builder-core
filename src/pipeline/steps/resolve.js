@@ -13,6 +13,11 @@ const df = DataFactory
 // A strategy returns either one quad (collapse the group to a single value) or an
 // array of quads (keep several). The caller flattens, so both forms compose.
 const STRATEGIES = {
+    // The default: when sources disagree, the longest literal usually carries
+    // the most information (full name over an acronym, a street over a fragment).
+    // Equal lengths fall back to alphabeticFirst so the pick stays deterministic.
+    longestValue: (quads) => [...quads].sort((a, b) =>
+        b.object.value.length - a.object.value.length || a.object.value.localeCompare(b.object.value))[0],
     alphabeticFirst: (quads) => [...quads].sort((a, b) => a.object.value.localeCompare(b.object.value))[0],
     concatenateAll:  (quads) => df.quad(quads[0].subject, quads[0].predicate,
         df.literal([...new Set(quads.map(q => q.object.value))].sort().join(", "))),
@@ -40,8 +45,8 @@ export const runResolve = async ({ store, defStore, abs }, outPath) => {
             OPTIONAL { ?resolve a :ResolveRule ; :defaultStrategy ?strategy }
         }`, [defStore])
     if (!cfg) throw new Error(":MatchRule config missing in federation.ttl")
-    // No :ResolveRule (or none with a :defaultStrategy) → alphabeticFirst.
-    const defaultPick = lookupStrategy(cfg.strategy ?? `${CDP}alphabeticFirst`)
+    // No :ResolveRule (or none with a :defaultStrategy) → longestValue.
+    const defaultPick = lookupStrategy(cfg.strategy ?? `${CDP}longestValue`)
 
     const overrideRows = await sparqlSelect(`
         PREFIX : <${CDP}>

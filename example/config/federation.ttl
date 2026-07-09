@@ -177,7 +177,8 @@
     :hasWeightedCriterion [ :on schema:name ; :weight 1.0 ] .
 
 # ---- Resolve ------------------------------------------------------------
-# One value per predicate per merged record; alphabeticFirst is deterministic.
+# One value per predicate per merged record; longestValue keeps the fullest,
+# alphabeticFirst breaks length ties deterministically.
 
 :resolve a :ResolveRule ;
-    :defaultStrategy :alphabeticFirst .
+    :defaultStrategy :longestValue .

@@ -235,3 +235,51 @@ test("a curated :ValueCorrection rewrites a known-wrong literal at resolve", asy
     await new Pipeline({ root }).run()
     assert.equal(fs.readFileSync(path.join(root, PATHS.final), "utf8"), expectedFinal)
 })
+
+// ---- Test 5: the default longestValue strategy ------------------------------
+// Two sources merge on an identical name but carry different-length descriptions.
+// With no :ResolveRule configured the engine defaults to longestValue, so the
+// fuller description survives — alphabeticFirst would have picked "Beratung"
+// ("B" sorts before "Z"), proving the default is length- not alphabet-driven.
+
+test("the default longestValue strategy keeps the fullest conflicting value", async () => {
+    const withDesc = `
+@prefix :       <https://civic-data.de/pipeline#> .
+@prefix schema: <http://schema.org/> .
+@prefix ft:     <http://publications.europa.eu/resource/authority/file-type/> .
+
+:federation a :Federation ; :hasSource :alphaSource, :betaSource .
+:thingSchema a :TargetSchema ; :targetClass schema:Thing .
+:t-id   a :TargetField ; :targetPredicate schema:identifier .
+:t-name a :TargetField ; :targetPredicate schema:name .
+:t-desc a :TargetField ; :targetPredicate schema:description .
+
+:alphaSource a :Source ; :format ft:JSON ; :hasField :alpha-id, :alpha-name, :alpha-desc .
+:betaSource  a :Source ; :format ft:JSON ; :hasField :beta-id, :beta-name, :beta-desc .
+:alpha-id   a :SourceField ; :fieldPath "id" ; :iriSource true .
+:alpha-name a :SourceField ; :fieldPath "name" .
+:alpha-desc a :SourceField ; :fieldPath "desc" .
+:beta-id    a :SourceField ; :fieldPath "id" ; :iriSource true .
+:beta-name  a :SourceField ; :fieldPath "name" .
+:beta-desc  a :SourceField ; :fieldPath "desc" .
+
+:alpha-mapping a :Mapping ; :fromSource :alphaSource ; :toTarget :thingSchema ;
+    :hasFieldMapping [ :from :alpha-id ; :to :t-id ] , [ :from :alpha-name ; :to :t-name ] , [ :from :alpha-desc ; :to :t-desc ] .
+:beta-mapping a :Mapping ; :fromSource :betaSource ; :toTarget :thingSchema ;
+    :hasFieldMapping [ :from :beta-id ; :to :t-id ] , [ :from :beta-name ; :to :t-name ] , [ :from :beta-desc ; :to :t-desc ] .
+
+:match a :MatchRule ; :forTarget :thingSchema ; :targetNamespace "urn:test:" ;
+    :mintedSubjectPrefix "thing-" ; :minScore 1.0 ;
+    :hasWeightedCriterion [ :on schema:name ; :weight 1.0 ] .
+`
+    const root = makeInstance("longest", { federation: withDesc, sources: {
+        alpha: [{ id: "a1", name: "Shared", desc: "Beratung" }],
+        beta:  [{ id: "b1", name: "Shared", desc: "Zentrum für umfassende Sozialberatung" }],
+    } })
+    assert.deepEqual(await validate(root), [])
+    await new Pipeline({ root }).run()
+    const final = parseTtl(fs.readFileSync(path.join(root, PATHS.final), "utf8"))
+    // a1+b1 merged on their identical name; the longer description wins the conflict
+    const descs = final.filter((q) => q.predicate.value === "http://schema.org/description").map((q) => q.object.value)
+    assert.deepEqual(descs, ["Zentrum für umfassende Sozialberatung"])
+})
