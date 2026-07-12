@@ -126,7 +126,7 @@ export function loadPipeline(stepTtls, federationTtl) {
     const inputEdges = []
     if (curationIris.length) {
         const inId = `input:${PATHS.curation}`
-        inputNodes.push({ id: inId, label: "input", type: "Input", color: "transparent", borderColor: LANE_BORDER })
+        inputNodes.push({ id: inId, label: "manual input", type: "Input", color: "transparent", borderColor: LANE_BORDER })
         inputEdges.push(...curationIris.map((to) =>
             ({ from: inId, to, value: basename(PATHS.curation), centered: true, sideInput: true })))
     }

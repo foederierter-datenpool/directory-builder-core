@@ -16,9 +16,13 @@ const TOP_MARGIN = 56
 function SideNode({ data, style }) {
     const targetPos = data.targetPos ?? Position.Left
     const sourcePos = data.sourcePos ?? Position.Right
+    // A step fed by a side input exposes a second target handle on its side,
+    // so the feed enters visibly apart from the main flow.
+    const sidePos = targetPos === Position.Top || targetPos === Position.Bottom ? Position.Right : Position.Bottom
     return (
         <div style={style}>
             <Handle type="target" position={targetPos} />
+            {data.sideTarget && <Handle type="target" id="side" position={sidePos} />}
             <div title={data.label} style={{ textAlign: "center", fontWeight: data.props?.length ? 600 : 400, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden", wordBreak: "break-word" }}>{data.label}</div>
             {data.subtitle && (
                 <div title={data.subtitle} style={{ textAlign: "center", fontSize: 10, color: "#888", marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{data.subtitle}</div>
@@ -269,6 +273,7 @@ export function toFlow({ nodes, edges, columns, colors, centerColumns, orderColu
     const targetPos = isVertical ? (isReversed ? Position.Bottom : Position.Top) : (isReversed ? Position.Right : Position.Left)
     const sourcePos = isVertical ? (isReversed ? Position.Top : Position.Bottom) : (isReversed ? Position.Left : Position.Right)
 
+    const sideTargets = new Set(edges.filter((e) => e.sideInput).map((e) => e.to))
     const flowNodes = []
     for (const n of nodes) {
         const pos = positions.get(n.id)
@@ -277,7 +282,7 @@ export function toFlow({ nodes, edges, columns, colors, centerColumns, orderColu
             id: n.id,
             type: "sideNode",
             position: isVertical ? { x: pos.y, y: pos.x } : pos,
-            data: { label: n.label, subtitle: n.subtitle, props: n.props, targetPos, sourcePos, estH: estHeight(n) },
+            data: { label: n.label, subtitle: n.subtitle, props: n.props, targetPos, sourcePos, sideTarget: sideTargets.has(n.id), estH: estHeight(n) },
             style: {
                 background: n.color ?? colors[n.type] ?? "#eee",
                 border: `1px ${n.dashed ? "dashed" : "solid"} ${n.borderColor ?? "#888"}`,
@@ -338,6 +343,7 @@ export function toFlow({ nodes, edges, columns, colors, centerColumns, orderColu
     const flowEdges = edges.map((e, i) => {
         const base = { id: `e-${i}`, source: e.from, target: e.to, markerEnd: { type: MarkerType.ArrowClosed } }
         if (e.value !== undefined) { base.type = "value"; base.data = { value: e.value, idx: i, bg: e.valueBg, centered: e.centered } }
+        if (e.sideInput) base.targetHandle = "side"
         const stroke = e.stroke ?? (e.rel ? REL_COLOR : null)
         if (stroke) {
             base.style = { stroke, strokeWidth: 1.5 }
