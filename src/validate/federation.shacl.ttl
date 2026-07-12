@@ -11,9 +11,11 @@
 
 # ---- Federation ---------------------------------------------------------
 
-# Only :hasSource is required — the engine discovers target schemas and match
-# rules by type and defaults the resolve strategy, so those federation-level
-# links are optional; when present they must point at the right kind of node.
+# The federation node links only what is read off it: :hasSource (required;
+# declaration order is the order sources run in) and :hasTargetSchema
+# (declaration order drives the webapp's lanes and exports). Everything else —
+# mappings, match/resolve/enrich rules — is discovered by rdf:type, not linked
+# from here.
 :federationShape a sh:NodeShape ;
     sh:targetNode :federation ;
     sh:property [
@@ -23,18 +25,6 @@
     sh:property [
         sh:path :hasTargetSchema ; sh:nodeKind sh:IRI ; sh:class :TargetSchema ;
         sh:message ":hasTargetSchema must point to :TargetSchema nodes"
-    ] ;
-    sh:property [
-        sh:path :hasMatchRule ; sh:nodeKind sh:IRI ; sh:class :MatchRule ;
-        sh:message ":hasMatchRule must point to :MatchRule nodes"
-    ] ;
-    sh:property [
-        sh:path :hasResolveRule ; sh:maxCount 1 ; sh:nodeKind sh:IRI ; sh:class :ResolveRule ;
-        sh:message ":hasResolveRule must be a single :ResolveRule"
-    ] ;
-    sh:property [
-        sh:path :hasEnrichRule ; sh:nodeKind sh:IRI ; sh:class :EnrichRule ;
-        sh:message ":hasEnrichRule must point to :EnrichRule nodes"
     ] .
 
 # ---- Sources ------------------------------------------------------------

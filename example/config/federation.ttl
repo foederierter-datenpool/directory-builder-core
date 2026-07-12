@@ -15,9 +15,7 @@
 
 :federation a :Federation ;
     :hasSource       :cityopenSource, :civichubSource, :readcitySource ;
-    :hasTargetSchema :organisationSchema, :programSchema ;
-    :hasMatchRule    :organisationMatch, :programMatch ;
-    :hasResolveRule  :resolve .
+    :hasTargetSchema :organisationSchema, :programSchema .
 
 # ---- Target schema ------------------------------------------------------
 

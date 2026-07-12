@@ -21,7 +21,7 @@ const federation = `
 @prefix schema: <http://schema.org/> .
 @prefix ft:     <http://publications.europa.eu/resource/authority/file-type/> .
 
-:federation a :Federation ; :hasSource :alphaSource ; :hasEnrichRule :enrich .
+:federation a :Federation ; :hasSource :alphaSource .
 
 :placeSchema a :TargetSchema ; :targetClass schema:PostalAddress .
 :t-id     a :TargetField ; :targetPredicate schema:identifier .
