@@ -1,46 +1,25 @@
-// Download view: choose target fields + format, or an external-schema export.
+// Download view: the full directory in four formats, or an external-schema export.
 // Reads:  config/federation.ttl, data/pipeline/final.ttl, and the exporters
 //         the federation declares via :hasExporter (instance-owned modules at
 //         webapp/exporters/<name>.js, dynamic-imported at runtime like config/data)
-// Does:   triggers a browser download (.ttl / .jsonld / .json / .csv, or an
-//         exporter's external-schema file)
+// Does:   triggers a browser download — Turtle and JSON-LD as one graph file,
+//         JSON and CSV as a zip with one file per target schema, or an
+//         exporter's external-schema file
 
-import { datasetToTurtleWriter, storeFromTurtles } from "@foerderfunke/sem-ops-utils/core"
+import { storeFromTurtles } from "@foerderfunke/sem-ops-utils/core"
 import { turtleToJsonLdObj } from "@foerderfunke/sem-ops-utils/jsonld"
 import { sparqlSelect } from "@foerderfunke/sem-ops-utils/sparql"
 import { CDP, groupBySubject, localName, objectsOf, parseTtl, PATHS, shrink, subjectsOfType } from "@directory-builder/core/utils"
-import { displayPrefixes, federationTtl, finalTtl } from "./instanceData.js"
+import { displayPrefixes, federationTtl, finalTtl, provenanceTtl } from "./instanceData.js"
 import { strToU8, zipSync } from "fflate"
 import HelpTip from "./HelpTip.jsx"
 import React, { useState } from "react"
 
-const SCHEMA_IDENTIFIER = "http://schema.org/identifier"
+const RDF_TYPE = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type"
 const RDFS_LABEL = "http://www.w3.org/2000/01/rdf-schema#label"
 
-function readTargetFields() {
-    const quads = parseTtl(federationTtl)
-    const isTargetField = subjectsOfType(quads, `${CDP}TargetField`)
-    const fieldOrder = []
-    const seen = new Set()
-    const predicateOf = new Map()
-    for (const q of quads) {
-        if (q.predicate.value === `${CDP}hasTargetField`) {
-            if (!seen.has(q.object.value)) { seen.add(q.object.value); fieldOrder.push(q.object.value) }
-        } else if (q.predicate.value === `${CDP}targetPredicate`) {
-            predicateOf.set(q.subject.value, q.object.value)
-        }
-    }
-    return fieldOrder
-        .filter((iri) => isTargetField.has(iri) && predicateOf.has(iri))
-        .map((iri) => ({ predicate: predicateOf.get(iri), label: shrink(predicateOf.get(iri), displayPrefixes) }))
-        .filter((f) => f.predicate !== SCHEMA_IDENTIFIER)
-}
-
 const FINAL_QUADS = parseTtl(finalTtl)
-// Only offer target fields that actually carry data in final.ttl —
-// declared-but-unmapped fields would just download as empty columns.
-const PREDICATES_WITH_DATA = new Set(FINAL_QUADS.map((q) => q.predicate.value))
-const TARGET_FIELDS = readTargetFields().filter((f) => PREDICATES_WITH_DATA.has(f.predicate))
+const BY_SUBJECT = groupBySubject(FINAL_QUADS)
 
 // The federation's target schemas in declaration order, each with its declared
 // fields — the schema definitions only, no instance data.
@@ -86,9 +65,11 @@ function readTargetSchemas() {
         iri,
         name: localName(iri),
         label: schemaLabel(iri),
+        classIri: classOf.get(iri),
         targetClass: shrink(classOf.get(iri) ?? "", displayPrefixes),
         relations: [...(relationsOf.get(iri) ?? [])],
         fields: (fieldsOf.get(iri) ?? []).filter((f) => predicateOf.has(f)).map((f) => ({
+            predicate: predicateOf.get(f),
             label: shrink(predicateOf.get(f), displayPrefixes),
             multiValued: multiValued.has(f),
             resolve: resolveOf.get(predicateOf.get(f)),
@@ -96,6 +77,20 @@ function readTargetSchemas() {
     }))
 }
 const TARGET_SCHEMAS = readTargetSchemas()
+
+// A schema's slice of final.ttl: its entities (by rdf:type) and the columns
+// they actually carry — declared target fields first, in declaration order,
+// then whatever else the pipeline added (e.g. enrich's schema:latitude).
+function schemaRows(schema) {
+    const subjects = subjectsOfType(FINAL_QUADS, schema.classIri)
+    const rows = [...BY_SUBJECT].filter(([s]) => subjects.has(s))
+    const present = new Set(rows.flatMap(([, row]) => [...row.keys()]))
+    present.delete(RDF_TYPE)
+    const declared = schema.fields.map((f) => f.predicate).filter((p) => present.has(p))
+    const extras = [...present].filter((p) => !declared.includes(p))
+    const columns = [...declared, ...extras].map((p) => ({ predicate: p, label: shrink(p, displayPrefixes) }))
+    return { rows, columns }
+}
 
 // overview.csv: the schema-level model — each schema's target class and how
 // the schemas link to each other (from the mappings' :hasRelationship decls).
@@ -117,48 +112,31 @@ function buildSchemaCsv(schema) {
 const SCHEMA_FORMATS = [{ value: "csv", label: "CSV (.csv)" }]
 
 const FORMATS = [
-    { value: "ttl",    label: "Turtle (.ttl)",     ext: "ttl",    mime: "text/turtle" },
-    { value: "jsonld", label: "JSON-LD (.jsonld)", ext: "jsonld", mime: "application/ld+json" },
-    { value: "json",   label: "JSON (.json)",      ext: "json",   mime: "application/json" },
-    { value: "csv",    label: "CSV (.csv)",        ext: "csv",    mime: "text/csv" },
+    { value: "ttl",    label: "Turtle (.ttl)" },
+    { value: "jsonld", label: "JSON-LD (.jsonld)" },
+    { value: "json",   label: "JSON (.zip, one file per schema)" },
+    { value: "csv",    label: "CSV (.zip, one file per schema)" },
 ]
 
 const csvEscape = (v) => /[",\n\r]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v
 
-function buildCsv(quads, fields) {
-    const bySubject = groupBySubject(quads)
-    const header = ["iri", ...fields.map((f) => f.label)]
-    const lines = [header.map(csvEscape).join(",")]
-    for (const [s, row] of bySubject) {
-        const cells = [s, ...fields.map((f) => (row.get(f.predicate) ?? []).join("; "))]
-        lines.push(cells.map(csvEscape).join(","))
+function buildDataCsv({ rows, columns }) {
+    const lines = [["iri", ...columns.map((c) => c.label)].map(csvEscape).join(",")]
+    for (const [s, row] of rows) {
+        lines.push([s, ...columns.map((c) => (row.get(c.predicate) ?? []).join("; "))].map(csvEscape).join(","))
     }
     return lines.join("\n") + "\n"
 }
 
-function buildJson(quads, fields) {
-    const out = []
-    for (const [s, row] of groupBySubject(quads)) {
+function buildDataJson({ rows, columns }) {
+    return JSON.stringify(rows.map(([s, row]) => {
         const obj = { iri: s }
-        for (const f of fields) {
-            const vals = row.get(f.predicate)
-            if (!vals) continue
-            obj[f.label] = vals.length === 1 ? vals[0] : vals
+        for (const c of columns) {
+            const vals = row.get(c.predicate)
+            if (vals) obj[c.label] = vals.length === 1 ? vals[0] : vals
         }
-        out.push(obj)
-    }
-    return JSON.stringify(out, null, 2)
-}
-
-async function buildFile(selectedFields, format) {
-    const allowed = new Set(selectedFields.map((f) => f.predicate))
-    const filtered = FINAL_QUADS.filter((q) => allowed.has(q.predicate.value))
-    if (format === "csv")  return buildCsv(filtered, selectedFields)
-    if (format === "json") return buildJson(filtered, selectedFields)
-    const ttl = await datasetToTurtleWriter(filtered, displayPrefixes)
-    if (format === "ttl") return ttl
-    const jsonld = await turtleToJsonLdObj(ttl)
-    return JSON.stringify(jsonld, null, 2)
+        return obj
+    }), null, 2)
 }
 
 function triggerDownload(content, mime, filename) {
@@ -191,22 +169,18 @@ const EXTERNAL_TARGETS = (await Promise.all(
 )).filter(Boolean)
 
 export default function Download() {
-    const [selected, setSelected] = useState(() => new Set(TARGET_FIELDS.map((f) => f.predicate)))
     const [format, setFormat] = useState("ttl")
     const [externalTarget, setExternalTarget] = useState(EXTERNAL_TARGETS[0]?.value)
     const [schemaFormat, setSchemaFormat] = useState("csv")
 
-    const toggle = (pred) => {
-        const next = new Set(selected)
-        if (next.has(pred)) next.delete(pred); else next.add(pred)
-        setSelected(next)
-    }
-
     const onDownload = async () => {
-        const fmt = FORMATS.find((f) => f.value === format)
-        const fields = TARGET_FIELDS.filter((f) => selected.has(f.predicate))
-        const content = await buildFile(fields, format)
-        triggerDownload(content, fmt.mime, `final.${fmt.ext}`)
+        if (format === "ttl")    return triggerDownload(finalTtl, "text/turtle", "final.ttl")
+        if (format === "jsonld") return triggerDownload(
+            JSON.stringify(await turtleToJsonLdObj(finalTtl), null, 2), "application/ld+json", "final.jsonld")
+        const build = format === "csv" ? buildDataCsv : buildDataJson
+        const files = Object.fromEntries(
+            TARGET_SCHEMAS.map((s) => [`${s.name}.${format}`, strToU8(build(schemaRows(s)))]))
+        triggerDownload(zipSync(files), "application/zip", `final-${format}.zip`)
     }
 
     const onDownloadExternal = async () => {
@@ -228,8 +202,8 @@ export default function Download() {
             <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", margin: "0 0 0.75rem" }}>
                 <HelpTip title="Download" label="About downloads">
                     <div>
-                        Export the directory. Pick the fields to include and a format
-                        (Turtle, JSON-LD, JSON or CSV).
+                        Export the directory. Turtle and JSON-LD come as one graph file;
+                        JSON and CSV as a zip with one file per target schema.
                     </div>
                     <div>
                         Instances can add more: <strong>Map to other schema</strong> runs a provided
@@ -240,24 +214,24 @@ export default function Download() {
                 </HelpTip>
                 <h3 style={{ margin: 0 }}>Federated directory</h3>
             </div>
-            <div style={{ marginBottom: "0.5rem" }}>Fields to include:</div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", columnGap: "1rem", rowGap: "0.25rem" }}>
-                {TARGET_FIELDS.map((f) => (
-                    <label key={f.predicate} style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem" }}>
-                        <input type="checkbox" checked={selected.has(f.predicate)} onChange={() => toggle(f.predicate)} />
-                        <code>{f.label}</code>
-                    </label>
-                ))}
-            </div>
-            <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginTop: "1rem" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
                 <label style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem" }}>
                     Format:
                     <select value={format} onChange={(e) => setFormat(e.target.value)}>
                         {FORMATS.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
                     </select>
                 </label>
-                <button onClick={onDownload} disabled={selected.size === 0}>Download</button>
+                <button onClick={onDownload}>Download</button>
             </div>
+            {provenanceTtl && (
+                <div style={{ marginTop: "0.75rem", fontSize: 13, color: "#888" }}>
+                    Also available:{" "}
+                    <a href="" style={{ color: "inherit" }} onClick={(e) => {
+                        e.preventDefault()
+                        triggerDownload(provenanceTtl, "text/turtle", "provenance.ttl")
+                    }}>provenance.ttl</a>, tracing each triple back to its source.
+                </div>
+            )}
 
             {EXTERNAL_TARGETS.length > 0 && <>
                 <hr style={{ margin: "1.5rem 0", border: 0, borderTop: "1px solid #ddd" }} />
