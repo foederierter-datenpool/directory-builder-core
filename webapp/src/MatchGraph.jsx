@@ -101,7 +101,7 @@ function MemberDetailsModal({ clusterId, memberIris, type, onClose }) {
                 <div style={{ fontSize: 11, color: "#999", marginBottom: 12 }}>
                     {criteria.length > 0
                         ? "Showing this schema's match criteria fields only, not the full record."
-                        : "This schema's match rule declares no criteria — nothing to show per member."}
+                        : "This schema's match rule declares no criteria: nothing to show per member."}
                 </div>
                 {memberIris.map((iri) => {
                     return (
@@ -182,10 +182,12 @@ export default function MatchGraph() {
                 <HelpTip title="The Match view" label="About the Match view">
                     <div>
                         Where duplicate records become one entity. Each lane is one
-                        {" "}<strong>target schema</strong>; inside it sits every entity the match
-                        step formed. The tinted column before a lane shows the
+                        {" "}<strong>target schema</strong> (one entity type); inside it sits every
+                        entity the match step formed, each a <em>cluster</em> of the source records
+                        that matched. The tinted column to the left of a lane shows the
                         {" "}<em>source duplications</em>: which source records collapsed onto that
-                        entity.
+                        entity. By default only real collapses show; <em>Show 1:1 clusters</em> adds
+                        the entities a single record formed.
                     </div>
                     <div>
                         Arrows across lanes are the declared <em>relationships</em> between

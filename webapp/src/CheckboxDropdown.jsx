@@ -1,5 +1,5 @@
 // Multi-select dropdown: a summary label ("All sources", "2 of 3 types", …) over a
-// popover of checkboxes with select-all / unselect-all. Used for the Map source
+// popover of checkboxes with select-all / clear-all. Used for the Map source
 // filter and the Merge/Directory schema filter.
 // options: [{ key, label }] · selected: Set<key> · onChange(Set<key>) · noun: e.g. "source"
 
@@ -20,7 +20,7 @@ export default function CheckboxDropdown({ options, selected, onChange, noun }) 
         <Dropdown label={label}>
             <div style={{ display: "flex", gap: 12, paddingBottom: 4, marginBottom: 4, borderBottom: "1px solid #eee" }}>
                 <button onClick={() => setAll(true)} style={linkBtn}>Select all</button>
-                <button onClick={() => setAll(false)} style={linkBtn}>Unselect all</button>
+                <button onClick={() => setAll(false)} style={linkBtn}>Clear all</button>
             </div>
             {options.map((o) => (
                 <label key={o.key} style={item}>

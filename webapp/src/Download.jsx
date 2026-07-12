@@ -199,21 +199,21 @@ export default function Download() {
 
     return (
         <div className="page" style={{ fontSize: 14 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", margin: "0 0 0.75rem" }}>
+            <div style={{ display: "flex", margin: "0 0 0.75rem" }}>
                 <HelpTip title="Download" label="About downloads">
                     <div>
                         Export the directory. Turtle and JSON-LD come as one graph file;
                         JSON and CSV as a zip with one file per target schema.
                     </div>
                     <div>
-                        Instances can add more: <strong>Map to other schema</strong> runs a provided
-                        exporter to a different vocabulary, and <strong>Target schemas</strong>
-                        {" "}downloads the schema <em>definitions</em> (one file per schema plus an
-                        overview), not the data.
+                        Below, <strong>Map to other schema</strong> (shown when this directory
+                        provides an exporter) rewrites the data into a different vocabulary, and
+                        {" "}<strong>Target schemas</strong> downloads the schema <em>definitions</em>
+                        {" "}(one file per schema plus an overview), not the data.
                     </div>
                 </HelpTip>
-                <h3 style={{ margin: 0 }}>Federated directory</h3>
             </div>
+            <h3 style={{ margin: "0 0 0.75rem" }}>Federated directory</h3>
             <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
                 <label style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem" }}>
                     Format:

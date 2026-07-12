@@ -158,10 +158,9 @@ export default function Query() {
             <div style={{ display: "flex", padding: "0.5rem 1rem", borderBottom: "1px solid #ddd" }}>
                 <HelpTip title="Query" label="About the query editor">
                     <div>
-                        A SPARQL editor running entirely in your browser against the finished
-                        directory, with no server and no endpoint. Write a query, run it, and the
-                        results come straight from the final data. Share links carry the query in
-                        the URL.
+                        An editor for SPARQL, the query language for graph data, running entirely
+                        in your browser against the finished directory: no server, no endpoint.
+                        Share links carry the query in the URL.
                     </div>
                 </HelpTip>
             </div>

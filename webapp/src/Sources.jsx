@@ -42,9 +42,9 @@ export default function Sources() {
                     <div>
                         One card per source the federation declares: where its data comes from
                         (a live URL or committed static files), its format, when it was last
-                        harvested or added, and how many records and schema fields it contributes
-                        {" "}(<em>mapped</em> of <em>total</em>). All read from the configuration and
-                        the ingest log.
+                        harvested or added, how many records it contributes, and how many of its
+                        fields are mapped into the directory (<em>mapped</em> / <em>total</em>).
+                        All read from the configuration and the ingest log.
                     </div>
                 </HelpTip>
             </div>

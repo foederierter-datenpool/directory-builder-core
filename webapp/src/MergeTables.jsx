@@ -61,7 +61,7 @@ function StatsModal({ onClose }) {
             <table style={{ borderCollapse: "collapse", fontSize: 12, width: "100%" }}>
                 <thead>
                     <tr style={{ textAlign: "left", color: "#666", borderBottom: "1px solid #ddd" }}>
-                        <th style={cell}>Tier</th><th style={cellR}>Entities</th><th style={cellR}>Deduplicated</th><th style={cellR}>With conflicts</th>
+                        <th style={cell}>Type</th><th style={cellR}>Entities</th><th style={cellR}>Deduplicated</th><th style={cellR}>With conflicts</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -123,17 +123,18 @@ export default function MergeTables() {
             <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "0.75rem", marginBottom: "0.75rem" }}>
                 <HelpTip title="The Merge view" label="About the Merge view">
                     <div>
-                        Every resolved entity with its field values laid out
+                        Every merged entity with its field values laid out
                         {" "}<strong>per contributing source</strong>, so you can see where the
-                        sources agreed and where they conflicted (highlighted). Hovering a
-                        conflicted value shows what settles it: a curated correction (teal ✎),
-                        the resolve strategy picking the value that reaches the directory, or
-                        both when disagreement remains after the correction.
+                        sources agreed and where they conflicted (highlighted). A conflict means
+                        sources supplied different values for a field that expects one. Hovering a
+                        conflicted value shows how it settles: a curated correction (teal ✎), the
+                        resolve strategy that picks which value reaches the directory, or both
+                        when sources still disagree after the correction.
                         {" "}<em>Group by hierarchy</em> nests an entity under the one it links to.
                     </div>
                     <div>
-                        The bar above counts how many entities were deduplicated and how many carry
-                        conflicts; click it for a per-type breakdown.
+                        The summary in the toolbar counts how many entities were deduplicated and
+                        how many carry conflicts; click it for a per-type breakdown.
                     </div>
                 </HelpTip>
                 <CheckboxDropdown options={SCHEMA_OPTS} selected={selected} onChange={setSelected} noun="type" />

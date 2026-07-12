@@ -35,14 +35,15 @@ export default function Pipeline() {
                         The steps the engines actually ran, journaled as they executed. Each source
                         is <em>fetched</em> and <em>lifted</em> into RDF, then
                         {" "}<em>extract → map → match → merge → resolve</em> fold every source into the
-                        final directory. Edge labels show what passed between steps.
+                        final directory. Edge labels show what passed between steps;
+                        {" "}<em>manual input</em> marks curated files entering from the side.
                     </div>
                     <div>
-                        Each step has one concern. <strong>Extract</strong> normalizes values and
-                        shapes the entities (cleaning, splitting, deduplication);
+                        Each step has one concern. <strong>Extract</strong> normalises values and
+                        shapes the entities (cleaning, splitting, deduplicating within a source);
                         {" "}<strong>map</strong> renames each source's fields onto the shared schema
-                        vocabulary and is value-neutral; <strong>match</strong> and
-                        {" "}<strong>merge</strong> fold duplicate records into one;
+                        vocabulary and is value-neutral; <strong>match</strong> decides which records
+                        describe the same entity and <strong>merge</strong> folds them into one;
                         {" "}<strong>resolve</strong> picks each field's value; an opt-in
                         {" "}<strong>enrich</strong> step adds looked-up data no source
                         carries (geocoded coordinates, cached in the registry). The last

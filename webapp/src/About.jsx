@@ -8,9 +8,9 @@ import React from "react"
 
 const DEFAULT = `## Federated directory
 
-Builds a federated directory by mapping heterogeneous source schemas into a unified target schema.
+This site combines records from heterogeneous sources into one searchable directory.
 The directory can be queried or downloaded.
-This site serves both its users and those interested in the federation process itself.
+It serves both its users and those interested in the federation process itself.
 Toggle "Show federation process" in the top bar to inspect the steps.
 
 *The data shown here is example data: two fictional library directories exercising the pipeline and this webapp.

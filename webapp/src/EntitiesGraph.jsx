@@ -1,6 +1,6 @@
 // Entities view: how each source becomes the federated model, in three modes
 // (switched at the top, remembered in the URL as ?view=flow|links|prepare):
-//   "Extractable entities" (flow)  — the derivation: source record → typed
+//   "Entity extraction" (flow)  — the derivation: source record → typed
 //           entities → target schema
 //   "Target entity relationships" (links) — the output relationships
 //           (:hasRelationship) between the resulting entities, as a
@@ -48,7 +48,7 @@ const relColor = (t) => REL_COLORS[t] ?? REL_FALLBACK
 const relBg = (t) => REL_BG[t] ?? "#efe6fb"
 
 const MODES = [
-    { key: "flow", label: "Extractable entities" },
+    { key: "flow", label: "Entity extraction" },
     { key: "links", label: "Target entity relationships" },
     { key: "prepare", label: "Cleanup" },
 ]
@@ -57,14 +57,13 @@ const MODES = [
 // reader guess what the other tabs were). Gentle, instance-agnostic copy.
 const VIEW_GUIDE = [
     {
-        label: "Extractable entities",
+        label: "Entity extraction",
         body: (
             <>
                 How each source becomes the federated directory: every source record fans out into
                 typed <em>entities</em>, and each entity feeds one shared <em>target schema</em>.
-                The entity-level companion to the field-level <strong>Map</strong> view; filtering
-                to a single source reads easiest. Entity names come from the configuration, each
-                labelled the way its source names it.
+                The entity-level companion to the field-level <strong>Map</strong> view; select one
+                source for the clearest graph. Each entity is labelled the way its source names it.
             </>
         ),
     },
@@ -74,8 +73,8 @@ const VIEW_GUIDE = [
             <>
                 How the resulting entity types relate to one another: each coloured arrow a
                 declared relationship (labelled with its kind) from one target schema to another.
-                Declared in the config and true across all sources, so it's the shared output data
-                model.
+                Declared in the config and the same across all sources, so it's the shared output
+                data model.
             </>
         ),
     },
@@ -84,12 +83,13 @@ const VIEW_GUIDE = [
         body: (
             <>
                 What the <strong>extract</strong> step changed on the way in, per entity, in two
-                kinds: a <em>split</em>, where one raw field fans out into several targets (a
-                Teaser into street, PLZ and city), and a <em>normalised</em> value, where a field
-                is cleaned but not split (whitespace collapsed, phone reduced to digits,
-                “Str.” → “Straße”). Each <em>split</em>/<em>normalised</em> tag links to the
-                <code> extract.sparql</code> that does the work. Plus the <em>match key</em>: the
-                normalised string the match step compares on, invisible in every other view.
+                kinds. A <em>split</em> fans one packed field out into several targets (an address
+                line into street, postal code and city); a <em>normalised</em> value is cleaned
+                but not split (whitespace collapsed, a phone reduced to digits, an abbreviation
+                expanded). Each <em>split</em>/<em>normalised</em> tag names the
+                <code> extract.sparql</code> that does the work, linked when the site declares its
+                repository. Plus the <em>match key</em>: the normalised value the match step
+                compares on, invisible in every other view.
             </>
         ),
     },
@@ -161,7 +161,7 @@ function Tag({ kind, href, style }) {
 function PrepareView({ data }) {
     if (!data.length) return (
         <div style={{ padding: "1.25rem", color: "#888", fontSize: 13 }}>
-            No preparation data yet — run the pipeline to generate <code>data/pipeline/preparation/</code>.
+            No preparation data yet: run the pipeline to generate <code>data/pipeline/preparation/</code>.
         </div>
     )
     return (

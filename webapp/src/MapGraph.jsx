@@ -244,30 +244,30 @@ export default function MapGraph() {
                         <strong>Map relabels; extract does everything else.</strong> Each source
                         works in its own vocabulary; extract cleans, splits and shapes its data, and
                         map's one job is to translate the resulting fields onto the shared schema
-                        vocabulary, carrying every value across unchanged. So this view is that
+                        vocabulary. So this view is that
                         dictionary: on the left a source's own <strong>fields</strong>, on the right
-                        the shared <strong>target fields</strong> (orange, schema.org predicates)
+                        the shared <strong>target fields</strong> (orange)
                         grouped by target schema. A dashed box groups the fields of one entity (an
-                        address carrying street, PLZ and city together).
+                        address carrying street, postal code and city together).
                     </div>
                     <div>
-                        Source fields come in two colors: a <strong>green</strong> field was
+                        Source fields come in two colours: a <strong>green</strong> field was
                         {" "}<em>found</em> in the source; a <strong>teal</strong> field was
                         {" "}<em>made</em> by extract, with teal arrows pointing from the fields it
                         was made from. Extract makes a field for two reasons: to <em>split</em> one
-                        packed field into several (a Teaser into street, PLZ and city), or to
-                        {" "}<em>relocate</em> a value onto another entity (an office's address
-                        parts onto the shared, deduplicated Adresse). Every plain arrow is a pure
-                        {" "}<em>rename</em>: same value, new name.
+                        packed field into several (an address line into street, postal code and
+                        city), or to <em>relocate</em> a value onto another entity (an office's
+                        address parts onto one shared, deduplicated address entity). Every plain
+                        arrow is a pure <em>rename</em>: same value, new name.
                         {HAS_TRANSFORMS && <> A yellow <em>transform</em> node is the exception:
                         it rewrites values on their way through map.</>}
                     </div>
                     <div>
-                        A value merely <em>cleaned in place</em> (whitespace collapsed,
-                        “Str.” → “Straße”, a phone reduced to digits) makes no new field, so it
-                        stays green and nothing changes shape here: the Map draws fields and where
-                        they go. The <strong>Cleanup</strong> view (on the Entities page) lists
-                        every before → after value change the extract step made. Turn on
+                        A value merely <em>cleaned in place</em> (whitespace collapsed, an
+                        abbreviation expanded, a phone reduced to digits) makes no new field, so it
+                        stays green and nothing changes shape here.
+                        The <strong>Cleanup</strong> view (on the Entities page) lists
+                        the before → after value changes the extract step made. Turn on
                         {" "}<strong>Show data flow</strong> here to watch one record's values
                         travel the arrows.
                     </div>
