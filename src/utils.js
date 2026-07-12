@@ -55,7 +55,7 @@ export const LIFTED_FORMAT = "http://publications.europa.eu/resource/authority/f
 
 export const PATHS = {
     federation:     "config/federation.ttl",
-    matchKnowledge: "config/match-knowledge.ttl",
+    curation:       "config/curation.ttl",
     registry:       "registry/identity.ttl",
     registryHistory: "registry/history.ttl",
     geocache:       "registry/geocache.json",

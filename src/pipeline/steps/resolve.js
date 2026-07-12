@@ -55,7 +55,7 @@ export const runResolve = async ({ store, defStore, abs }, outPath) => {
         }`, [defStore])
     const overrides = new Map(overrideRows.map(r => [r.on, lookupStrategy(r.strategy)]))
 
-    // Curated corrections (match-knowledge.ttl): a :wrong literal is a known
+    // Curated corrections (curation.ttl): a :wrong literal is a known
     // source error (e.g. a typo) beyond algorithmic reach. Every occurrence
     // under the :on predicate — scoped by :entity when present, corpus-wide
     // when absent — is rewritten to :right before the strategies pick, so when

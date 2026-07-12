@@ -17,7 +17,7 @@ example/
   config/
     federation.ttl        # the decisions: sources + facts, target schemas,
                           # field mappings, match/merge/resolve rules
-    match-knowledge.ttl   # curated owl:sameAs pairs (empty here)
+    curation.ttl          # curated owl:sameAs pairs, value corrections (empty here)
   sources/
     cityopen/  { extract.sparql, static/libraries.json }
     civichub/  { extract.sparql, static/libraries.json }

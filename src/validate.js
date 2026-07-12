@@ -12,7 +12,7 @@ const XYZ = "http://sparql.xyz/facade-x/data/"
 // automatically before the engines; `directory-builder validate` triggers it
 // on its own.
 
-const checks = [sourcesFoldersInSync, federationConformsToShape]
+const checks = [sourcesFoldersInSync, federationConformsToShape, noLegacyCurationFile]
 
 export async function validate(root = process.cwd()) {
     const abs = (p) => path.join(root, p)
@@ -47,6 +47,15 @@ function sourcesFoldersInSync({ abs, quads }) {
         if (!declaredNames.includes(name)) problems.push(`sources/${name}/ has no :hasSource declaration in ${PATHS.federation}`)
     }
     return problems
+}
+
+// curation.ttl is optional, so a file left under its legacy name would silently
+// stop being loaded and its curated merges/corrections would vanish — the one
+// failure mode of the rename this check can catch.
+function noLegacyCurationFile({ abs }) {
+    return fs.existsSync(abs("config/match-knowledge.ttl"))
+        ? [`config/match-knowledge.ttl is the legacy name and no longer loaded, rename it to ${PATHS.curation}`]
+        : []
 }
 
 // federation.ttl conforms to the engine's config contract, expressed as SHACL

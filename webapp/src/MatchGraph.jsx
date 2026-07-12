@@ -3,10 +3,10 @@
 // cross-lane :hasRelationship edges between merged entities. All structure — lanes,
 // order, colours, titles, relationships — is derived from federation.ttl inside
 // loadMatch.js; this file only adds node text labels, the stats line and the modal.
-// Reads:  data/pipeline/{matches,merged,mapped}.ttl, config/{federation,match-knowledge}.ttl
+// Reads:  data/pipeline/{matches,merged,mapped}.ttl, config/{federation,curation}.ttl
 // Does:   renders the Match page (<ColumnGraph> + per-cluster details modal)
 
-import { displayPrefixes, federationTtl, matchKnowledgeTtl, mappedTtl, matchesTtl, mergedTtl } from "./instanceData.js"
+import { displayPrefixes, federationTtl, curationTtl, mappedTtl, matchesTtl, mergedTtl } from "./instanceData.js"
 import { loadSourceMeta, loadSourceOfRecord } from "./sourceMeta.js"
 import { CDP, groupBySubject, parseTtl, shrink } from "@directory-builder/core/utils"
 import React, { useMemo, useState } from "react"
@@ -83,11 +83,11 @@ const cellValue = (iri, p) => {
     return t?.get(SCHEMA_NAME)?.[0] ?? t?.get(SCHEMA_STREET)?.[0] ?? prefixed(target)
 }
 
-const manualPairs = parseTtl(matchKnowledgeTtl)
+const manualPairs = parseTtl(curationTtl)
     .filter(q => q.predicate.value === OWL_SAME_AS)
     .map(q => [q.subject.value, q.object.value])
 
-const distinctPairs = parseTtl(matchKnowledgeTtl)
+const distinctPairs = parseTtl(curationTtl)
     .filter(q => q.predicate.value === OWL_DIFFERENT_FROM)
     .map(q => [q.subject.value, q.object.value])
 

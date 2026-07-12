@@ -12,7 +12,7 @@ artefacts — no engine code:
 config/
   federation.ttl        # the decisions: sources + facts, target schemas,
                         # field mappings, match/merge/resolve rules
-  match-knowledge.ttl   # optional: curated owl:sameAs pairs, value corrections
+  curation.ttl          # optional: curated owl:sameAs pairs, value corrections
 sources/<name>/
   fetch.js              # how to fetch this source
   extract.sparql        # how to extract entities from its lifted RDF
@@ -65,7 +65,7 @@ for the full contract it must satisfy. Then, per source:
 
 Optionally add curated `owl:sameAs` / `owl:differentFrom` pairs and
 `:ValueCorrection` entries (known-wrong literals, rewritten at resolve) in
-`config/match-knowledge.ttl`.
+`config/curation.ttl`.
 
 Check the setup before running: `npx directory-builder validate`.
 

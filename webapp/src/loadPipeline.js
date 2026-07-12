@@ -6,8 +6,8 @@
 //         fill, light-gray border) above each Fetch step, step nodes labelled
 //         by their type (fetch/lift/extract/map/match/merge/resolve/enrich),
 //         and an End sink so the last step's output is shown on a visible edge, plus a
-//         boundary node feeding the Match step with the conventional
-//         match-knowledge file. Edge labels come from federation.ttl —
+//         boundary node feeding the match and resolve steps with the
+//         conventional curation file. Edge labels come from federation.ttl —
 //         a source's :format (uppercased) and :retrieval — or from the
 //         conventions: Lift emits Turtle (LIFTED_FORMAT), other steps their
 //         output file(s) per PATHS, resolved per source for Extract steps.
@@ -118,15 +118,17 @@ export function loadPipeline(stepTtls, federationTtl) {
         endEdges.push({ from: lastIri, to: "end", value: edgeLabel(lastIri) ?? undefined, centered: true })
     }
 
-    // Side input: the Match step consumes the conventional match-knowledge
-    // file — a boundary node labelled with the file basename.
-    const matchIri = [...stepType].find(([, t]) => t === "Match")?.[0]
+    // Side input: the conventional curation file feeds the two steps that act
+    // on it — match (sameAs/differentFrom pairs) and resolve (value
+    // corrections). One file, so one boundary node, with an edge per consumer.
+    const curationIris = [...stepType].filter(([, t]) => ["Match", "Resolve"].includes(t)).map(([iri]) => iri)
     const inputNodes = []
     const inputEdges = []
-    if (matchIri) {
-        const inId = `input:${PATHS.matchKnowledge}`
+    if (curationIris.length) {
+        const inId = `input:${PATHS.curation}`
         inputNodes.push({ id: inId, label: "input", type: "Input", color: "transparent", borderColor: LANE_BORDER })
-        inputEdges.push({ from: inId, to: matchIri, value: basename(PATHS.matchKnowledge), centered: true, sideInput: true })
+        inputEdges.push(...curationIris.map((to) =>
+            ({ from: inId, to, value: basename(PATHS.curation), centered: true, sideInput: true })))
     }
 
     return {

@@ -29,7 +29,7 @@ export const displayPrefixes = { cdp: CDP, ...prefixesOf(federationTtl) }
 export const federationLabel = fedQuads.find((q) =>
     q.subject.value === `${CDP}federation` && q.predicate.value === "http://www.w3.org/2000/01/rdf-schema#label")?.object.value
 
-const FIXED = [PATHS.matchKnowledge, PATHS.ingestLog, PATHS.federateLog, PATHS.mapped,
+const FIXED = [PATHS.curation, PATHS.ingestLog, PATHS.federateLog, PATHS.mapped,
                PATHS.matches, PATHS.merged, PATHS.provenance, PATHS.final, PATHS.about, PATHS.query]
 const [fixedTexts, extractedTexts, preparationTexts] = await Promise.all([
     Promise.all(FIXED.map(fetchText)),
@@ -37,6 +37,6 @@ const [fixedTexts, extractedTexts, preparationTexts] = await Promise.all([
     Promise.all(preparationPaths.map(fetchText)),
 ])
 
-export const [matchKnowledgeTtl, ingestLogTtl, federateLogTtl, mappedTtl, matchesTtl, mergedTtl, provenanceTtl, finalTtl, aboutMd, querySparql] = fixedTexts
+export const [curationTtl, ingestLogTtl, federateLogTtl, mappedTtl, matchesTtl, mergedTtl, provenanceTtl, finalTtl, aboutMd, querySparql] = fixedTexts
 export const extractedByPath = Object.fromEntries(extractedPaths.map((p, i) => [p, extractedTexts[i]]))
 export const preparationByPath = Object.fromEntries(preparationPaths.map((p, i) => [p, preparationTexts[i]]))

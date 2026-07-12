@@ -227,14 +227,18 @@ export function toFlow({ nodes, edges, columns, colors, centerColumns, orderColu
         }
     })
 
-    // A side-input source (e.g. the Match step's knowledge graph) is parked one
-    // sibling-gap beside the step it feeds — where a sibling of that step would
-    // sit — so its edge stays short instead of trailing in from the column edge.
+    // A side-input source (e.g. the curation file) is parked one sibling-gap
+    // beside the first step it feeds — where a sibling of that step would sit —
+    // so its edge stays short instead of trailing in from the column edge;
+    // edges to further consumers run from there.
+    const parked = new Set()
     for (const e of edges) {
-        if (!e.sideInput) continue
+        if (!e.sideInput || parked.has(e.from)) continue
         const tgt = positions.get(e.to)
         const src = positions.get(e.from)
-        if (tgt && src) positions.set(e.from, { x: src.x, y: tgt.y + siblingGap })
+        if (!tgt || !src) continue
+        positions.set(e.from, { x: src.x, y: tgt.y + siblingGap })
+        parked.add(e.from)
     }
 
     // Anchor columns: barycenter over ALL edge neighbours (not just incoming) —

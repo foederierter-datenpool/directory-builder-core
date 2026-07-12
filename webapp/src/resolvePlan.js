@@ -1,12 +1,12 @@
 // How resolve settles each Merge conflict: the strategy federation.ttl assigns
 // to the predicate, the value(s) that survived into final.ttl, and any curated
-// :ValueCorrection (match-knowledge.ttl) touching the field — a correction's
+// :ValueCorrection (curation.ttl) touching the field — a correction's
 // :entity is translated member → cluster via matches.ttl, mirroring the engine.
-// Reads:  config/{federation,match-knowledge}.ttl, data/pipeline/{matches,final}.ttl
+// Reads:  config/{federation,curation}.ttl, data/pipeline/{matches,final}.ttl
 // Does:   exports resolutionOf(entityIri, field) → { strategy, finals, corrections }
 
 import { CDP, parseTtl, shrink } from "@directory-builder/core/utils"
-import { federationTtl, matchKnowledgeTtl, matchesTtl, finalTtl, displayPrefixes } from "./instanceData.js"
+import { federationTtl, curationTtl, matchesTtl, finalTtl, displayPrefixes } from "./instanceData.js"
 
 const RDF_TYPE = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type"
 const local = (iri) => iri.split("#").pop()
@@ -22,15 +22,15 @@ const overrides = new Map(fedQuads.filter((q) => q.predicate.value === `${CDP}ha
 const mintedOf = new Map(parseTtl(matchesTtl).filter((q) => q.predicate.value === `${CDP}hasMember`)
     .map((q) => [q.object.value, q.subject.value]))
 
-const mkQuads = parseTtl(matchKnowledgeTtl)
-const CORRECTIONS = mkQuads.filter((q) => q.predicate.value === RDF_TYPE && q.object.value === `${CDP}ValueCorrection`)
+const curationQuads = parseTtl(curationTtl)
+const CORRECTIONS = curationQuads.filter((q) => q.predicate.value === RDF_TYPE && q.object.value === `${CDP}ValueCorrection`)
     .map((q) => {
-        const entity = objOf(mkQuads, q.subject.value, "entity")
+        const entity = objOf(curationQuads, q.subject.value, "entity")
         return {
             entity: entity && (mintedOf.get(entity) ?? entity),
-            on: objOf(mkQuads, q.subject.value, "on"),
-            wrong: objOf(mkQuads, q.subject.value, "wrong"),
-            right: objOf(mkQuads, q.subject.value, "right"),
+            on: objOf(curationQuads, q.subject.value, "on"),
+            wrong: objOf(curationQuads, q.subject.value, "wrong"),
+            right: objOf(curationQuads, q.subject.value, "right"),
         }
     })
 
