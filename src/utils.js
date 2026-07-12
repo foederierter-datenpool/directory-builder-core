@@ -58,6 +58,7 @@ export const PATHS = {
     matchKnowledge: "config/match-knowledge.ttl",
     registry:       "registry/identity.ttl",
     registryHistory: "registry/history.ttl",
+    geocache:       "registry/geocache.json",
     about:          "webapp/content/about.md",
     query:          "webapp/content/query.sparql",
     fetchScript: (name) => `sources/${name}/fetch.js`,
@@ -77,6 +78,7 @@ export const PATHS = {
     matches:     "data/pipeline/matches.ttl",
     merged:      "data/pipeline/merged.ttl",
     provenance:  "data/pipeline/provenance.ttl",
+    resolved:    "data/pipeline/resolved.ttl",
     final:       "data/pipeline/final.ttl",
 }
 

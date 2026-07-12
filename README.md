@@ -53,7 +53,8 @@ instance and the full data flow.
 ### Configuring the pipeline
 
 Edit `config/federation.ttl` — the federation's decisions (sources, target
-schemas, field mappings, match/merge/resolve rules). It's the one required
+schemas, field mappings, match/merge/resolve rules, an opt-in `:EnrichRule`
+to geocode a schema's entities via Nominatim). It's the one required
 file; see [`example/config/federation.ttl`](example/config/federation.ttl) for
 a worked example and [`src/validate/federation.shacl.ttl`](src/validate/federation.shacl.ttl)
 for the full contract it must satisfy. Then, per source:
@@ -77,7 +78,7 @@ Via command (root = where you invoke):
 ```sh
 npx directory-builder            # full pipeline: ingest + federate
 npx directory-builder ingest     # fetch + lift only
-npx directory-builder federate   # extract → map → match → merge → resolve only
+npx directory-builder federate   # extract → map → match → merge → resolve (→ enrich) only
 ```
 
 Or programmatically:

@@ -4,8 +4,8 @@
 //         Pipeline.jsx
 // Does:   returns { nodes, edges } — Source lane-header nodes (transparent
 //         fill, light-gray border) above each Fetch step, step nodes labelled
-//         by their type (fetch/lift/extract/map/match/merge/resolve), and an
-//         End sink so resolve's output is shown on a visible edge, plus a
+//         by their type (fetch/lift/extract/map/match/merge/resolve/enrich),
+//         and an End sink so the last step's output is shown on a visible edge, plus a
 //         boundary node feeding the Match step with the conventional
 //         match-knowledge file. Edge labels come from federation.ttl —
 //         a source's :format (uppercased) and :retrieval — or from the
@@ -27,12 +27,15 @@ const LANE_BORDER = "#bbb"
 const basename = (path) => path.replace(/^.*\//, "")
 
 // Output file(s) per step type, by the PATHS conventions (name = source name).
+// The last step writes final.ttl, so resolve's output is only the intermediate
+// resolved.ttl when an enrich step follows.
 const STEP_OUTPUTS = {
     Extract:   (name) => [PATHS.extracted(name)],
     Map:     () => [PATHS.mapped],
     Match:   () => [PATHS.matches],
     Merge:   () => [PATHS.merged, PATHS.provenance],
-    Resolve: () => [PATHS.final],
+    Resolve: (name, enriched) => [enriched ? PATHS.resolved : PATHS.final],
+    Enrich:  () => [PATHS.final, PATHS.geocache],
 }
 
 export function loadPipeline(stepTtls, federationTtl) {
@@ -59,9 +62,10 @@ export function loadPipeline(stepTtls, federationTtl) {
     }
     const stepType = new Map([...isStep].map((iri) => [iri, nsTypeOf.get(iri)]))
 
+    const enriched = [...stepType.values()].includes("Enrich")
     const fileLabel = (iri) => {
         const src = sourceOfStep.get(iri)
-        const outs = (STEP_OUTPUTS[stepType.get(iri)] ?? (() => []))(src && sourceName(src)).map(basename)
+        const outs = (STEP_OUTPUTS[stepType.get(iri)] ?? (() => []))(src && sourceName(src), enriched).map(basename)
         return outs.length ? outs.join("\n") : null
     }
     // A Fetch step emits its source's :format from federation.ttl; a Lift
@@ -103,13 +107,15 @@ export function loadPipeline(stepTtls, federationTtl) {
         laneEdges.push({ from: laneId, to: iri, value: retrievalBySubject.get(sourceIri), centered: true })
     }
 
-    // End sink so resolve's output (final.ttl) is shown on a visible edge.
-    const resolveIri = [...stepType].find(([, t]) => t === "Resolve")?.[0]
+    // End sink so the last step's output (final.ttl) is shown on a visible
+    // edge — enrich when it ran, resolve otherwise.
+    const lastIri = [...stepType].find(([, t]) => t === "Enrich")?.[0]
+        ?? [...stepType].find(([, t]) => t === "Resolve")?.[0]
     const endNodes = []
     const endEdges = []
-    if (resolveIri) {
+    if (lastIri) {
         endNodes.push({ id: "end", label: "end", type: "End", color: "transparent", borderColor: LANE_BORDER })
-        endEdges.push({ from: resolveIri, to: "end", value: edgeLabel(resolveIri) ?? undefined, centered: true })
+        endEdges.push({ from: lastIri, to: "end", value: edgeLabel(lastIri) ?? undefined, centered: true })
     }
 
     // Side input: the Match step consumes the conventional match-knowledge

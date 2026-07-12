@@ -31,6 +31,10 @@
     sh:property [
         sh:path :hasResolveRule ; sh:maxCount 1 ; sh:nodeKind sh:IRI ; sh:class :ResolveRule ;
         sh:message ":hasResolveRule must be a single :ResolveRule"
+    ] ;
+    sh:property [
+        sh:path :hasEnrichRule ; sh:nodeKind sh:IRI ; sh:class :EnrichRule ;
+        sh:message ":hasEnrichRule must point to :EnrichRule nodes"
     ] .
 
 # ---- Sources ------------------------------------------------------------
@@ -215,4 +219,15 @@
     sh:property [
         sh:path :defaultStrategy ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ;
         sh:message "needs exactly one :defaultStrategy"
+    ] .
+
+# ---- Enrich rules ---------------------------------------------------------
+
+# An EnrichRule adds looked-up data past resolve: :geocode names the target
+# schemas whose resolved entities get Nominatim coordinates.
+:enrichRuleShape a sh:NodeShape ;
+    sh:targetClass :EnrichRule ;
+    sh:property [
+        sh:path :geocode ; sh:minCount 1 ; sh:nodeKind sh:IRI ; sh:class :TargetSchema ;
+        sh:message "needs at least one :geocode (a :TargetSchema)"
     ] .

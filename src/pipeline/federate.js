@@ -8,6 +8,7 @@ import { runPreparation } from "./steps/preparation.js"
 import { runMatch } from "./steps/match.js"
 import { runMerge } from "./steps/merge.js"
 import { runResolve } from "./steps/resolve.js"
+import { geocodeTargets, runEnrich } from "./steps/enrich.js"
 import { DataFactory } from "n3"
 import path from "path"
 import fs from "fs"
@@ -15,8 +16,9 @@ import fs from "fs"
 const df = DataFactory
 
 // ---- Federate engine -----------------------------------------------------
-// Extract per source, load, then map → match → merge → resolve (one module per
-// step under steps/, sharing the ctx of store + config + path resolver). The
+// Extract per source, load, then map → match → merge → resolve, plus enrich
+// when an :EnrichRule opts in (one module per step under steps/, sharing the
+// ctx of store + config + path resolver). The
 // step sequence is the engine's own shape; config declares only the sources,
 // processed in :hasSource declaration order. Paths follow from the source
 // name (PATHS), resolved against the instance `root`. Each step runs through
@@ -71,7 +73,15 @@ export async function federate(root = process.cwd()) {
     })
     const matchStep   = await journal.step("match",   { after: [mapStep] },   () => runMatch(ctx, PATHS.matches, PATHS.registry, PATHS.registryHistory))
     const mergeStep   = await journal.step("merge",   { after: [matchStep] }, () => runMerge(ctx, PATHS.merged, PATHS.provenance))
-    await journal.step("resolve", { after: [mergeStep] }, () => runResolve(ctx, PATHS.final))
+    // Enrichment is opt-in: no :EnrichRule declared → no enrich step, no journal
+    // entry. The last step writes final.ttl — resolve's output is only an
+    // intermediate resolved.ttl when an enrich step follows.
+    const enrichTargets = await geocodeTargets(defStore)
+    const resolveOut = enrichTargets.length ? PATHS.resolved : PATHS.final
+    const resolveStep = await journal.step("resolve", { after: [mergeStep] }, () => runResolve(ctx, resolveOut))
+    if (enrichTargets.length)
+        await journal.step("enrich", { after: [resolveStep] },
+            () => runEnrich(ctx, enrichTargets, PATHS.resolved, PATHS.final, PATHS.provenance, PATHS.geocache))
 
     fs.writeFileSync(abs(PATHS.federateLog), `@prefix :      <${CDP}> .
 @prefix p-plan: <http://purl.org/net/p-plan#> .

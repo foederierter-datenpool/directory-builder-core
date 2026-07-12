@@ -11,8 +11,8 @@ import ColumnGraph from "./ColumnGraph.jsx"
 import HelpTip from "./HelpTip.jsx"
 import React from "react"
 
-const COLUMNS = ["Source", "Fetch", "Lift", "Extract", "Map", "Input", "Match", "Merge", "Resolve", "End"]
-const CENTER_COLUMNS = ["Extract", "Map", "Input", "Match", "Merge", "Resolve", "End"]
+const COLUMNS = ["Source", "Fetch", "Lift", "Extract", "Map", "Input", "Match", "Merge", "Resolve", "Enrich", "End"]
+const CENTER_COLUMNS = ["Extract", "Map", "Input", "Match", "Merge", "Resolve", "Enrich", "End"]
 const COLORS = {
     Fetch:   "#d4e7ff",
     Lift:    "#e6f3d8",
@@ -21,6 +21,7 @@ const COLORS = {
     Match:   "#e2d4f4",
     Merge:   "#cfe9d8",
     Resolve: "#c5e0e8",
+    Enrich:  "#cfe8e6",   // the made-not-found teal: enrich adds data no source carries
 }
 
 const { nodes, edges } = loadPipeline([ingestLogTtl, federateLogTtl], federationTtl)
@@ -42,7 +43,10 @@ export default function Pipeline() {
                         {" "}<strong>map</strong> renames each source's fields onto the shared schema
                         vocabulary and is value-neutral; <strong>match</strong> and
                         {" "}<strong>merge</strong> fold duplicate records into one;
-                        {" "}<strong>resolve</strong> writes the final directory.
+                        {" "}<strong>resolve</strong> picks each field's value; an opt-in
+                        {" "}<strong>enrich</strong> step adds looked-up data no source
+                        carries (geocoded coordinates, cached in the registry). The last
+                        step writes the final directory.
                     </div>
                     <div>
                         It's a record of the last run: evidence of the pipeline, not a live process.
