@@ -13,3 +13,12 @@ const conflictCount = (entity) => entity.fields.reduce((n, f) => n + (isConflict
 export const mergedEntities = loadMerge(mergedTtl, provTtl, federationTtl).sort((a, b) => conflictCount(b) - conflictCount(a) || a.iri.localeCompare(b.iri))
 const orderIndex = new Map(mergedEntities.map((o, i) => [o.iri, i]))
 export const finalEntities = loadMerge(finalTtl, "", federationTtl).sort((a, b) => (orderIndex.get(a.iri) ?? Infinity) - (orderIndex.get(b.iri) ?? Infinity))
+
+// The :Sources that contributed to each entity (Source IRIs), for the source
+// filter on the Merge and Directory pages. Merge entities carry it on their
+// per-record columns; final entities load without provenance (single resolved
+// values, no per-source columns), so they inherit it from the merged entity of
+// the same canonical IRI.
+for (const e of mergedEntities) e.sources = [...new Set(e.columns.map((c) => c.source).filter(Boolean))]
+const sourcesByIri = new Map(mergedEntities.map((e) => [e.iri, e.sources]))
+for (const e of finalEntities) e.sources = sourcesByIri.get(e.iri) ?? []

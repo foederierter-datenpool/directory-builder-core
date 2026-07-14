@@ -11,6 +11,8 @@ import { CDP, parseTtl } from "@directory-builder/core/utils"
 import { mergedEntities } from "./mergeEntities.js"
 import { federationTtl } from "./instanceData.js"
 import { schemaOptions } from "./filters.js"
+import { loadSourceMeta } from "./sourceMeta.js"
+import { useSourceParam } from "./useSourceParam.js"
 import CheckboxDropdown from "./CheckboxDropdown.jsx"
 import Dropdown from "./Dropdown.jsx"
 import EntityCard, { isConflict } from "./EntityCard.jsx"
@@ -24,6 +26,8 @@ const REL_PREDS = new Set(fedQuads.filter((q) => relFields.has(q.subject.value) 
 const SCHEMAS = schemaOptions(federationTtl)
 const SCHEMA_OPTS = SCHEMAS.map((s) => ({ key: s.type, label: s.label }))
 const tierLabel = new Map(SCHEMAS.map((s) => [s.type, s.label]))
+const SOURCES = [...loadSourceMeta(federationTtl).values()]
+const SOURCE_OPTS = SOURCES.map((s) => ({ key: s.iri, label: s.label }))
 
 const menuItem = { display: "flex", alignItems: "center", gap: 6, padding: "2px 0", whiteSpace: "nowrap" }
 
@@ -81,13 +85,20 @@ function StatsModal({ onClose }) {
 
 export default function MergeTables() {
     const [selected, setSelected] = useState(new Set(SCHEMAS.map((s) => s.type)))
+    const [visibleSources, setVisibleSources, sourceMode, setSourceMode] = useSourceParam(SOURCES)  // mode: any = union, all = overlap
     const [group, setGroup] = useState(true)
     const [compact, setCompact] = useState(true)
     const [highlight, setHighlight] = useState(true)
     const [showStats, setShowStats] = useState(false)
 
     const rows = useMemo(() => {
-        const visible = mergedEntities.filter((e) => selected.has(e.type))
+        const sel = visibleSources
+        // any: entity any selected source fed into. all: only entities every
+        // selected source fed into (their overlap) — empty selection shows nothing.
+        const bySource = sourceMode === "all"
+            ? (e) => sel.size > 0 && [...sel].every((s) => e.sources.includes(s))
+            : (e) => e.sources.some((s) => sel.has(s))
+        const visible = mergedEntities.filter((e) => selected.has(e.type) && bySource(e))
         if (!group) return visible.map((e) => ({ e, depth: 0 }))
 
         // Hierarchy over the surviving set only: a child whose parent was filtered
@@ -115,7 +126,7 @@ export default function MergeTables() {
         visible.filter((e) => !hasParent.has(e.iri)).forEach((e) => walk(e, 0))
         visible.forEach((e) => walk(e, 0))   // catch reference cycles
         return out
-    }, [selected, group])
+    }, [selected, visibleSources, sourceMode, group])
 
     return (
         <div className="page" style={{ overflowY: "auto", height: "100%" }}>
@@ -138,6 +149,8 @@ export default function MergeTables() {
                     </div>
                 </HelpTip>
                 <CheckboxDropdown options={SCHEMA_OPTS} selected={selected} onChange={setSelected} noun="type" />
+                <CheckboxDropdown options={SOURCE_OPTS} selected={visibleSources} onChange={setVisibleSources} noun="source"
+                    matchMode={sourceMode} onMatchMode={setSourceMode} />
                 <Dropdown label="View">
                     <label style={menuItem}>
                         <input type="checkbox" checked={group} onChange={(e) => setGroup(e.target.checked)} /> Group by hierarchy

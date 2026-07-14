@@ -5,6 +5,11 @@
 // where every source at once is too dense). Selecting exactly the default clears
 // the param back to a clean URL; an explicit ?src= overrides the default on any
 // page. Nav links drop the query, so pages apply their own default on arrival.
+//
+// The match mode rides along in ?srcmatch (Merge/Directory source filter): "any"
+// (union, the default, param absent) or "all" (overlap — entities every selected
+// source fed into). Returned as [visible, setVisible, mode, setMode]; the Map
+// destructures only the first two and never sets a mode, so its URL stays clean.
 
 import { useMemo } from "react"
 import { useSearchParams } from "react-router-dom"
@@ -26,5 +31,13 @@ export function useSourceParam(sources, { defaultFirst = false } = {}) {
         isDefault ? p.delete("src") : p.set("src", iris.map((i) => notationOf.get(i)).join(","))
         return p
     }, { replace: true })
-    return [visible, setVisible]
+
+    const mode = searchParams.get("srcmatch") === "all" ? "all" : "any"
+    const setMode = (next) => setSearchParams((prev) => {
+        const p = new URLSearchParams(prev)
+        next === "all" ? p.set("srcmatch", "all") : p.delete("srcmatch")
+        return p
+    }, { replace: true })
+
+    return [visible, setVisible, mode, setMode]
 }

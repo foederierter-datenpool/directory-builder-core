@@ -8,13 +8,26 @@ import HelpTip from "./HelpTip.jsx"
 import { finalEntities } from "./mergeEntities.js"
 import { federationTtl } from "./instanceData.js"
 import { schemaOptions } from "./filters.js"
+import { loadSourceMeta } from "./sourceMeta.js"
+import { useSourceParam } from "./useSourceParam.js"
 import React, { useMemo, useState } from "react"
 
 const SCHEMA_OPTS = schemaOptions(federationTtl).map((s) => ({ key: s.type, label: s.label }))
+const SOURCES = [...loadSourceMeta(federationTtl).values()]
+const SOURCE_OPTS = SOURCES.map((s) => ({ key: s.iri, label: s.label }))
 
 export default function Directory() {
     const [selected, setSelected] = useState(new Set(SCHEMA_OPTS.map((s) => s.key)))
-    const list = useMemo(() => finalEntities.filter((e) => selected.has(e.type)), [selected])
+    const [visibleSources, setVisibleSources, sourceMode, setSourceMode] = useSourceParam(SOURCES)  // mode: any = union, all = overlap
+    const list = useMemo(() => {
+        const sel = visibleSources
+        // any: entity any selected source fed into. all: only entities every
+        // selected source fed into (their overlap) — empty selection shows nothing.
+        const bySource = sourceMode === "all"
+            ? (e) => sel.size > 0 && [...sel].every((s) => e.sources.includes(s))
+            : (e) => e.sources.some((s) => sel.has(s))
+        return finalEntities.filter((e) => selected.has(e.type) && bySource(e))
+    }, [selected, visibleSources, sourceMode])
 
     return (
         <div className="page" style={{ overflowY: "auto", height: "100%" }}>
@@ -22,7 +35,8 @@ export default function Directory() {
                 <HelpTip title="The Directory" label="About the Directory">
                     <div>
                         The finished, consumer-facing directory: one card per entity, with
-                        duplicates across sources already merged. Filter by type with the dropdown.
+                        duplicates across sources already merged. Filter by type, or by which
+                        sources fed into an entity, with the dropdowns.
                     </div>
                     <div>
                         This is the end product the pipeline builds. The views under
@@ -31,6 +45,8 @@ export default function Directory() {
                     </div>
                 </HelpTip>
                 <CheckboxDropdown options={SCHEMA_OPTS} selected={selected} onChange={setSelected} noun="type" />
+                <CheckboxDropdown options={SOURCE_OPTS} selected={visibleSources} onChange={setVisibleSources} noun="source"
+                    matchMode={sourceMode} onMatchMode={setSourceMode} />
             </div>
             {list.map((entity) => <EntityCard key={entity.iri} entity={entity} compact={true} highlight={false} />)}
         </div>
