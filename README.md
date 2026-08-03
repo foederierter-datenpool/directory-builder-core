@@ -13,6 +13,8 @@ config/
   federation.ttl        # the decisions: sources + facts, target schemas,
                         # field mappings, match/merge/resolve rules
   curation.ttl          # optional: curated owl:sameAs pairs, value corrections
+  publication.ttl       # optional: DCAT-AP.de catalog metadata; present turns
+                        # the publish step on (→ data/publish/catalog.ttl)
 sources/<name>/
   fetch.js              # how to fetch this source
   extract.sparql        # how to extract entities from its lifted RDF
@@ -63,9 +65,19 @@ for the full contract it must satisfy. Then, per source:
 - create `sources/<name>/extract.sparql` (optional when a field maps to `schema:identifier`)
 - for static-file sources, put the data in `sources/<name>/static/`
 
+Add `:federation :baseUrl "https://example.org/directory/"` for a directory that
+gets deployed: it is the single statement of where the webapp lives, feeding both
+the webapp build's base and the IRIs the publish step below writes.
+
 Optionally add curated `owl:sameAs` / `owl:differentFrom` pairs and
 `:ValueCorrection` entries (known-wrong literals, rewritten at resolve) in
 `config/curation.ttl`.
+
+To publish the directory as an open dataset, add `config/publication.ttl` —
+[DCAT-AP.de 3.0](https://www.dcat-ap.de/def/dcatde/3.0/spec/) catalog metadata
+(publisher, licence, themes); see
+[`example/config/publication.ttl`](example/config/publication.ttl). The catalog and the other nodes it describes are
+published under `:federation :baseUrl`. 
 
 Check the setup before running: `npx directory-builder validate`.
 
@@ -134,8 +146,14 @@ webapp code. From an instance directory:
 
 ```sh
 npx directory-builder webapp                         # dev server
-npx directory-builder webapp build --base /repo/     # production build → webapp/dist/
+npx directory-builder webapp build                    # production build → webapp/dist/
+npx directory-builder webapp build --base /repo/     # ... with an explicit vite base
 ```
+
+The build's base comes from `:federation :baseUrl`'s path when that is declared,
+so a deployment states its URL once and the built site's asset paths cannot
+drift from the IRIs the published catalog points at. `--base` overrides it (and
+warns when the two disagree).
 
 `webapp build` stages the instance's `config/`, `data/` and
 `webapp/{content,exporters}/` into `webapp/dist/` next to the bundle —

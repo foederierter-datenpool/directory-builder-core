@@ -9,6 +9,7 @@
 //   directory-builder validate                 check the instance's config ↔ sources/ integrity
 //   directory-builder webapp                   dev server for the instance's webapp
 //   directory-builder webapp build [--base /x/]  build the webapp → <instance>/webapp/dist/
+//     (base defaults to the path of :federation :baseUrl; --base overrides it)
 
 import { webappBuild, webappDev } from "../src/webapp.js"
 import { Pipeline } from "../src/pipeline.js"

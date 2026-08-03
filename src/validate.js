@@ -12,7 +12,7 @@ const XYZ = "http://sparql.xyz/facade-x/data/"
 // automatically before the engines; `directory-builder validate` triggers it
 // on its own.
 
-const checks = [sourcesFoldersInSync, federationConformsToShape, noLegacyCurationFile]
+const checks = [sourcesFoldersInSync, federationConformsToShape, noLegacyCurationFile, catalogConformsToShape]
 
 export async function validate(root = process.cwd()) {
     const abs = (p) => path.join(root, p)
@@ -61,12 +61,24 @@ function noLegacyCurationFile({ abs }) {
 // federation.ttl conforms to the engine's config contract, expressed as SHACL
 // in federation.shacl.ttl next to this file - the shape ships with the
 // package, instances never carry it.
-const validator = buildValidator(fs.readFileSync(path.join(import.meta.dirname, "validate/federation.shacl.ttl"), "utf8"))
+const shapeValidator = (file) => buildValidator(fs.readFileSync(path.join(import.meta.dirname, "validate", file), "utf8"))
+const validator = shapeValidator("federation.shacl.ttl")
 
 async function federationConformsToShape({ ttl }) {
     const report = await validator.validate({ dataset: turtleToDataset(ttl) })
     return report.results.map((r) =>
         `${PATHS.federation}: ${shrink(r.focusNode.value, { "": CDP })} ${r.message.map((m) => m.value).join("; ")}`)
+}
+
+// The published catalog conforms to the DCAT-AP.de constraints in
+// publish.shacl.ttl. Publishing is opt-in, so no catalog.ttl (no
+// publication.ttl, or never run) is not a problem.
+const catalogValidator = shapeValidator("publish.shacl.ttl")
+
+async function catalogConformsToShape({ abs }) {
+    if (!fs.existsSync(abs(PATHS.catalog))) return []
+    const report = await catalogValidator.validate({ dataset: turtleToDataset(fs.readFileSync(abs(PATHS.catalog), "utf8")) })
+    return report.results.map((r) => `${PATHS.catalog}: ${r.focusNode.value} ${r.message.map((m) => m.value).join("; ")}`)
 }
 
 // Post-extract drift check (config ↔ real data): the map step reads xyz:<fieldPath>

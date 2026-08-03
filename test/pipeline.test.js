@@ -283,3 +283,78 @@ test("the default longestValue strategy keeps the fullest conflicting value", as
     const descs = final.filter((q) => q.predicate.value === "http://schema.org/description").map((q) => q.object.value)
     assert.deepEqual(descs, ["Zentrum für umfassende Sozialberatung"])
 })
+
+// ---- Test: the opt-in publish step -------------------------------------------
+// publication.ttl turns the publish step on; the catalog it writes must satisfy
+// the DCAT-AP.de constraints in publish.shacl.ttl, which validate() checks.
+// Publishing needs a deployment URL, declared once for the whole instance —
+// every published IRI below is built on this :baseUrl.
+const publishedFederation = federation.replace(
+    ":hasSource :alphaSource, :betaSource .",
+    ':hasSource :alphaSource, :betaSource ; :baseUrl "https://example.org/d/" .')
+
+const publication = `
+@prefix :       <https://civic-data.de/pipeline#> .
+@prefix dcat:   <http://www.w3.org/ns/dcat#> .
+@prefix dct:    <http://purl.org/dc/terms/> .
+@prefix dcatde: <http://dcat-ap.de/def/dcatde/> .
+@prefix foaf:   <http://xmlns.com/foaf/0.1/> .
+
+:federation a dcat:Catalog ;
+    dct:title "Testkatalog"@de ; dct:description "Testbeschreibung"@de ; dct:publisher :publisher .
+:publisher a foaf:Agent ; foaf:name "Test e.V." .
+:thingSchema :publishedAs :thingDataset .
+:thingDataset a dcat:Dataset ;
+    dct:title "Dinge"@de ; dct:description "Testdaten"@de ; dct:publisher :publisher .
+:distributionDefaults a :DistributionTemplate ;
+    dct:license <http://dcat-ap.de/def/licenses/dl-by-de/2.0> ;
+    dcatde:licenseAttributionByText "Test e.V." .
+`
+
+test("publish writes a catalog conforming to the DCAT-AP.de shape", async () => {
+    const root = makeInstance("publish", { federation: publishedFederation, sources: { alpha, beta }, publication })
+    await new Pipeline({ root }).run()
+    assert.deepEqual(await validate(root), [])
+    const catalog = parseTtl(fs.readFileSync(path.join(root, PATHS.catalog), "utf8"))
+    const dist = `https://example.org/d/${PATHS.final}`
+    assert.ok(catalog.some((q) => q.predicate.value === "http://www.w3.org/ns/dcat#distribution"
+        && q.object.value === dist), "the dataset carries the derived Turtle distribution")
+    assert.ok(catalog.some((q) => q.subject.value === dist
+        && q.predicate.value === "http://dcat-ap.de/def/dcatde/licenseAttributionByText"),
+        "the distribution template is stamped onto it")
+    // The config's subjects live in the shared pipeline namespace, so they are
+    // renamed onto :baseUrl — one instance's catalog must be identifiable.
+    assert.deepEqual(
+        catalog.filter((q) => q.predicate.value === "http://www.w3.org/ns/dcat#dataset").map((q) => q.object.value),
+        ["https://example.org/d/#thingDataset"])
+    assert.ok(catalog.some((q) => q.subject.value === "https://example.org/d/#catalog"
+        && q.object.value === "http://www.w3.org/ns/dcat#Catalog"), "the catalog is published under :baseUrl")
+    assert.ok(!catalog.some((q) => q.subject.value.startsWith(CDP) || q.object.value.startsWith(CDP)),
+        "no pipeline-namespace term (:publishedAs and its :TargetSchema) reaches the published catalog")
+    // The browser-built formats have no URL, so the Download page is the only
+    // way a harvested dataset can offer anything but Turtle.
+    assert.deepEqual(
+        catalog.filter((q) => q.predicate.value === "http://www.w3.org/ns/dcat#landingPage").map((q) => q.object.value),
+        ["https://example.org/d/#/download"])
+    assert.deepEqual(
+        catalog.filter((q) => q.predicate.value === "http://dcat-ap.de/def/dcatde/qualityProcessURI").map((q) => q.object.value),
+        ["https://example.org/d/#/pipeline"])
+    // The dataset's :TargetSchema :targetClass, the one triple saying what is inside.
+    assert.deepEqual(
+        catalog.filter((q) => q.predicate.value === "http://purl.org/dc/terms/conformsTo").map((q) => q.object.value),
+        ["http://schema.org/Thing"])
+    // Origins per dataset, from the :Mapping declarations: both sources map
+    // into the one target schema here, in :hasSource declaration order.
+    assert.deepEqual(
+        catalog.filter((q) => q.predicate.value === "http://www.w3.org/2000/01/rdf-schema#label").map((q) => q.object.value),
+        ["Merged from alpha, beta by this directory's pipeline."])
+})
+
+test("validate rejects a catalog missing the attribution an attribution license needs", async () => {
+    const root = makeInstance("publish-bad", { federation: publishedFederation, sources: { alpha, beta },
+        publication: publication.replace(/ ;\n    dcatde:licenseAttributionByText "Test e.V."/, "") })
+    await new Pipeline({ root }).run()
+    const problems = await validate(root)
+    assert.equal(problems.length, 1)
+    assert.match(problems[0], /licenseAttributionByText/)
+})

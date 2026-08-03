@@ -25,6 +25,15 @@
     sh:property [
         sh:path :hasTargetSchema ; sh:nodeKind sh:IRI ; sh:class :TargetSchema ;
         sh:message ":hasTargetSchema must point to :TargetSchema nodes"
+    ] ;
+    # Where the webapp is deployed. Optional (a directory need not be public),
+    # but publishing needs it: the published IRIs and the distribution's
+    # accessURL are built from it by concatenation, and it sets the webapp
+    # build's vite base — hence absolute, and ending in "/".
+    sh:property [
+        sh:path :baseUrl ; sh:maxCount 1 ; sh:datatype xsd:string ;
+        sh:pattern "^https?://.+/$" ;
+        sh:message ":baseUrl must be a single absolute http(s) URL ending in \"/\""
     ] .
 
 # ---- Sources ------------------------------------------------------------
