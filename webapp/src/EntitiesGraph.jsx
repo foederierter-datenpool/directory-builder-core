@@ -148,6 +148,12 @@ function Tag({ kind, href, style }) {
         : <span style={s}>{kind}</span>
 }
 
+// Why a mode has nothing to draw. Each mode reads a different part of the
+// config, so an instance can legitimately fill one and leave another empty.
+const Empty = ({ children }) => (
+    <div style={{ padding: "1.25rem", color: "#888", fontSize: 13, maxWidth: "42rem", lineHeight: 1.5 }}>{children}</div>
+)
+
 // Prepare mode: a scrollable, per-source list of entities, each showing what
 // extract changed — in two visually distinct kinds:
 //   split      — one raw field fanned out into ≥2 target fields (a Teaser into
@@ -160,9 +166,10 @@ function Tag({ kind, href, style }) {
 //                field (a "strasse" span → streetAddress). Shown as before → after.
 function PrepareView({ data }) {
     if (!data.length) return (
-        <div style={{ padding: "1.25rem", color: "#888", fontSize: 13 }}>
-            No preparation data yet: run the pipeline to generate <code>data/pipeline/preparation/</code>.
-        </div>
+        <Empty>
+            No value changes recorded in <code>data/pipeline/preparation/</code>. Either the pipeline
+            has not run, or the extract steps produced no before→after difference this view can pair up.
+        </Empty>
     )
     return (
         <div style={{ height: "100%", overflow: "auto", padding: "0.75rem 1.25rem" }}>
@@ -309,7 +316,9 @@ export default function EntitiesGraph() {
                     ? <PrepareView data={prep} />
                     : mode === "flow"
                         ? <ColumnGraph key={graphKey} nodes={flow.nodes} edges={flow.edges} columns={FLOW_COLUMNS} colors={FLOW_COLORS} anchorColumns={["Source"]} orderColumns={["TargetSchema"]} colSpacing={COL_SPACING} columnGap={{ TargetSchema: FLOW_TARGET_GAP }} columnTitles={FLOW_TITLES} />
-                        : <ColumnGraph key={graphKey} nodes={links.nodes} edges={links.edges} columns={links.columns} colors={links.colors} colSpacing={COL_SPACING} nodeY={links.nodeY} />}
+                        : links.nodes.length
+                            ? <ColumnGraph key={graphKey} nodes={links.nodes} edges={links.edges} columns={links.columns} colors={links.colors} colSpacing={COL_SPACING} nodeY={links.nodeY} />
+                            : <Empty>No relationships between target schemas. A source declares them with <code>:hasRelationship</code>, which links one target schema to another (an organisation to its address, say).</Empty>}
             </div>
         </div>
     )

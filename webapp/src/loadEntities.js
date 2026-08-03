@@ -60,10 +60,13 @@ export function loadEntities(ttl, { hiddenSources } = {}) {
 
     // Source → Entity: the record fanning out into its typed entities, kept
     // contiguous per source so a source's entities stack together in the column.
-    for (const [src, ents] of f.entitiesOfSource) {
+    // A flat source (fields hung straight off it via :hasField, no :hasEntity)
+    // has no split to draw, so it contributes only its own node and reaches its
+    // schema directly — hence iterating every source, not just the splitting ones.
+    for (const src of f.sources) {
         if (!visible.has(src)) continue
         nodes.push({ id: src, label: f.label(src), type: "Source" })
-        for (const ent of ents) {
+        for (const ent of f.entitiesOfSource.get(src) ?? []) {
             nodes.push({ id: ent, label: f.label(ent), type: "Entity" })
             addEdge(src, ent)
         }
