@@ -14,7 +14,8 @@ config/
                         # field mappings, match/merge/resolve rules
   curation.ttl          # optional: curated owl:sameAs pairs, value corrections
   publication.ttl       # optional: DCAT-AP.de catalog metadata; present turns
-                        # the publish step on (→ data/publish/catalog.ttl)
+                        # the publish step on (→ data/publish/catalog.ttl).
+                        # `init publication` drafts one from federation.ttl
 sources/<name>/
   fetch.js              # how to fetch this source
   extract.sparql        # how to extract entities from its lifted RDF
@@ -73,11 +74,28 @@ Optionally add curated `owl:sameAs` / `owl:differentFrom` pairs and
 `:ValueCorrection` entries (known-wrong literals, rewritten at resolve) in
 `config/curation.ttl`.
 
-To publish the directory as an open dataset, add `config/publication.ttl` —
-[DCAT-AP.de 3.0](https://www.dcat-ap.de/def/dcatde/3.0/spec/) catalog metadata
-(publisher, licence, themes); see
-[`example/config/publication.ttl`](example/config/publication.ttl). The catalog and the other nodes it describes are
-published under `:federation :baseUrl`. 
+To publish the directory as an open dataset, add `config/publication.ttl`. Start
+from a draft derived from your federation:
+
+```sh
+npx directory-builder init publication
+```
+
+It writes the catalog node, its homepage from `:baseUrl`, and one `dcat:Dataset`
+per target schema — titled from each schema's `rdfs:label` — leaving a `TODO:`
+placeholder wherever only you can decide (publisher, contact, licence, prose).
+The draft is valid as it stands, so the publish step works immediately and the
+placeholders show up in the published catalog until you replace them; the licence
+placeholder is `other-closed`, which grants nothing, so an unedited draft cannot
+publish data under an open licence nobody chose. From there it is a hand-edited
+config file like the others — nothing regenerates it, and it refuses to
+overwrite.
+
+The file holds [DCAT-AP.de 3.0](https://www.dcat-ap.de/def/dcatde/3.0/spec/)
+catalog metadata (publisher, licence, themes); see
+[`example/config/publication.ttl`](example/config/publication.ttl) for a filled-in
+one. The catalog and the other nodes it describes are published under
+`:federation :baseUrl`.
 
 Check the setup before running: `npx directory-builder validate`.
 

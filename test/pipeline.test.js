@@ -1,5 +1,6 @@
 import { CDP, parseTtl, PATHS } from "@directory-builder/core/utils"
 import { Pipeline, validate } from "@directory-builder/core"
+import { scaffoldPublication } from "../src/publication.js"
 import { makeInstance } from "./helpers/instance.js"
 import assert from "node:assert/strict"
 import { test } from "node:test"
@@ -348,6 +349,29 @@ test("publish writes a catalog conforming to the DCAT-AP.de shape", async () => 
     assert.deepEqual(
         catalog.filter((q) => q.predicate.value === "http://www.w3.org/2000/01/rdf-schema#label").map((q) => q.object.value),
         ["Merged from alpha, beta by this directory's pipeline."])
+})
+
+// ---- Test: the publication.ttl draft ---------------------------------------
+// `directory-builder init publication` writes a first draft from federation.ttl.
+// Its contract is that it is valid on arrival: the publish step runs on it
+// unedited and validate stays clean, so an author fills in decisions rather than
+// debugging shapes. The placeholders must be visible in the published catalog,
+// not hidden in comments, so an unfinished draft cannot ship unnoticed.
+
+test("init publication drafts a valid publication.ttl from federation.ttl", async () => {
+    const root = makeInstance("draft", { federation: publishedFederation, sources: { alpha, beta } })
+    const draft = scaffoldPublication(root)
+    assert.equal(draft.datasets, 1, "one dcat:Dataset per target schema")
+    const ttl = fs.readFileSync(path.join(root, PATHS.publication), "utf8")
+    assert.match(ttl, /:thingSchema :publishedAs :thingDataset \./)
+    assert.match(ttl, /foaf:homepage\s+<https:\/\/example\.org\/d\/>/, ":baseUrl becomes the catalog's homepage")
+
+    await new Pipeline({ root }).run()
+    assert.deepEqual(await validate(root), [], "the unedited draft publishes a valid catalog")
+    const catalog = parseTtl(fs.readFileSync(path.join(root, PATHS.catalog), "utf8"))
+    assert.ok(catalog.some((q) => q.object.value.startsWith("TODO:")), "placeholders reach the catalog")
+    // The draft is hand-edited from here on — config/ holds no regenerated files.
+    assert.throws(() => scaffoldPublication(root), /refusing to overwrite/)
 })
 
 test("validate rejects a catalog missing the attribution an attribution license needs", async () => {
