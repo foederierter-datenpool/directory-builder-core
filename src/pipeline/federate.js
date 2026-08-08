@@ -9,6 +9,7 @@ import { runMatch } from "./steps/match.js"
 import { runMerge } from "./steps/merge.js"
 import { runResolve } from "./steps/resolve.js"
 import { geocodeTargets, runEnrich } from "./steps/enrich.js"
+import { runPublish } from "./steps/publish.js"
 import { DataFactory } from "n3"
 import path from "path"
 import fs from "fs"
@@ -79,10 +80,13 @@ export async function federate(root = process.cwd()) {
     // intermediate resolved.ttl when an enrich step follows.
     const enrichTargets = await geocodeTargets(defStore)
     const resolveOut = enrichTargets.length ? PATHS.resolved : PATHS.final
-    const resolveStep = await journal.step("resolve", { after: [mergeStep] }, () => runResolve(ctx, resolveOut))
+    let lastStep = await journal.step("resolve", { after: [mergeStep] }, () => runResolve(ctx, resolveOut))
     if (enrichTargets.length)
-        await journal.step("enrich", { after: [resolveStep] },
+        lastStep = await journal.step("enrich", { after: [lastStep] },
             () => runEnrich(ctx, enrichTargets, PATHS.resolved, PATHS.final, PATHS.provenance, PATHS.geocache))
+    // Publishing is opt-in the same way: no publication.ttl → no publish step.
+    if (fs.existsSync(abs(PATHS.publication)))
+        await journal.step("publish", { after: [lastStep] }, () => runPublish(ctx, abs(PATHS.catalog)))
 
     fs.writeFileSync(abs(PATHS.federateLog), `@prefix :      <${CDP}> .
 @prefix p-plan: <http://purl.org/net/p-plan#> .

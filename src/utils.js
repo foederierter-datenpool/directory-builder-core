@@ -56,6 +56,7 @@ export const LIFTED_FORMAT = "http://publications.europa.eu/resource/authority/f
 export const PATHS = {
     federation:     "config/federation.ttl",
     curation:       "config/curation.ttl",
+    publication:    "config/publication.ttl",
     registry:       "registry/identity.ttl",
     registryHistory: "registry/history.ttl",
     geocache:       "registry/geocache.json",
@@ -80,6 +81,7 @@ export const PATHS = {
     provenance:  "data/pipeline/provenance.ttl",
     resolved:    "data/pipeline/resolved.ttl",
     final:       "data/pipeline/final.ttl",
+    catalog:     "data/publish/catalog.ttl",
 }
 
 // Format family of a file-type IRI (EU file-type authority): the code before

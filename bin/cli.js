@@ -4,15 +4,18 @@
 // repo needs nothing but config/ + sources/ and this on its PATH).
 //   directory-builder                          run the full pipeline (ingest + federate)
 //   directory-builder init                      scaffold config/ + sources/ from the bundled example
+//   directory-builder init publication         draft config/publication.ttl from federation.ttl
 //   directory-builder ingest                   fetch + lift only
 //   directory-builder federate                 extract → map → match → merge → resolve only
 //   directory-builder validate                 check the instance's config ↔ sources/ integrity
 //   directory-builder webapp                   dev server for the instance's webapp
 //   directory-builder webapp build [--base /x/]  build the webapp → <instance>/webapp/dist/
+//     (base defaults to the path of :federation :baseUrl; --base overrides it)
 
 import { webappBuild, webappDev } from "../src/webapp.js"
 import { Pipeline } from "../src/pipeline.js"
 import { validate } from "../src/validate.js"
+import { scaffoldPublication } from "../src/publication.js"
 import { init } from "../src/scaffold.js"
 
 const [cmd = "run", ...rest] = process.argv.slice(2)
@@ -24,6 +27,17 @@ const flag = (name) => {
 const pipeline = new Pipeline()
 const commands = {
     init:     () => {
+        if (rest[0] && rest[0] !== "publication") {
+            console.error(`Unknown init subcommand "${rest[0]}" — expected "publication" or nothing (the whole instance)`)
+            process.exit(1)
+        }
+        if (rest[0] === "publication") {
+            let draft
+            try { draft = scaffoldPublication() }
+            catch (e) { console.error(e.message); process.exit(1) }
+            console.log(`drafted ${draft.path} — ${draft.datasets} dataset(s), ${draft.todos} TODO(s) to fill in; it is valid as it stands, so \`npx directory-builder\` publishes from it now`)
+            return
+        }
         let dirs
         try { dirs = init() }
         catch (e) { console.error(e.message); process.exit(1) }

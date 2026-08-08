@@ -14,6 +14,12 @@
 # convention from the source names.
 
 :federation a :Federation ;
+    # Where the webapp is deployed, trailing slash included. Optional — omit it
+    # for a directory that is never published. When present it is the single
+    # statement of the deployment URL: the webapp build takes its vite base from
+    # this path, and publish builds the catalog's IRIs and the distribution's
+    # accessURL on it (so the served final.ttl is dereferenceable).
+    :baseUrl         "https://example.org/directory/" ;
     :hasSource       :cityopenSource, :civichubSource, :readcitySource ;
     :hasTargetSchema :organisationSchema, :programSchema .
 

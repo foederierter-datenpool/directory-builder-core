@@ -1,5 +1,6 @@
 import { CDP, parseTtl, PATHS } from "@directory-builder/core/utils"
 import { Pipeline, validate } from "@directory-builder/core"
+import { scaffoldPublication } from "../src/publication.js"
 import { makeInstance } from "./helpers/instance.js"
 import assert from "node:assert/strict"
 import { test } from "node:test"
@@ -282,4 +283,102 @@ test("the default longestValue strategy keeps the fullest conflicting value", as
     // a1+b1 merged on their identical name; the longer description wins the conflict
     const descs = final.filter((q) => q.predicate.value === "http://schema.org/description").map((q) => q.object.value)
     assert.deepEqual(descs, ["Zentrum für umfassende Sozialberatung"])
+})
+
+// ---- Test: the opt-in publish step -------------------------------------------
+// publication.ttl turns the publish step on; the catalog it writes must satisfy
+// the DCAT-AP.de constraints in publish.shacl.ttl, which validate() checks.
+// Publishing needs a deployment URL, declared once for the whole instance —
+// every published IRI below is built on this :baseUrl.
+const publishedFederation = federation.replace(
+    ":hasSource :alphaSource, :betaSource .",
+    ':hasSource :alphaSource, :betaSource ; :baseUrl "https://example.org/d/" .')
+
+const publication = `
+@prefix :       <https://civic-data.de/pipeline#> .
+@prefix dcat:   <http://www.w3.org/ns/dcat#> .
+@prefix dct:    <http://purl.org/dc/terms/> .
+@prefix dcatde: <http://dcat-ap.de/def/dcatde/> .
+@prefix foaf:   <http://xmlns.com/foaf/0.1/> .
+
+:federation a dcat:Catalog ;
+    dct:title "Testkatalog"@de ; dct:description "Testbeschreibung"@de ; dct:publisher :publisher .
+:publisher a foaf:Agent ; foaf:name "Test e.V." .
+:thingSchema :publishedAs :thingDataset .
+:thingDataset a dcat:Dataset ;
+    dct:title "Dinge"@de ; dct:description "Testdaten"@de ; dct:publisher :publisher .
+:distributionDefaults a :DistributionTemplate ;
+    dct:license <http://dcat-ap.de/def/licenses/dl-by-de/2.0> ;
+    dcatde:licenseAttributionByText "Test e.V." .
+`
+
+test("publish writes a catalog conforming to the DCAT-AP.de shape", async () => {
+    const root = makeInstance("publish", { federation: publishedFederation, sources: { alpha, beta }, publication })
+    await new Pipeline({ root }).run()
+    assert.deepEqual(await validate(root), [])
+    const catalog = parseTtl(fs.readFileSync(path.join(root, PATHS.catalog), "utf8"))
+    const dist = `https://example.org/d/${PATHS.final}`
+    assert.ok(catalog.some((q) => q.predicate.value === "http://www.w3.org/ns/dcat#distribution"
+        && q.object.value === dist), "the dataset carries the derived Turtle distribution")
+    assert.ok(catalog.some((q) => q.subject.value === dist
+        && q.predicate.value === "http://dcat-ap.de/def/dcatde/licenseAttributionByText"),
+        "the distribution template is stamped onto it")
+    // The config's subjects live in the shared pipeline namespace, so they are
+    // renamed onto :baseUrl — one instance's catalog must be identifiable.
+    assert.deepEqual(
+        catalog.filter((q) => q.predicate.value === "http://www.w3.org/ns/dcat#dataset").map((q) => q.object.value),
+        ["https://example.org/d/#thingDataset"])
+    assert.ok(catalog.some((q) => q.subject.value === "https://example.org/d/#catalog"
+        && q.object.value === "http://www.w3.org/ns/dcat#Catalog"), "the catalog is published under :baseUrl")
+    assert.ok(!catalog.some((q) => q.subject.value.startsWith(CDP) || q.object.value.startsWith(CDP)),
+        "no pipeline-namespace term (:publishedAs and its :TargetSchema) reaches the published catalog")
+    // The browser-built formats have no URL, so the Download page is the only
+    // way a harvested dataset can offer anything but Turtle.
+    assert.deepEqual(
+        catalog.filter((q) => q.predicate.value === "http://www.w3.org/ns/dcat#landingPage").map((q) => q.object.value),
+        ["https://example.org/d/#/download"])
+    assert.deepEqual(
+        catalog.filter((q) => q.predicate.value === "http://dcat-ap.de/def/dcatde/qualityProcessURI").map((q) => q.object.value),
+        ["https://example.org/d/#/pipeline"])
+    // The dataset's :TargetSchema :targetClass, the one triple saying what is inside.
+    assert.deepEqual(
+        catalog.filter((q) => q.predicate.value === "http://purl.org/dc/terms/conformsTo").map((q) => q.object.value),
+        ["http://schema.org/Thing"])
+    // Origins per dataset, from the :Mapping declarations: both sources map
+    // into the one target schema here, in :hasSource declaration order.
+    assert.deepEqual(
+        catalog.filter((q) => q.predicate.value === "http://www.w3.org/2000/01/rdf-schema#label").map((q) => q.object.value),
+        ["Merged from alpha, beta by this directory's pipeline."])
+})
+
+// ---- Test: the publication.ttl draft ---------------------------------------
+// `directory-builder init publication` writes a first draft from federation.ttl.
+// Its contract is that it is valid on arrival: the publish step runs on it
+// unedited and validate stays clean, so an author fills in decisions rather than
+// debugging shapes. The placeholders must be visible in the published catalog,
+// not hidden in comments, so an unfinished draft cannot ship unnoticed.
+
+test("init publication drafts a valid publication.ttl from federation.ttl", async () => {
+    const root = makeInstance("draft", { federation: publishedFederation, sources: { alpha, beta } })
+    const draft = scaffoldPublication(root)
+    assert.equal(draft.datasets, 1, "one dcat:Dataset per target schema")
+    const ttl = fs.readFileSync(path.join(root, PATHS.publication), "utf8")
+    assert.match(ttl, /:thingSchema :publishedAs :thingDataset \./)
+    assert.match(ttl, /foaf:homepage\s+<https:\/\/example\.org\/d\/>/, ":baseUrl becomes the catalog's homepage")
+
+    await new Pipeline({ root }).run()
+    assert.deepEqual(await validate(root), [], "the unedited draft publishes a valid catalog")
+    const catalog = parseTtl(fs.readFileSync(path.join(root, PATHS.catalog), "utf8"))
+    assert.ok(catalog.some((q) => q.object.value.startsWith("TODO:")), "placeholders reach the catalog")
+    // The draft is hand-edited from here on — config/ holds no regenerated files.
+    assert.throws(() => scaffoldPublication(root), /refusing to overwrite/)
+})
+
+test("validate rejects a catalog missing the attribution an attribution license needs", async () => {
+    const root = makeInstance("publish-bad", { federation: publishedFederation, sources: { alpha, beta },
+        publication: publication.replace(/ ;\n    dcatde:licenseAttributionByText "Test e.V."/, "") })
+    await new Pipeline({ root }).run()
+    const problems = await validate(root)
+    assert.equal(problems.length, 1)
+    assert.match(problems[0], /licenseAttributionByText/)
 })

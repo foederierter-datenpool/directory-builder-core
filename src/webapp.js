@@ -1,3 +1,4 @@
+import { CDP, objectsOf, parseTtl, PATHS } from "./utils.js"
 import path from "path"
 import fs from "fs"
 
@@ -18,14 +19,30 @@ export async function webappDev(root = process.cwd()) {
     server.printUrls()
 }
 
+// vite's base for a deployment: the path of :federation :baseUrl, which the
+// publish step also builds the catalog's IRIs on. Deriving it keeps one
+// statement of where the instance is deployed — a --base that disagreed with
+// :baseUrl would serve the site from paths the catalog does not point at.
+const declaredBase = (root) => {
+    const fed = path.join(root, PATHS.federation)
+    if (!fs.existsSync(fed)) return undefined
+    const baseUrl = objectsOf(parseTtl(fs.readFileSync(fed, "utf8")), `${CDP}baseUrl`)[0]
+    return baseUrl && new URL(baseUrl).pathname
+}
+
 export async function webappBuild(root = process.cwd(), { base } = {}) {
     const { build } = await import("vite")
     process.env.INSTANCE = root
     const outDir = path.join(root, "webapp/dist")
+    const declared = declaredBase(root)
+    if (base && declared && base !== declared) {
+        console.warn(`--base ${base} overrides :baseUrl (${declared}) — the published catalog's IRIs follow :baseUrl`)
+    }
+    const resolvedBase = base ?? declared
     await build({
         configFile: CONFIG,
         root: WEBAPP,
-        ...(base ? { base } : {}),
+        ...(resolvedBase ? { base: resolvedBase } : {}),
         build: { outDir, emptyOutDir: true },
     })
     // The bundle fetches the instance's config, data and webapp/{content,

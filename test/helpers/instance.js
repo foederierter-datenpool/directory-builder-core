@@ -10,12 +10,13 @@ const TOOLS_CACHE = path.join(import.meta.dirname, "../../example/tools")
 // per source, optionally a curation.ttl string) into test/tmp/<name>/ —
 // a real instance folder the engines run against, wiped at setup and left in
 // place afterwards for inspection.
-export const makeInstance = (name, { federation, sources, curation }) => {
+export const makeInstance = (name, { federation, sources, curation, publication }) => {
     const root = path.join(import.meta.dirname, "../tmp", name)
     fs.rmSync(root, { recursive: true, force: true })
     fs.mkdirSync(path.join(root, "config"), { recursive: true })
     fs.writeFileSync(path.join(root, PATHS.federation), federation)
     if (curation) fs.writeFileSync(path.join(root, PATHS.curation), curation)
+    if (publication) fs.writeFileSync(path.join(root, PATHS.publication), publication)
     for (const [source, records] of Object.entries(sources)) {
         fs.mkdirSync(path.join(root, PATHS.staticDir(source)), { recursive: true })
         fs.writeFileSync(path.join(root, PATHS.staticDir(source), "data.json"), JSON.stringify(records, null, 4))

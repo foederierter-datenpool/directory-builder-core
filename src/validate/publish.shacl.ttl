@@ -1,0 +1,37 @@
+@prefix sh:     <http://www.w3.org/ns/shacl#> .
+@prefix dcat:   <http://www.w3.org/ns/dcat#> .
+@prefix dct:    <http://purl.org/dc/terms/> .
+@prefix dcatde: <http://dcat-ap.de/def/dcatde/> .
+
+# The DCAT-AP.de 3.0 constraints catalog.ttl must always satisfy — not a
+# conformance claim. The official shapes are AGPL-3.0 and resolve their code
+# lists through owl:imports, so full conformance runs out of band:
+# https://www.itb.ec.europa.eu/shacl/dcat-ap.de/upload
+
+<#Catalog> a sh:NodeShape ;
+    sh:targetClass dcat:Catalog ;
+    sh:property [ sh:path dct:title       ; sh:minCount 1 ] ,
+                [ sh:path dct:description ; sh:minCount 1 ] ,
+                [ sh:path dct:publisher   ; sh:minCount 1 ; sh:nodeKind sh:IRI ] ,
+                [ sh:path dcat:dataset    ; sh:minCount 1 ] .
+
+<#Dataset> a sh:NodeShape ;
+    sh:targetClass dcat:Dataset ;
+    sh:property [ sh:path dct:title        ; sh:minCount 1 ] ,
+                [ sh:path dct:description  ; sh:minCount 1 ] ,
+                [ sh:path dct:publisher    ; sh:minCount 1 ; sh:nodeKind sh:IRI ] ,
+                [ sh:path dcat:distribution ; sh:minCount 1 ] .
+
+<#Distribution> a sh:NodeShape ;
+    sh:targetClass dcat:Distribution ;
+    sh:property [ sh:path dcat:accessURL ; sh:minCount 1 ; sh:nodeKind sh:IRI ] ,
+                [ sh:path dct:license ; sh:minCount 1 ; sh:nodeKind sh:IRI ;
+                  sh:pattern "^http://dcat-ap\\.de/def/licenses/" ;
+                  sh:message "dct:license must come from the DCAT-AP.de license list" ] ;
+    # Attribution licenses (dl-by-de, cc-by) require the attribution text.
+    sh:or ( [ sh:property [ sh:path dct:license ; sh:in (
+                  <http://dcat-ap.de/def/licenses/dl-zero-de/2.0>
+                  <http://dcat-ap.de/def/licenses/cc-zero>
+                  <http://dcat-ap.de/def/licenses/officialWork> ) ] ]
+             [ sh:property [ sh:path dcatde:licenseAttributionByText ; sh:minCount 1 ] ] ) ;
+    sh:message "dcatde:licenseAttributionByText missing for an attribution license" .

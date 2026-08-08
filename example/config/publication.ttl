@@ -1,0 +1,73 @@
+@prefix :       <https://civic-data.de/pipeline#> .
+@prefix dcat:   <http://www.w3.org/ns/dcat#> .
+@prefix dct:    <http://purl.org/dc/terms/> .
+@prefix dcatde: <http://dcat-ap.de/def/dcatde/> .
+@prefix dcatap: <http://data.europa.eu/r5r/> .
+@prefix vcard:  <http://www.w3.org/2006/vcard/ns#> .
+@prefix foaf:   <http://xmlns.com/foaf/0.1/> .
+@prefix theme:  <http://publications.europa.eu/resource/authority/data-theme/> .
+@prefix freq:   <http://publications.europa.eu/resource/authority/frequency/> .
+@prefix pgl:    <http://dcat-ap.de/def/politicalGeocoding/Level/> .
+
+# DCAT-AP.de 3.0 metadata for publishing this directory — optional: no
+# publication.ttl, no publish step. Its own file because it is owned and edited
+# separately from the pipeline decisions in federation.ttl (publisher, legal
+# terms), and because the run derives the rest (dct:modified, the distribution's
+# accessURL). The deployment URL is not here: :federation :baseUrl in
+# federation.ttl is the one place it is stated, since the webapp build needs it
+# too. :federation is the same subject as there, so
+# this adds publication facets to the federation rather than restating its
+# structure — the publish step then renames these config subjects onto :baseUrl
+# (:federation → <:baseUrl#catalog>, :publisher → <:baseUrl#publisher>), because
+# the pipeline namespace is shared by every instance and cannot identify one
+# published catalog.
+
+:federation a dcat:Catalog ;
+    dct:title       "Verzeichnis von Bibliotheken und Leseprogrammen"@de ;
+    dct:description "Zusammengeführte Bibliotheks- und Leseprogrammdaten aus drei Quellen."@de ;
+    dct:publisher   :publisher ;
+    dct:language    <http://publications.europa.eu/resource/authority/language/DEU> ;
+    foaf:homepage   <https://example.org/directory/> ;
+    dcat:themeTaxonomy <http://publications.europa.eu/resource/authority/data-theme> .
+
+:publisher a foaf:Agent ;
+    foaf:name "Example e.V." ;
+    # Assigned by GovData, required for delivery there: http://dcat-ap.de/def/contributors/
+    dcatde:contributorID <http://dcat-ap.de/def/contributors/example> .
+
+:contact a vcard:Kind ;
+    vcard:fn "Datenteam" ;
+    vcard:hasEmail <mailto:data@example.org> .
+
+# One dcat:Dataset per :TargetSchema, hung off the schema IRI federation.ttl declares.
+:organisationSchema :publishedAs :organisationDataset .
+:programSchema      :publishedAs :programDataset .
+
+:organisationDataset a dcat:Dataset ;
+    dct:title       "Bibliotheken"@de ;
+    dct:description "Bibliotheken und Organisationen der drei Quellen."@de ;
+    dct:publisher   :publisher ;
+    dcat:contactPoint :contact ;
+    dcat:keyword    "Bibliothek"@de ;
+    dcat:theme      theme:EDUC ;
+    dct:accrualPeriodicity freq:MONTHLY ;
+    dcatde:politicalGeocodingLevelURI pgl:municipality ;
+    dcatap:availability <http://publications.europa.eu/resource/authority/planned-availability/EXPERIMENTAL> .
+
+:programDataset a dcat:Dataset ;
+    dct:title       "Leseprogramme"@de ;
+    dct:description "Leseprogramme und ihre gastgebenden Bibliotheken."@de ;
+    dct:publisher   :publisher ;
+    dcat:contactPoint :contact ;
+    dcat:keyword    "Leseförderung"@de ;
+    dcat:theme      theme:EDUC ;
+    dct:accrualPeriodicity freq:MONTHLY ;
+    dcatde:politicalGeocodingLevelURI pgl:municipality ;
+    dcatap:availability <http://publications.europa.eu/resource/authority/planned-availability/EXPERIMENTAL> .
+
+# Stamped onto the distribution the publish step derives (its accessURL is
+# final.ttl under :federation :baseUrl, which the webapp serves verbatim).
+:distributionDefaults a :DistributionTemplate ;
+    dct:license <http://dcat-ap.de/def/licenses/dl-by-de/2.0> ;
+    dcatde:licenseAttributionByText "CityOpen Data; CivicHub Directory; ReadCity Programmes — aggregiert durch Example e.V." ;
+    dcatap:availability <http://publications.europa.eu/resource/authority/planned-availability/EXPERIMENTAL> .
