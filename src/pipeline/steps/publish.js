@@ -1,15 +1,13 @@
-import { CDP, enabledSources, localName, objectsOf, parseTtl, PATHS, sourceName, subjectsOfType } from "../../utils.js"
-import { COMMON_PREFIXES, writeTurtleFile } from "../write-turtle.js"
+import { CDP, enabledSources, localName, NAMESPACES as NS, objectsOf, parseTtl, PATHS, prefixes, prefixesOf, PUBLICATION_PREFIXES, sourceName, subjectsOfType } from "../../utils.js"
+import { usedPrefixes, writeTurtleFile } from "../write-turtle.js"
 import { DataFactory } from "n3"
 import fs from "fs"
 
 const df = DataFactory
-const DCAT = "http://www.w3.org/ns/dcat#"
-const DCT = "http://purl.org/dc/terms/"
-const DCATDE = "http://dcat-ap.de/def/dcatde/"
-const RDFS_LABEL = "http://www.w3.org/2000/01/rdf-schema#label"
-const RDF_TYPE = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type"
-const DATETIME = df.namedNode("http://www.w3.org/2001/XMLSchema#dateTime")
+const { dcat: DCAT, dct: DCT, dcatde: DCATDE } = NS
+const RDFS_LABEL = `${NS.rdfs}label`
+const RDF_TYPE = `${NS.rdf}type`
+const DATETIME = df.namedNode(`${NS.xsd}dateTime`)
 const TURTLE_MEDIA_TYPE = df.namedNode("https://www.iana.org/assignments/media-types/text/turtle")
 // Webapp routes (hash router). Download is where a human gets the other
 // formats: they are built in the browser from final.ttl on click, so they have
@@ -45,7 +43,8 @@ const PIPELINE_ROUTE = "#/pipeline"
 // reading, and it is the one triple that tells a consumer what is inside.
 
 export async function runPublish({ abs }, out) {
-    const pub = parseTtl(fs.readFileSync(abs(PATHS.publication), "utf8"))
+    const pubTtl = fs.readFileSync(abs(PATHS.publication), "utf8")
+    const pub = parseTtl(pubTtl)
     const fed = parseTtl(fs.readFileSync(abs(PATHS.federation), "utf8"))
     const configCatalog = [...subjectsOfType(pub, `${DCAT}Catalog`)][0]
     const template = [...subjectsOfType(pub, `${CDP}DistributionTemplate`)][0]
@@ -101,6 +100,16 @@ export async function runPublish({ abs }, out) {
             ]
         }),
     ]
-    await writeTurtleFile(out, quads, { ...COMMON_PREFIXES, dcat: DCAT, dcatde: DCATDE, rdfs: RDFS_LABEL.replace(/label$/, "") })
+    // The DCAT vocabularies come from the same bundle the publication.ttl draft
+    // declares, so the catalog abbreviates them however the author's file was
+    // written. On top of that, the prefixes that file declares itself, for the
+    // vocabularies an instance brought and the engine cannot know. The default
+    // prefix is the catalog's own namespace: rebasing leaves no term in the
+    // author's default (the pipeline namespace), and the nodes this file is
+    // about are the ones worth reading short. usedPrefixes drops the rest.
+    await writeTurtleFile(out, quads, usedPrefixes({
+        ...prefixes("schema", "rdfs", "xsd"), ...PUBLICATION_PREFIXES,
+        ...prefixesOf(pubTtl), "": `${baseUrl}#`,
+    }, quads))
     console.log(`publish: wrote ${quads.length} triples → ${PATHS.catalog}`)
 }

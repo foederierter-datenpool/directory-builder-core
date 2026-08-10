@@ -1,14 +1,24 @@
 import { newStore } from "@foerderfunke/sem-ops-utils"
+import { prefixes } from "../utils.js"
 import { DataFactory, Writer } from "n3"
 import path from "path"
 import fs from "fs"
 
 const df = DataFactory
 
-export const COMMON_PREFIXES = {
-    schema: "http://schema.org/",
-    foaf:   "http://xmlns.com/foaf/0.1/",
-    dct:    "http://purl.org/dc/terms/",
+// The vocabularies the federated data itself speaks, on every artefact the
+// pipeline writes. Steps add what only they use (cdp:, the instance's cdf:).
+export const COMMON_PREFIXES = prefixes("schema", "foaf", "dct")
+
+// The Writer emits every prefix it is handed, used or not. A step that carries
+// an author's declarations through (publish, from publication.ttl) hands over
+// more than its output can use — prefixesOf reads the file's text, so it also
+// returns namespaces the author only mentions in a comment — so it narrows the
+// map to the namespaces an IRI in the data actually starts with.
+export const usedPrefixes = (prefixMap, quads) => {
+    const iris = quads.flatMap((q) => [q.subject, q.predicate, q.object, q.object.datatype]
+        .filter((t) => t?.termType === "NamedNode").map((t) => t.value))
+    return Object.fromEntries(Object.entries(prefixMap).filter(([, ns]) => iris.some((iri) => iri.startsWith(ns))))
 }
 
 // Dedupe via a Store and sort by subject so the Writer can emit grouped

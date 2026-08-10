@@ -2,7 +2,7 @@ import { sparqlSelect } from "@foerderfunke/sem-ops-utils"
 import { COMMON_PREFIXES, writeTurtleFile } from "../write-turtle.js"
 import { HAS_MEMBER, MATCH_GRAPH } from "./match.js"
 import { MERGED_GRAPH } from "./merge.js"
-import { CDP } from "../../utils.js"
+import { CDP, NAMESPACES } from "../../utils.js"
 import { DataFactory } from "n3"
 
 const df = DataFactory
@@ -29,7 +29,7 @@ const STRATEGIES = {
             .sort((a, b) => a.object.value.localeCompare(b.object.value))
     },
 }
-const RESOLVE_EXCLUDE = new Set(["http://schema.org/identifier", `${CDP}fromSource`])
+const RESOLVE_EXCLUDE = new Set([`${NAMESPACES.schema}identifier`, `${CDP}fromSource`])
 
 const lookupStrategy = (iri) => {
     const fn = STRATEGIES[iri.split("#").pop()]

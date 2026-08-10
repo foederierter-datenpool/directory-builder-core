@@ -9,14 +9,14 @@
 import { storeFromTurtles } from "@foerderfunke/sem-ops-utils/core"
 import { turtleToJsonLdObj } from "@foerderfunke/sem-ops-utils/jsonld"
 import { sparqlSelect } from "@foerderfunke/sem-ops-utils/sparql"
-import { CDP, groupBySubject, localName, objectsOf, parseTtl, PATHS, shrink, subjectsOfType } from "@directory-builder/core/utils"
+import { CDP, groupBySubject, localName, NAMESPACES, objectsOf, parseTtl, PATHS, shrink, subjectsOfType } from "@directory-builder/core/utils"
 import { displayPrefixes, federationTtl, finalTtl, provenanceTtl } from "./instanceData.js"
 import { strToU8, zipSync } from "fflate"
 import HelpTip from "./HelpTip.jsx"
 import React, { useState } from "react"
 
-const RDF_TYPE = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type"
-const RDFS_LABEL = "http://www.w3.org/2000/01/rdf-schema#label"
+const RDF_TYPE = `${NAMESPACES.rdf}type`
+const RDFS_LABEL = `${NAMESPACES.rdfs}label`
 
 const FINAL_QUADS = parseTtl(finalTtl)
 const BY_SUBJECT = groupBySubject(FINAL_QUADS)

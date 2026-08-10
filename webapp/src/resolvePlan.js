@@ -5,10 +5,10 @@
 // Reads:  config/{federation,curation}.ttl, data/pipeline/{matches,final}.ttl
 // Does:   exports resolutionOf(entityIri, field) → { strategy, finals, corrections }
 
-import { CDP, parseTtl, shrink } from "@directory-builder/core/utils"
+import { CDP, NAMESPACES, parseTtl, shrink } from "@directory-builder/core/utils"
 import { federationTtl, curationTtl, matchesTtl, finalTtl, displayPrefixes } from "./instanceData.js"
 
-const RDF_TYPE = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type"
+const RDF_TYPE = `${NAMESPACES.rdf}type`
 const local = (iri) => iri.split("#").pop()
 const objOf = (quads, subj, pred) => quads.find((q) => q.subject.value === subj && q.predicate.value === `${CDP}${pred}`)?.object.value
 

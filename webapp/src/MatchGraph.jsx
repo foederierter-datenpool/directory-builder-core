@@ -8,7 +8,7 @@
 
 import { displayPrefixes, federationTtl, curationTtl, mappedTtl, matchesTtl, mergedTtl } from "./instanceData.js"
 import { loadSourceMeta, loadSourceOfRecord } from "./sourceMeta.js"
-import { CDP, groupBySubject, parseTtl, shrink } from "@directory-builder/core/utils"
+import { CDP, groupBySubject, NAMESPACES, parseTtl, shrink } from "@directory-builder/core/utils"
 import React, { useMemo, useState } from "react"
 import ColumnGraph from "./ColumnGraph.jsx"
 import CheckboxDropdown from "./CheckboxDropdown.jsx"
@@ -16,16 +16,16 @@ import HelpTip from "./HelpTip.jsx"
 import Modal from "./Modal.jsx"
 import { loadMatch, readSchemas } from "./loadMatch.js"
 
-const SCHEMA_IDENTIFIER = "http://schema.org/identifier"
-const SCHEMA_NAME = "http://schema.org/name"
-const SCHEMA_STREET = "http://schema.org/streetAddress"   // link-cell fallback for addresses (no name)
-const CDF_NS = "https://civic-data.de/federated-directory#"
+const SCHEMA_IDENTIFIER = `${NAMESPACES.schema}identifier`
+const SCHEMA_NAME = `${NAMESPACES.schema}name`
+const SCHEMA_STREET = `${NAMESPACES.schema}streetAddress`   // link-cell fallback for addresses (no name)
+const CDF_NS = NAMESPACES.cdf
 const HARD_CRITERION = `${CDP}hasHardCriterion`
 const WEIGHTED_CRITERION = `${CDP}hasWeightedCriterion`
 const ON = `${CDP}on`
 const FOR_TARGET = `${CDP}forTarget`
-const OWL_SAME_AS = "http://www.w3.org/2002/07/owl#sameAs"
-const OWL_DIFFERENT_FROM = "http://www.w3.org/2002/07/owl#differentFrom"
+const OWL_SAME_AS = `${NAMESPACES.owl}sameAs`
+const OWL_DIFFERENT_FROM = `${NAMESPACES.owl}differentFrom`
 
 const prefixed = (iri) => shrink(iri, displayPrefixes)
 

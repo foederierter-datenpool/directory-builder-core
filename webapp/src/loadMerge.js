@@ -3,12 +3,12 @@
 // Reads:  TTL strings passed by mergeEntities.js; resolves sources via sourceMeta.js
 // Does:   returns entity[] (each {iri, label, type, fields[], sources[]})
 
-import { CDP as NS, parseTtl, prefixesOf, shrink } from "@directory-builder/core/utils"
+import { CDP as NS, NAMESPACES, parseTtl, prefixesOf, shrink } from "@directory-builder/core/utils"
 import { compareSources, loadSourceMeta } from "./sourceMeta.js"
 
-const PROV_DERIVED_FROM = "http://www.w3.org/ns/prov#wasDerivedFrom"
-const RDF_TYPE = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type"
-const RDF_REIFIES = "http://www.w3.org/1999/02/22-rdf-syntax-ns#reifies"
+const PROV_DERIVED_FROM = `${NAMESPACES.prov}wasDerivedFrom`
+const RDF_TYPE = `${NAMESPACES.rdf}type`
+const RDF_REIFIES = `${NAMESPACES.rdf}reifies`
 const FROM_SOURCE = `${NS}fromSource`
 
 export function loadMerge(mergedTtl, provTtl, federationTtl = "") {

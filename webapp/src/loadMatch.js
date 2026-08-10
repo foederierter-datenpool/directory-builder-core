@@ -8,12 +8,12 @@
 //         matches.ttl (clusters + hasMember), merged.ttl (rdf:type, name, links)
 // Does:   returns everything <ColumnGraph> needs + a per-lane nodeY layout.
 
-import { CDP as NS, localName, parseTtl, prefixesOf, shrink, subjectsOfType } from "@directory-builder/core/utils"
+import { CDP as NS, localName, NAMESPACES, parseTtl, prefixesOf, shrink, subjectsOfType } from "@directory-builder/core/utils"
 
-const CDF = "https://civic-data.de/federated-directory#"
-const S   = "http://schema.org/"
-const RDF_TYPE   = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type"
-const RDFS_LABEL = "http://www.w3.org/2000/01/rdf-schema#label"
+const CDF = NAMESPACES.cdf
+const S   = NAMESPACES.schema
+const RDF_TYPE   = `${NAMESPACES.rdf}type`
+const RDFS_LABEL = `${NAMESPACES.rdfs}label`
 const HAS_TARGET_SCHEMA = `${NS}hasTargetSchema`
 const TARGET_CLASS      = `${NS}targetClass`
 const TO_TARGET         = `${NS}toTarget`

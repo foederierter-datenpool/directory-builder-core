@@ -1,10 +1,10 @@
-import { CDP, parseTtl, PATHS, sourceName } from "../../utils.js"
+import { CDP, NAMESPACES, parseTtl, PATHS, sourceName } from "../../utils.js"
 import { writeTurtleFile } from "../write-turtle.js"
 import { DataFactory } from "n3"
 import fs from "fs"
 
 const df = DataFactory
-const XYZ = "http://sparql.xyz/facade-x/data/"
+const XYZ = NAMESPACES.xyz
 const XHTML_CLASS = "http://www.w3.org/1999/xhtml#class"
 const HTML_INNER_TEXT = "https://html.spec.whatwg.org/#innerText"
 const P = (x) => df.namedNode(`${CDP}${x}`)

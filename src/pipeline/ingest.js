@@ -1,5 +1,5 @@
 import { sparqlSelect, storeFromTurtles } from "@foerderfunke/sem-ops-utils"
-import { CDP, enabledSources, parseTtl, PATHS, sourceName, stepJournal } from "../utils.js"
+import { CDP, enabledSources, parseTtl, PATHS, prefixes, sourceName, stepJournal, turtlePrefixBlock } from "../utils.js"
 import { ensureJar, runLift } from "./steps/lift.js"
 import { runFetch } from "./steps/fetch.js"
 import path from "path"
@@ -86,12 +86,8 @@ ${journal.toTurtle()}
     prov:endedAtTime   ${dt(new Date().toISOString())}${harvestPart} .
 `
 
-    const prefixes = `@prefix :      <${CDP}> .
-@prefix p-plan: <http://purl.org/net/p-plan#> .
-@prefix prov:   <http://www.w3.org/ns/prov#> .
-@prefix xsd:    <http://www.w3.org/2001/XMLSchema#> .
-`
+    const header = `${turtlePrefixBlock({ "": CDP, ...prefixes("p-plan", "prov", "xsd") })}\n`
     fs.mkdirSync(path.dirname(abs(PATHS.ingestLog)), { recursive: true })
-    fs.writeFileSync(abs(PATHS.ingestLog), prefixes + block)
+    fs.writeFileSync(abs(PATHS.ingestLog), header + block)
     console.log(`log:   wrote steps + IngestRun → ${PATHS.ingestLog}`)
 }

@@ -1,13 +1,13 @@
 import { sparqlSelect } from "@foerderfunke/sem-ops-utils"
-import { CDP, groupBySubject, parseTtl, prefixesOf } from "../../utils.js"
+import { CDP, groupBySubject, NAMESPACES, parseTtl, prefixesOf } from "../../utils.js"
 import { writeTurtleFile } from "../write-turtle.js"
 import { DataFactory } from "n3"
 import path from "path"
 import fs from "fs"
 
 const df = DataFactory
-const SCHEMA = "http://schema.org/"
-const RDF_TYPE = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type"
+const SCHEMA = NAMESPACES.schema
+const RDF_TYPE = `${NAMESPACES.rdf}type`
 
 // ---- Enrich step -----------------------------------------------------------
 // The one step past resolve that adds data no source carries: geocoding the

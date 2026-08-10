@@ -1,4 +1,4 @@
-import { CDP, localName, objectsOf, parseTtl, PATHS } from "./utils.js"
+import { CDP, localName, NAMESPACES, objectsOf, parseTtl, PATHS, PUBLICATION_PREFIXES, turtlePrefixBlock } from "./utils.js"
 import path from "path"
 import fs from "fs"
 
@@ -24,7 +24,7 @@ import fs from "fs"
 // One-shot, like init: config/ holds hand-edited files, and this becomes one the
 // moment it is written. It refuses to overwrite, and nothing regenerates it.
 
-const RDFS_LABEL = "http://www.w3.org/2000/01/rdf-schema#label"
+const RDFS_LABEL = `${NAMESPACES.rdfs}label`
 
 // The label of a config node as a Turtle literal, language tag preserved
 // (federation.ttl labels are tagged: rdfs:label "Organisation"@en), or the
@@ -70,16 +70,7 @@ ${datasetIri(schema)} a dcat:Dataset ;
     # dcatde:politicalGeocodingLevelURI pgl:municipality ;
     dcatap:availability <http://publications.europa.eu/resource/authority/planned-availability/EXPERIMENTAL> .`)
 
-    const ttl = `@prefix :       <${CDP}> .
-@prefix dcat:   <http://www.w3.org/ns/dcat#> .
-@prefix dct:    <http://purl.org/dc/terms/> .
-@prefix dcatde: <http://dcat-ap.de/def/dcatde/> .
-@prefix dcatap: <http://data.europa.eu/r5r/> .
-@prefix vcard:  <http://www.w3.org/2006/vcard/ns#> .
-@prefix foaf:   <http://xmlns.com/foaf/0.1/> .
-@prefix theme:  <http://publications.europa.eu/resource/authority/data-theme/> .
-@prefix freq:   <http://publications.europa.eu/resource/authority/frequency/> .
-@prefix pgl:    <http://dcat-ap.de/def/politicalGeocoding/Level/> .
+    const ttl = `${turtlePrefixBlock({ "": CDP, ...PUBLICATION_PREFIXES })}
 
 # DCAT-AP.de 3.0 metadata for publishing this directory. Generated from
 # federation.ttl as a first draft — hand-edited from here on, nothing

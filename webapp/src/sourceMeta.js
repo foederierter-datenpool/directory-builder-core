@@ -5,11 +5,11 @@
 // Reads:  TTL strings passed in (federation, mapped, ingest-log)
 // Does:   returns lookup maps + helpers (used by loadMerge, EntityCard, MapGraph, MatchGraph)
 
-import { CDP as NS, parseTtl, PATHS, sourceName } from "@directory-builder/core/utils"
+import { CDP as NS, NAMESPACES, parseTtl, PATHS, sourceName } from "@directory-builder/core/utils"
 
-const RDFS_LABEL    = "http://www.w3.org/2000/01/rdf-schema#label"
-const SKOS_NOTATION = "http://www.w3.org/2004/02/skos/core#notation"
-const PROV_AT_TIME  = "http://www.w3.org/ns/prov#atTime"
+const RDFS_LABEL    = `${NAMESPACES.rdfs}label`
+const SKOS_NOTATION = `${NAMESPACES.skos}notation`
+const PROV_AT_TIME  = `${NAMESPACES.prov}atTime`
 const HAS_SOURCE    = `${NS}hasSource`
 const FROM_SOURCE   = `${NS}fromSource`
 const OF_SOURCE     = `${NS}ofSource`

@@ -1,5 +1,5 @@
 import { sparqlConstruct, storeFromTurtles } from "@foerderfunke/sem-ops-utils"
-import { CDP, identifierField, PATHS, sourceName } from "../../utils.js"
+import { identifierField, PATHS, prefixes, sourceName } from "../../utils.js"
 import { writeTurtleFile } from "../write-turtle.js"
 import path from "path"
 import fs from "fs"
@@ -28,10 +28,7 @@ export const runExtract = async ({ abs, quads }, sourceIri) => {
         const fileStore = storeFromTurtles([fs.readFileSync(path.join(inAbs, f), "utf8")])
         allQuads.push(...await sparqlConstruct(extractQuery, [fileStore]))
     }
-    await writeTurtleFile(abs(outPath), allQuads, {
-        xyz: "http://sparql.xyz/facade-x/data/",
-        cdp: CDP,
-    })
+    await writeTurtleFile(abs(outPath), allQuads, prefixes("xyz", "cdp"))
 }
 
 // No extract.sparql given: resolve the engine's default template with the

@@ -2,18 +2,18 @@ import { sparqlSelect } from "@foerderfunke/sem-ops-utils"
 import { COMMON_PREFIXES, writeTurtleFile } from "../write-turtle.js"
 import { HAS_MEMBER, MATCH_GRAPH } from "./match.js"
 import { MAPPED_GRAPH } from "./map.js"
-import { CDP } from "../../utils.js"
+import { CDP, NAMESPACES, prefixes } from "../../utils.js"
 import { DataFactory } from "n3"
 
 const df = DataFactory
 
 export const MERGED_GRAPH = df.namedNode("urn:merged")
 
-const RDF_REIFIES = df.namedNode("http://www.w3.org/1999/02/22-rdf-syntax-ns#reifies")
+const RDF_REIFIES = df.namedNode(`${NAMESPACES.rdf}reifies`)
 
 // Engine invariant, mirrored by the webapp's loadMerge: each derivation's
 // origin hangs off its reifier via prov:wasDerivedFrom.
-const PROV_DERIVED_FROM = df.namedNode("http://www.w3.org/ns/prov#wasDerivedFrom")
+const PROV_DERIVED_FROM = df.namedNode(`${NAMESPACES.prov}wasDerivedFrom`)
 
 export const runMerge = async ({ store, defStore, abs }, outPath, provOutPath) => {
     const [cfg] = await sparqlSelect(`
@@ -51,9 +51,7 @@ export const runMerge = async ({ store, defStore, abs }, outPath, provOutPath) =
     await writeTurtleFile(abs(outPath), mergedQuads, { ...COMMON_PREFIXES, cdp: CDP, cdf: namespace })
     console.log(`merge: wrote ${mergedQuads.length} triples → ${outPath}`)
 
-    await writeTurtleFile(abs(provOutPath), provQuads, {
-        ...COMMON_PREFIXES, cdp: CDP, cdf: namespace, prov: "http://www.w3.org/ns/prov#",
-        rdf: "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
-    })
+    await writeTurtleFile(abs(provOutPath), provQuads,
+        { ...COMMON_PREFIXES, cdp: CDP, cdf: namespace, ...prefixes("prov", "rdf") })
     console.log(`merge: wrote ${provQuads.length / 2} provenance annotations → ${provOutPath}`)
 }

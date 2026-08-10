@@ -3,10 +3,10 @@
 // Reads:  TTL strings passed by MapGraph.jsx (federation, mapped, extracted source TTL)
 // Does:   returns { nodes, edges } plus per-source / per-entity value maps
 
-import { CDP as NS, localName, parseTtl, prefixesOf, shrink, sourceName, subjectsOfType, typesOf } from "@directory-builder/core/utils"
+import { CDP as NS, localName, NAMESPACES, parseTtl, prefixesOf, shrink, sourceName, subjectsOfType, typesOf } from "@directory-builder/core/utils"
 
-const RDFS_LABEL = "http://www.w3.org/2000/01/rdf-schema#label"
-const SKOS_NOTATION = "http://www.w3.org/2004/02/skos/core#notation"
+const RDFS_LABEL = `${NAMESPACES.rdfs}label`
+const SKOS_NOTATION = `${NAMESPACES.skos}notation`
 const NODE_TYPES = [`${NS}Source`, `${NS}SourceField`, `${NS}TargetField`, `${NS}TargetSchema`]
 const SUB_FIELD = `${NS}SubField`
 const DERIVED_EDGE = "#0d9488"   // teal stroke for :derivedFrom lineage (raw origin → derived field), distinct from plain map relabels
@@ -15,8 +15,8 @@ const DERIVED_EDGE = "#0d9488"   // teal stroke for :derivedFrom lineage (raw or
 // pointing at its Source IRI, so this is a single-pass scan with no prefix
 // matching.
 export function loadEntitiesBySource(_federationTtl, mappedTtl) {
-    const SCHEMA_NAME       = "http://schema.org/name"
-    const SCHEMA_IDENTIFIER = "http://schema.org/identifier"
+    const SCHEMA_NAME       = `${NAMESPACES.schema}name`
+    const SCHEMA_IDENTIFIER = `${NAMESPACES.schema}identifier`
     const FROM_SOURCE       = `${NS}fromSource`
 
     const entitySource = new Map()  // entityIri -> sourceIri

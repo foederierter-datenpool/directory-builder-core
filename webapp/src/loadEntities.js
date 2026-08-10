@@ -5,9 +5,9 @@
 //                     collapsed to a source-independent schema↔schema graph
 // (Complements the Map view's field-level dimension.)
 
-import { CDP as NS, localName, parseTtl, subjectsOfType } from "@directory-builder/core/utils"
+import { CDP as NS, localName, NAMESPACES, parseTtl, subjectsOfType } from "@directory-builder/core/utils"
 
-const RDFS_LABEL = "http://www.w3.org/2000/01/rdf-schema#label"
+const RDFS_LABEL = `${NAMESPACES.rdfs}label`
 const P = (x) => `${NS}${x}`
 
 // Single pass over the config, shared by both lenses.

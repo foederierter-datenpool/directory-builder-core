@@ -1,5 +1,5 @@
 import { newStore, parser as n3Parser, storeFromTurtles } from "@foerderfunke/sem-ops-utils"
-import { CDP, enabledSources, parseTtl, PATHS, sourceGraph, sourceName, stepIri, stepJournal } from "../utils.js"
+import { CDP, enabledSources, parseTtl, PATHS, prefixes, sourceGraph, sourceName, stepIri, stepJournal, turtlePrefixBlock } from "../utils.js"
 import { extractedOutputHasMappedFields } from "../validate.js"
 import { COMMON_PREFIXES, writeTurtleFile } from "./write-turtle.js"
 import { MAPPED_GRAPH, runMap } from "./steps/map.js"
@@ -88,8 +88,7 @@ export async function federate(root = process.cwd()) {
     if (fs.existsSync(abs(PATHS.publication)))
         await journal.step("publish", { after: [lastStep] }, () => runPublish(ctx, abs(PATHS.catalog)))
 
-    fs.writeFileSync(abs(PATHS.federateLog), `@prefix :      <${CDP}> .
-@prefix p-plan: <http://purl.org/net/p-plan#> .
+    fs.writeFileSync(abs(PATHS.federateLog), `${turtlePrefixBlock({ "": CDP, ...prefixes("p-plan") })}
 
 ${journal.toTurtle()}
 `)

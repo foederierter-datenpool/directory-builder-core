@@ -1,5 +1,5 @@
 import { sparqlInsertDelete, sparqlSelect } from "@foerderfunke/sem-ops-utils"
-import { buildPrefixBlock, CDP, PATHS, shrink, sourceGraph, sourceName } from "../../utils.js"
+import { buildPrefixBlock, CDP, PATHS, prefixes, shrink, sourceGraph, sourceName } from "../../utils.js"
 import { DataFactory } from "n3"
 import path from "path"
 import fs from "fs"
@@ -10,20 +10,11 @@ export const MAPPED_GRAPH = df.namedNode("urn:mapped")
 
 // ---- Direct-mapping generator ------------------------------------------
 
-const XYZ = "http://sparql.xyz/facade-x/data/"
-
 const buildDirectInsert = ({ sourceGraph, source, targetClass, target }, fields) => {
-    const prefixes = {
-        xyz:    XYZ,
-        cdp:    CDP,
-        cdf:    "https://civic-data.de/federated-directory#",
-        schema: "http://schema.org/",
-        foaf:   "http://xmlns.com/foaf/0.1/",
-        dct:    "http://purl.org/dc/terms/",
-    }
+    const prefixMap = prefixes("xyz", "cdp", "cdf", "schema", "foaf", "dct")
     // shrink() returns the IRI verbatim if no prefix matches; wrap that as <…>.
     const short = (iri) => {
-        const s = shrink(iri, prefixes)
+        const s = shrink(iri, prefixMap)
         return s === iri ? `<${iri}>` : s
     }
 
@@ -73,7 +64,7 @@ const buildDirectInsert = ({ sourceGraph, source, targetClass, target }, fields)
     // stays in xyz:/cdp: only.
     const typeClause = targetClass ? `a ${short(targetClass)} ; ` : ""
 
-    return `${buildPrefixBlock(prefixes)}
+    return `${buildPrefixBlock(prefixMap)}
 
 INSERT {
     GRAPH <urn:mapped> {
@@ -167,9 +158,9 @@ WHERE  { GRAPH <${sourceGraph(sourceName(source))}> { ?e cdp:matchString ?m } }`
     }
 
     for (const rel of linkRows) {
-        const prefixes = { cdp: CDP, schema: "http://schema.org/" }
-        const short = (iri) => { const s = shrink(iri, prefixes); return s === iri ? `<${iri}>` : s }
-        const query = `${buildPrefixBlock(prefixes)}
+        const prefixMap = prefixes("cdp", "schema")
+        const short = (iri) => { const s = shrink(iri, prefixMap); return s === iri ? `<${iri}>` : s }
+        const query = `${buildPrefixBlock(prefixMap)}
 
 INSERT {
     GRAPH <urn:mapped> {

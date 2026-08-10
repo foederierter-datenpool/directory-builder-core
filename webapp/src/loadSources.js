@@ -3,10 +3,10 @@
 // Reads:  federation, mapped, ingest-log TTL strings passed by Sources.jsx
 // Does:   returns source[] ({iri, label, format, totalFields, mappedFields, records, …})
 
-import { CDP as NS, enabledSources, formatFamily, parseTtl, PATHS, sourceName } from "@directory-builder/core/utils"
+import { CDP as NS, enabledSources, formatFamily, NAMESPACES, parseTtl, PATHS, sourceName } from "@directory-builder/core/utils"
 
-const PROV_AT_TIME = "http://www.w3.org/ns/prov#atTime"
-const RDFS_LABEL = "http://www.w3.org/2000/01/rdf-schema#label"
+const PROV_AT_TIME = `${NAMESPACES.prov}atTime`
+const RDFS_LABEL = `${NAMESPACES.rdfs}label`
 
 const setAdd = (map, key, val) => {
     if (!map.has(key)) map.set(key, new Set())

@@ -4,6 +4,7 @@
 // Does:   renders the Query page; answers SPARQL against final.ttl in-browser
 
 import { storeFromTurtles } from "@foerderfunke/sem-ops-utils/core"
+import { NAMESPACES } from "@directory-builder/core/utils"
 import { queryEngine } from "@foerderfunke/sem-ops-utils/sparql"
 import { finalTtl, querySparql } from "./instanceData.js"
 import HelpTip from "./HelpTip.jsx"
@@ -25,7 +26,7 @@ const INITIAL_QUERY = querySparql || "SELECT * WHERE { ?s ?p ?o } LIMIT 100"
 
 Yasgui.Yasqe.defaults.value = INITIAL_QUERY
 
-const XSD_STRING = "http://www.w3.org/2001/XMLSchema#string"
+const XSD_STRING = `${NAMESPACES.xsd}string`
 const termToJson = (term) => {
     if (term.termType === "Literal") {
         const v = { type: "literal", value: term.value }

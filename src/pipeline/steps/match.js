@@ -1,7 +1,7 @@
 import { sparqlSelect } from "@foerderfunke/sem-ops-utils"
 import { COMMON_PREFIXES, writeTurtleFile } from "../write-turtle.js"
 import { MAPPED_GRAPH } from "./map.js"
-import { CDP, parseTtl, shrink } from "../../utils.js"
+import { CDP, NAMESPACES, parseTtl, prefixes, shrink, turtlePrefixBlock } from "../../utils.js"
 import { token_set_ratio, token_sort_ratio, ratio } from "fuzzball"
 import { DataFactory } from "n3"
 import { createHash } from "crypto"
@@ -12,7 +12,7 @@ const df = DataFactory
 export const MATCH_GRAPH = df.namedNode("urn:matched")
 export const HAS_MEMBER  = df.namedNode(CDP + "hasMember")
 
-const RDF_TYPE      = df.namedNode("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")
+const RDF_TYPE      = df.namedNode(`${NAMESPACES.rdf}type`)
 const MATCH_CLUSTER = df.namedNode(CDP + "MatchCluster")
 
 // Fuzzy string similarity for weighted criteria, 0–100 normalised to 0–1. A rule picks
@@ -142,14 +142,14 @@ export const runMatch = async ({ store, defStore, abs }, outPath, registryPath, 
     // owl:sameAs assertions are shared; each pass only acts on the pairs whose
     // endpoints are in its own subject set (gated by parent.has below).
     const sameAsRows = await sparqlSelect(`
-        PREFIX owl: <http://www.w3.org/2002/07/owl#>
+        PREFIX owl: <${NAMESPACES.owl}>
         SELECT ?a ?b WHERE { ?a owl:sameAs ?b }`, [defStore])
 
     // owl:differentFrom pins two records apart — a curated veto on a merge. The
     // pairwise scan below never unions a distinct pair, even when its score clears
     // the rule (e.g. two co-located einrichtungen whose names overlap).
     const differentRows = await sparqlSelect(`
-        PREFIX owl: <http://www.w3.org/2002/07/owl#>
+        PREFIX owl: <${NAMESPACES.owl}>
         SELECT ?a ?b WHERE { ?a owl:differentFrom ?b }`, [defStore])
     const distinctPairs = new Set()
     for (const { a, b } of differentRows) { distinctPairs.add(`${a}|${b}`); distinctPairs.add(`${b}|${a}`) }
@@ -180,8 +180,8 @@ export const runMatch = async ({ store, defStore, abs }, outPath, registryPath, 
     const VALUE_B            = df.namedNode(CDP + "valueB")
     const AGGREGATE_SCORE    = df.namedNode(CDP + "aggregateScore")
     const VIA_MANUAL_MATCH   = df.namedNode(CDP + "viaManualMatch")
-    const XSD_DECIMAL        = df.namedNode("http://www.w3.org/2001/XMLSchema#decimal")
-    const XSD_BOOLEAN        = df.namedNode("http://www.w3.org/2001/XMLSchema#boolean")
+    const XSD_DECIMAL        = df.namedNode(`${NAMESPACES.xsd}decimal`)
+    const XSD_BOOLEAN        = df.namedNode(`${NAMESPACES.xsd}boolean`)
 
     for (const rule of orderedRules) {
         const namespace    = rule.ns
@@ -396,8 +396,8 @@ export const runMatch = async ({ store, defStore, abs }, outPath, registryPath, 
     // whole block is one append, so the named :Revision and its fresh blank
     // nodes never collide with earlier revisions when the file is re-parsed.
     if (harvesting && events.length) {
-        const prefixes = { cdp: CDP, cdf: rules[0].ns }
-        const sh   = (iri) => shrink(iri, prefixes)
+        const prefixMap = { cdp: CDP, cdf: rules[0].ns }
+        const sh   = (iri) => shrink(iri, prefixMap)
         const list = (arr) => arr.map(sh).join(", ")
         const existing = fs.existsSync(abs(historyPath)) ? fs.readFileSync(abs(historyPath), "utf8") : ""
         const rev = Math.max(0, ...[...existing.matchAll(/revision-(\d+)/g)].map(m => +m[1])) + 1
@@ -412,12 +412,7 @@ export const runMatch = async ({ store, defStore, abs }, outPath, registryPath, 
             `    ${pred}\n        ${bindings.join(" ,\n        ")}`).join(" ;\n")
         const block = `cdp:revision-${rev} a cdp:Revision ; prov:atTime "${new Date().toISOString()}"^^xsd:dateTime ;\n${props} .\n`
 
-        const header = `@prefix cdp:  <${CDP}> .
-@prefix cdf:  <${rules[0].ns}> .
-@prefix prov: <http://www.w3.org/ns/prov#> .
-@prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .
-
-`
+        const header = `${turtlePrefixBlock({ cdp: CDP, cdf: rules[0].ns, ...prefixes("prov", "xsd") })}\n\n`
         fs.appendFileSync(abs(historyPath), (existing ? "\n" : header) + block)
         console.log(`match: revision ${rev} — ${events.length} identity event(s) → ${historyPath}`)
     }

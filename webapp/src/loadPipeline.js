@@ -13,12 +13,12 @@
 //         output file(s) per PATHS, resolved per source for Extract steps.
 //         Multiple outputs (merge's provenance) stack as newlines.
 
-import { CDP as NS, formatFamily, LIFTED_FORMAT, localName, parseTtl, PATHS, sourceName } from "@directory-builder/core/utils"
+import { CDP as NS, formatFamily, LIFTED_FORMAT, localName, NAMESPACES, parseTtl, PATHS, sourceName } from "@directory-builder/core/utils"
 
-const PPLAN_STEP = "http://purl.org/net/p-plan#Step"
-const PPLAN_IS_PRECEDED_BY = "http://purl.org/net/p-plan#isPrecededBy"
-const RDF_TYPE = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type"
-const RDFS_LABEL = "http://www.w3.org/2000/01/rdf-schema#label"
+const PPLAN_STEP = `${NAMESPACES["p-plan"]}Step`
+const PPLAN_IS_PRECEDED_BY = `${NAMESPACES["p-plan"]}isPrecededBy`
+const RDF_TYPE = `${NAMESPACES.rdf}type`
+const RDFS_LABEL = `${NAMESPACES.rdfs}label`
 const FROM_SOURCE = `${NS}fromSource`
 const RETRIEVAL = `${NS}retrieval`
 const FORMAT = `${NS}format`

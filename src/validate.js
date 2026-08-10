@@ -1,10 +1,10 @@
 import { buildValidator, turtleToDataset } from "@foerderfunke/sem-ops-utils"
-import { CDP, enabledSources, identifierField, objectsOf, parseTtl, PATHS, shrink, sourceName } from "./utils.js"
+import { CDP, enabledSources, identifierField, NAMESPACES, objectsOf, parseTtl, PATHS, shrink, sourceName } from "./utils.js"
 import path from "path"
 import fs from "fs"
 
 // The facade-x namespace lifted source fields land under: xyz:<fieldPath>.
-const XYZ = "http://sparql.xyz/facade-x/data/"
+const XYZ = NAMESPACES.xyz
 
 // Instance integrity checks. Each check takes { abs, ttl, quads } (path
 // resolver rooted at the instance, federation.ttl raw + parsed) and returns

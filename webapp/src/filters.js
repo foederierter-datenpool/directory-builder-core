@@ -2,9 +2,9 @@
 // Reads:  federation.ttl.
 // Does:   one option per :TargetSchema, keyed to match entity.type.
 
-import { CDP as NS, parseTtl, prefixesOf, shrink } from "@directory-builder/core/utils"
+import { CDP as NS, NAMESPACES, parseTtl, prefixesOf, shrink } from "@directory-builder/core/utils"
 
-const RDFS_LABEL   = "http://www.w3.org/2000/01/rdf-schema#label"
+const RDFS_LABEL   = `${NAMESPACES.rdfs}label`
 const TARGET_CLASS = `${NS}targetClass`
 
 // One option per :TargetSchema, in declaration order. `type` is the prefixed

@@ -6,7 +6,7 @@
 // artifact resolves to "" (pages render empty). Top-level await — importing
 // modules stay synchronous.
 
-import { CDP, enabledSources, objectsOf, parseTtl, PATHS, prefixesOf, sourceName } from "@directory-builder/core/utils"
+import { CDP, enabledSources, NAMESPACES, objectsOf, parseTtl, PATHS, prefixes, prefixesOf, sourceName } from "@directory-builder/core/utils"
 
 const fetchText = async (path) => {
     const res = await fetch(`${import.meta.env.BASE_URL}${path}`).catch(() => null)
@@ -23,11 +23,11 @@ const preparationPaths = enabledSources(fedQuads).map((iri) => PATHS.preparation
 export const repositoryUrl = objectsOf(fedQuads, `${CDP}repository`)[0]
 // Display prefixes = the federation's own @prefix declarations; cdp pinned
 // first so cdp:… wins over the empty ":" prefix bound to the same namespace.
-export const displayPrefixes = { cdp: CDP, ...prefixesOf(federationTtl) }
+export const displayPrefixes = { ...prefixes("cdp"), ...prefixesOf(federationTtl) }
 // The federation's display name (:federation rdfs:label) — optional; the
 // webapp keeps its generic title without one.
 export const federationLabel = fedQuads.find((q) =>
-    q.subject.value === `${CDP}federation` && q.predicate.value === "http://www.w3.org/2000/01/rdf-schema#label")?.object.value
+    q.subject.value === `${CDP}federation` && q.predicate.value === `${NAMESPACES.rdfs}label`)?.object.value
 
 const FIXED = [PATHS.curation, PATHS.ingestLog, PATHS.federateLog, PATHS.mapped,
                PATHS.matches, PATHS.merged, PATHS.provenance, PATHS.final, PATHS.about, PATHS.query]

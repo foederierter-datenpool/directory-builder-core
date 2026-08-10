@@ -4,10 +4,60 @@
 
 import { Parser } from "n3"
 
-const RDF_TYPE = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type"
-
 // The engine's vocabulary namespace (config, journals, cdp: in artifacts).
 export const CDP = "https://civic-data.de/pipeline#"
+
+// ---- Namespaces ----------------------------------------------------------
+// Every namespace the engine itself names, spelled once: the prefix maps handed
+// to the Turtle writer, the @prefix headers of the journals it hand-writes, the
+// SPARQL headers the map step builds and the publication.ttl draft all pick from
+// here through prefixes(). An instance's own vocabularies are deliberately
+// absent — the engine cannot know them, so a file derived from a config takes
+// them from that config's own declarations instead (prefixesOf).
+export const NAMESPACES = {
+    cdp:      CDP,
+    // The default target namespace of a federated directory. An instance states
+    // its own as :targetNamespace, and the steps that write entity IRIs pass
+    // that through as cdf: instead; this is the fallback the shorteners assume.
+    cdf:      "https://civic-data.de/federated-directory#",
+    schema:   "http://schema.org/",
+    foaf:     "http://xmlns.com/foaf/0.1/",
+    dct:      "http://purl.org/dc/terms/",
+    dcat:     "http://www.w3.org/ns/dcat#",
+    dcatde:   "http://dcat-ap.de/def/dcatde/",
+    dcatap:   "http://data.europa.eu/r5r/",
+    vcard:    "http://www.w3.org/2006/vcard/ns#",
+    rdf:      "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
+    rdfs:     "http://www.w3.org/2000/01/rdf-schema#",
+    owl:      "http://www.w3.org/2002/07/owl#",
+    skos:     "http://www.w3.org/2004/02/skos/core#",
+    xsd:      "http://www.w3.org/2001/XMLSchema#",
+    prov:     "http://www.w3.org/ns/prov#",
+    "p-plan": "http://purl.org/net/p-plan#",
+    // SPARQL Anything's Facade-X data namespace: the lifted RDF's field IRIs.
+    xyz:      "http://sparql.xyz/facade-x/data/",
+    // EU and DCAT-AP.de authority tables, for the published catalog's code lists.
+    theme:    "http://publications.europa.eu/resource/authority/data-theme/",
+    freq:     "http://publications.europa.eu/resource/authority/frequency/",
+    pgl:      "http://dcat-ap.de/def/politicalGeocoding/Level/",
+}
+
+// {prefix: namespace} for the named prefixes only — what a writer or query
+// header needs, without restating an IRI. Unknown names throw rather than
+// yielding an undefined namespace that would silently stop abbreviating.
+export const prefixes = (...names) => Object.fromEntries(names.map((name) => {
+    if (!NAMESPACES[name]) throw new Error(`unknown prefix "${name}" — add it to NAMESPACES in utils.js`)
+    return [name, NAMESPACES[name]]
+}))
+
+// The vocabularies DCAT-AP.de catalog metadata is written in. One bundle for
+// both ends of publishing: the publication.ttl draft declares these, and the
+// publish step abbreviates the catalog with them — so a draft and the catalog
+// derived from it cannot disagree about what a prefix means.
+export const PUBLICATION_PREFIXES =
+    prefixes("dcat", "dct", "dcatde", "dcatap", "vcard", "foaf", "theme", "freq", "pgl")
+
+const RDF_TYPE = `${NAMESPACES.rdf}type`
 
 export const localName = (iri) => iri.replace(/^.*[#/]/, "")
 
@@ -99,6 +149,14 @@ export const prefixesOf = (turtle) =>
 // {prefix: namespace} → "PREFIX p1: <ns1>\nPREFIX p2: <ns2>"
 export const buildPrefixBlock = (prefixMap) =>
     Object.entries(prefixMap).map(([p, ns]) => `PREFIX ${p}: <${ns}>`).join("\n")
+
+// The same as a Turtle header, IRIs column-aligned: the shape of the @prefix
+// blocks in the hand-written journals and the drafted config. "" is the default
+// prefix, which each writer binds to whatever its file is about.
+export const turtlePrefixBlock = (prefixMap) => {
+    const width = Math.max(...Object.keys(prefixMap).map((p) => p.length + 1))
+    return Object.entries(prefixMap).map(([p, ns]) => `@prefix ${`${p}:`.padEnd(width)} <${ns}> .`).join("\n")
+}
 
 // Returns the IRI shortened against the supplied {prefix: namespace} map,
 // or the original IRI verbatim if no prefix matches.
