@@ -1,6 +1,6 @@
 import { HashRouter, Routes, Route, NavLink } from "react-router-dom"
 import "./styles.css"
-import { federationLabel, repositoryUrl } from "./instanceData.js"
+import { catalogTtl, federationLabel, repositoryUrl } from "./instanceData.js"
 import About from "./About.jsx"
 import React, { lazy, Suspense, useState } from "react"
 
@@ -8,6 +8,7 @@ import React, { lazy, Suspense, useState } from "react"
 // visited: comunica + yasgui (Query), comunica + jsonld (Download), xyflow
 // (Map/Match). About stays eager as the landing route.
 const Directory   = lazy(() => import("./Directory.jsx"))
+const DcatAp      = lazy(() => import("./DcatAp.jsx"))
 const Download    = lazy(() => import("./Download.jsx"))
 const Pipeline    = lazy(() => import("./Pipeline.jsx"))
 const EntitiesGraph = lazy(() => import("./EntitiesGraph.jsx"))
@@ -48,6 +49,7 @@ function Nav() {
                 <NavLink to="/directory">Directory</NavLink>
                 <NavLink to="/query">Query</NavLink>
                 <NavLink to="/download">Download</NavLink>
+                {catalogTtl && <NavLink to="/dcat-ap">DCAT-AP</NavLink>}
                 <NavLink to="/apis">APIs</NavLink>
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
@@ -91,6 +93,7 @@ export default function App() {
                             <Route path="/directory" element={<Directory />} />
                             <Route path="/query" element={<Query />} />
                             <Route path="/download" element={<Download />} />
+                            {catalogTtl && <Route path="/dcat-ap" element={<DcatAp />} />}
                             <Route path="/apis" element={<Apis />} />
                         </Routes>
                     </Suspense>
