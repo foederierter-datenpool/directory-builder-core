@@ -1,17 +1,19 @@
 import { HashRouter, Routes, Route, NavLink } from "react-router-dom"
 import "./styles.css"
 import { catalogTtl, federationLabel, repositoryUrl } from "./instanceData.js"
+import { hasLocations } from "./locationData.js"
 import About from "./About.jsx"
 import React, { lazy, Suspense, useState } from "react"
 
 // Lazy-load route views so their heavy deps load only when the route is
 // visited: comunica + yasgui (Query), comunica + jsonld (Download), xyflow
-// (Map/Match). About stays eager as the landing route.
+// (Mapping/Match), and Leaflet (Map). About stays eager as the landing route.
 const Directory   = lazy(() => import("./Directory.jsx"))
 const DcatAp      = lazy(() => import("./DcatAp.jsx"))
 const Download    = lazy(() => import("./Download.jsx"))
 const Pipeline    = lazy(() => import("./Pipeline.jsx"))
 const EntitiesGraph = lazy(() => import("./EntitiesGraph.jsx"))
+const LocationMap = lazy(() => import("./LocationMap.jsx"))
 const MapGraph    = lazy(() => import("./MapGraph.jsx"))
 const MatchGraph  = lazy(() => import("./MatchGraph.jsx"))
 const MergeTables = lazy(() => import("./MergeTables.jsx"))
@@ -41,7 +43,7 @@ function Nav() {
                         <NavLink to="/sources">Sources</NavLink>
                         <NavLink to="/pipeline">Pipeline</NavLink>
                         <NavLink to="/entities">Entities</NavLink>
-                        <NavLink to="/map">Map</NavLink>
+                        <NavLink to="/mapping">Mapping</NavLink>
                         <NavLink to="/match">Match</NavLink>
                         <NavLink to="/merge">Merge</NavLink>
                     </div>
@@ -50,6 +52,7 @@ function Nav() {
                 <NavLink to="/query">Query</NavLink>
                 <NavLink to="/download">Download</NavLink>
                 {catalogTtl && <NavLink to="/dcat-ap">DCAT-AP</NavLink>}
+                {hasLocations && <NavLink to="/map">Map</NavLink>}
                 <NavLink to="/apis">APIs</NavLink>
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
@@ -87,13 +90,14 @@ export default function App() {
                             <Route path="/pipeline" element={<Pipeline />} />
                             <Route path="/sources" element={<Sources />} />
                             <Route path="/entities" element={<EntitiesGraph />} />
-                            <Route path="/map" element={<MapGraph />} />
+                            <Route path="/mapping" element={<MapGraph />} />
                             <Route path="/match" element={<MatchGraph />} />
                             <Route path="/merge" element={<MergeTables />} />
                             <Route path="/directory" element={<Directory />} />
                             <Route path="/query" element={<Query />} />
                             <Route path="/download" element={<Download />} />
                             {catalogTtl && <Route path="/dcat-ap" element={<DcatAp />} />}
+                            {hasLocations && <Route path="/map" element={<LocationMap />} />}
                             <Route path="/apis" element={<Apis />} />
                         </Routes>
                     </Suspense>

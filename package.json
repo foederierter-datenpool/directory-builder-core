@@ -29,6 +29,7 @@
     "@zazuko/yasgui": "^4.6.1",
     "fflate": "^0.8.3",
     "fuzzball": "^2.2.6",
+    "leaflet": "^1.9.4",
     "lucide-react": "^1.14.0",
     "marked": "^18.0.5",
     "n3": "^2.0.3",
