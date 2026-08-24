@@ -39,3 +39,16 @@ main { flex: 1; min-height: 0 }
 .leaflet-tooltip ul { margin: 0.35rem 0 0; padding-left: 1.25rem }
 .leaflet-tooltip li { margin: 0.2rem 0 }
 .location-turtle { margin: 0; max-height: 70vh; overflow: auto; font-size: 13px }
+.pipeline-toolbar { position: relative; z-index: 10; display: flex; align-items: center; gap: 0.75rem; padding: 0.5rem 1rem; border-bottom: 1px solid #ddd }
+.data-file-menu { position: relative; color: #666; font-size: 13px }
+.data-file-menu > summary { cursor: pointer; user-select: none }
+.data-file-menu-panel { position: absolute; top: calc(100% + 0.55rem); left: 0; box-sizing: border-box; width: min(480px, calc(100vw - 3rem)); max-height: min(70vh, 640px); overflow: auto; padding: 0.75rem; border: 1px solid #ccc; border-radius: 4px; background: white; color: #444; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.16) }
+.data-file-menu-panel p { margin: 0 0 0.5rem; line-height: 1.4 }
+.data-file-menu-panel > .data-tree-children { padding-left: 0.25rem }
+.data-tree-children { margin: 0; padding: 0.5rem 0.75rem 0.5rem 1.75rem; list-style: none }
+.data-tree-children .data-tree-children { padding: 0.2rem 0 0.2rem 1.25rem }
+.data-tree-directory > summary { padding: 0.2rem 0; cursor: pointer }
+.data-tree-file { padding: 0.2rem 0 0.2rem 1rem }
+.data-tree-file a { color: #555; text-decoration: none }
+.data-tree-file a:hover { color: #000; text-decoration: underline }
+.data-tree-file code { color: #666; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 12px }

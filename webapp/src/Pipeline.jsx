@@ -1,13 +1,17 @@
 // Pipeline view: the fetch→lift→…→resolve step graph the engines journaled
 // while running — evidence of the executed pipeline.
 // Reads:  data/ingest/ingest-log.ttl, data/pipeline/federate-log.ttl,
-//         config/federation.ttl (via loadPipeline.js)
+//         config/federation.ttl (via loadPipeline.js), and the build-time data/
+//         file index
 // Does:   renders the Pipeline page (horizontal <ColumnGraph>) with a Source
-//         lane-header per Fetch and payload labels on the edges
+//         lane-header per Fetch, payload labels on the edges, and links to every
+//         published pipeline artifact
 
-import { federationTtl, ingestLogTtl, federateLogTtl } from "./instanceData.js"
+import { federationTtl, ingestLogTtl, federateLogTtl, repositoryUrl } from "./instanceData.js"
 import { loadPipeline } from "./loadPipeline.js"
 import ColumnGraph from "./ColumnGraph.jsx"
+import dataFiles from "virtual:instance-data-files"
+import DataFileTree from "./DataFileTree.jsx"
 import HelpTip from "./HelpTip.jsx"
 import React from "react"
 
@@ -29,7 +33,7 @@ const { nodes, edges } = loadPipeline([ingestLogTtl, federateLogTtl], federation
 export default function Pipeline() {
     return (
         <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
-            <div style={{ display: "flex", padding: "0.5rem 1rem", borderBottom: "1px solid #ddd" }}>
+            <div className="pipeline-toolbar">
                 <HelpTip title="The Pipeline view" label="About the Pipeline view">
                     <div>
                         The steps the engines actually ran, journaled as they executed. Each source
@@ -53,6 +57,7 @@ export default function Pipeline() {
                         It's a record of the last run: evidence of the pipeline, not a live process.
                     </div>
                 </HelpTip>
+                <DataFileTree files={dataFiles} repositoryUrl={repositoryUrl} />
             </div>
             <div style={{ flex: 1, minHeight: 0 }}>
                 <ColumnGraph

@@ -1,7 +1,6 @@
-// Download view: the full directory in four formats, or an external-schema export.
-// Reads:  config/federation.ttl, data/pipeline/final.ttl, and the exporters
-//         the federation declares via :hasExporter (instance-owned modules at
-//         webapp/exporters/<name>.js, dynamic-imported at runtime like config/data)
+// Download view: generated formats and exporters declared via :hasExporter.
+// Reads:  config/federation.ttl, data/pipeline/{final,provenance}.ttl, and
+//         instance-owned modules at webapp/exporters/<name>.js
 // Does:   triggers a browser download — Turtle and JSON-LD as one graph file,
 //         JSON and CSV as a zip with one file per target schema, or an
 //         exporter's external-schema file

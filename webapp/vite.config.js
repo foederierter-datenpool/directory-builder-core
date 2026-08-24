@@ -1,4 +1,4 @@
-import { serveInstanceData } from "./vite.js"
+import { instanceDataIndex, serveInstanceData } from "./vite.js"
 import react from "@vitejs/plugin-react"
 import { defineConfig } from "vite"
 import path from "path"
@@ -9,6 +9,6 @@ import path from "path"
 const instance = path.resolve(process.env.INSTANCE ?? path.join(import.meta.dirname, "../example"))
 
 export default defineConfig({
-    plugins: [react(), serveInstanceData({ root: instance })],
+    plugins: [react(), instanceDataIndex({ root: instance }), serveInstanceData({ root: instance })],
     build: { target: "es2022" },  // top-level await in instanceData.js
 })
