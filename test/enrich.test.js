@@ -1,5 +1,7 @@
 import { parseTtl, PATHS } from "@directory-builder/core/utils"
+import { storeFromTurtles } from "@foerderfunke/sem-ops-utils"
 import { Pipeline, validate } from "@directory-builder/core"
+import { loadEnrichConfig, runEnrich } from "../src/pipeline/steps/enrich.js"
 import { makeInstance } from "./helpers/instance.js"
 import assert from "node:assert/strict"
 import { test } from "node:test"
@@ -101,4 +103,90 @@ test("enrich geocodes via Nominatim with a tail-stripped retry, cached for offli
     t.mock.method(globalThis, "fetch", async () => { throw new Error("network hit despite warm cache") })
     await pipeline.federate()
     assert.deepEqual(geoOf(root), cold)
+})
+
+const inheritanceFederation = `
+@prefix :       <https://civic-data.de/pipeline#> .
+@prefix schema: <http://schema.org/> .
+@prefix ft:     <http://publications.europa.eu/resource/authority/file-type/> .
+
+:federation a :Federation ; :hasSource :alphaSource .
+
+:facilitySchema a :TargetSchema ; :targetClass schema:Place .
+:serviceSchema  a :TargetSchema ; :targetClass schema:Service .
+:t-id a :TargetField ; :targetPredicate schema:identifier .
+
+:alphaSource a :Source ; :format ft:JSON ; :hasField :alpha-id .
+:alpha-id a :SourceField ; :fieldPath "id" ; :iriSource true .
+:alpha-mapping a :Mapping ; :fromSource :alphaSource ; :toTarget :facilitySchema ;
+    :hasFieldMapping [ :from :alpha-id ; :to :t-id ] .
+
+:match a :MatchRule ; :forTarget :facilitySchema ;
+    :targetNamespace "urn:test:" ; :mintedSubjectPrefix "place-" .
+
+:enrich a :EnrichRule ;
+    :inherit :facilityToServiceInheritance .
+
+:facilityToServiceInheritance a :InheritanceRule ;
+    :from :facilitySchema ;
+    :to :serviceSchema ;
+    :through schema:provider ;
+    :on schema:audience, schema:openingHours .
+`
+
+test("enrich inherits fallback values and records their provider provenance", async () => {
+    const root = makeInstance("inherit", {
+        federation: inheritanceFederation,
+        sources: { alpha: [{ id: "unused" }] },
+    })
+    assert.deepEqual(await validate(root), [])
+
+    const resolvedTtl = `
+@prefix schema: <http://schema.org/> .
+
+<urn:facility> a schema:Place ;
+    schema:audience "Adults" ;
+    schema:openingHours "Mo-Fr 09:00-17:00" .
+<urn:service-a> a schema:Service ; schema:provider <urn:facility> .
+<urn:service-b> a schema:Service ;
+    schema:provider <urn:facility> ;
+    schema:audience "Direct audience" .
+
+<urn:other-provider> a schema:Organization ; schema:audience "Not inherited" .
+<urn:service-c> a schema:Service ; schema:provider <urn:other-provider> .
+`
+    const abs = (file) => path.join(root, file)
+    fs.mkdirSync(path.dirname(abs(PATHS.resolved)), { recursive: true })
+    fs.writeFileSync(abs(PATHS.resolved), resolvedTtl)
+    fs.writeFileSync(abs(PATHS.provenance), "")
+
+    const config = await loadEnrichConfig(storeFromTurtles([inheritanceFederation]))
+    await runEnrich({ abs }, config, PATHS.resolved, PATHS.final, PATHS.provenance, PATHS.geocache)
+
+    const final = parseTtl(fs.readFileSync(abs(PATHS.final), "utf8"))
+    const values = (subject, predicate) => final
+        .filter((quad) => quad.subject.value === subject && quad.predicate.value === SCHEMA + predicate)
+        .map((quad) => quad.object.value)
+
+    assert.deepEqual(values("urn:service-a", "audience"), ["Adults"])
+    assert.deepEqual(values("urn:service-a", "openingHours"), ["Mo-Fr 09:00-17:00"])
+    assert.deepEqual(values("urn:service-b", "audience"), ["Direct audience"], "direct values win")
+    assert.deepEqual(values("urn:service-b", "openingHours"), ["Mo-Fr 09:00-17:00"])
+    assert.deepEqual(values("urn:service-c", "audience"), [], "the configured source class is enforced")
+    assert.equal(fs.existsSync(abs(PATHS.geocache)), false, "inheritance alone creates no geocache")
+
+    const provenance = parseTtl(fs.readFileSync(abs(PATHS.provenance), "utf8"))
+    const derivedFrom = provenance.filter((quad) => quad.predicate.value === "http://www.w3.org/ns/prov#wasDerivedFrom")
+    assert.equal(derivedFrom.length, 3)
+    assert.ok(derivedFrom.every((quad) => quad.object.value === "urn:facility"))
+    const generatedBy = provenance.filter((quad) => quad.predicate.value === "http://www.w3.org/ns/prov#wasGeneratedBy")
+    assert.equal(generatedBy.length, 3)
+    assert.ok(generatedBy.every((quad) => quad.object.value === "https://civic-data.de/pipeline#enrichStep"))
+    const appliedRule = provenance.filter((quad) => quad.predicate.value === "https://civic-data.de/pipeline#appliedRule")
+    assert.equal(appliedRule.length, 3)
+    assert.ok(appliedRule.every((quad) =>
+        quad.object.value === "https://civic-data.de/pipeline#facilityToServiceInheritance"))
+    assert.equal(provenance.filter((quad) =>
+        quad.predicate.value === "http://www.w3.org/1999/02/22-rdf-syntax-ns#reifies"
+        && quad.object.termType === "Quad").length, 3)
 })

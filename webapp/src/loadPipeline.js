@@ -22,6 +22,7 @@ const RDFS_LABEL = `${NAMESPACES.rdfs}label`
 const FROM_SOURCE = `${NS}fromSource`
 const RETRIEVAL = `${NS}retrieval`
 const FORMAT = `${NS}format`
+const GEOCODE = `${NS}geocode`
 const LANE_BORDER = "#bbb"
 
 const basename = (path) => path.replace(/^.*\//, "")
@@ -30,12 +31,12 @@ const basename = (path) => path.replace(/^.*\//, "")
 // The last step writes final.ttl, so resolve's output is only the intermediate
 // resolved.ttl when an enrich step follows.
 const STEP_OUTPUTS = {
-    Extract:   (name) => [PATHS.extracted(name)],
+    Extract: ({ name }) => [PATHS.extracted(name)],
     Map:     () => [PATHS.mapped],
     Match:   () => [PATHS.matches],
     Merge:   () => [PATHS.merged, PATHS.provenance],
-    Resolve: (name, enriched) => [enriched ? PATHS.resolved : PATHS.final],
-    Enrich:  () => [PATHS.final, PATHS.geocache],
+    Resolve: ({ enriched }) => [enriched ? PATHS.resolved : PATHS.final],
+    Enrich:  ({ geocoded }) => [PATHS.final, ...(geocoded ? [PATHS.geocache] : [])],
 }
 
 export function loadPipeline(stepTtls, federationTtl) {
@@ -63,9 +64,11 @@ export function loadPipeline(stepTtls, federationTtl) {
     const stepType = new Map([...isStep].map((iri) => [iri, nsTypeOf.get(iri)]))
 
     const enriched = [...stepType.values()].includes("Enrich")
+    const geocoded = fedQuads.some((quad) => quad.predicate.value === GEOCODE)
     const fileLabel = (iri) => {
         const src = sourceOfStep.get(iri)
-        const outs = (STEP_OUTPUTS[stepType.get(iri)] ?? (() => []))(src && sourceName(src), enriched).map(basename)
+        const outputs = STEP_OUTPUTS[stepType.get(iri)] ?? (() => [])
+        const outs = outputs({ name: src && sourceName(src), enriched, geocoded }).map(basename)
         return outs.length ? outs.join("\n") : null
     }
     // A Fetch step emits its source's :format from federation.ttl; a Lift

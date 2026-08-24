@@ -45,8 +45,8 @@ export default function Pipeline() {
                         vocabulary and is value-neutral; <strong>match</strong> decides which records
                         describe the same entity and <strong>merge</strong> folds them into one;
                         {" "}<strong>resolve</strong> picks each field's value; an opt-in
-                        {" "}<strong>enrich</strong> step adds looked-up data no source
-                        carries (geocoded coordinates, cached in the registry). The last
+                        {" "}<strong>enrich</strong> step derives data after resolution,
+                        such as geocoded coordinates or values inherited from a linked entity. The last
                         step writes the final directory.
                     </div>
                     <div>

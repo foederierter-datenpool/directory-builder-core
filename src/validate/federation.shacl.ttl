@@ -222,11 +222,40 @@
 
 # ---- Enrich rules ---------------------------------------------------------
 
-# An EnrichRule adds looked-up data past resolve: :geocode names the target
-# schemas whose resolved entities get Nominatim coordinates.
+# An EnrichRule derives data past resolve. It needs at least one geocoding
+# target or inheritance rule.
 :enrichRuleShape a sh:NodeShape ;
     sh:targetClass :EnrichRule ;
+    sh:or (
+        [ sh:path :geocode ; sh:minCount 1 ]
+        [ sh:path :inherit ; sh:minCount 1 ]
+    ) ;
     sh:property [
-        sh:path :geocode ; sh:minCount 1 ; sh:nodeKind sh:IRI ; sh:class :TargetSchema ;
-        sh:message "needs at least one :geocode (a :TargetSchema)"
+        sh:path :geocode ; sh:nodeKind sh:IRI ; sh:class :TargetSchema ;
+        sh:message ":geocode must point to a :TargetSchema"
+    ] ;
+    sh:property [
+        sh:path :inherit ; sh:nodeKind sh:IRI ; sh:class :InheritanceRule ; sh:node :inheritanceShape ;
+        sh:message ":inherit must point to a named :InheritanceRule"
+    ] .
+
+# The destination points through :through to the source. A value under each
+# :on predicate is copied only when the destination has no value of its own.
+:inheritanceShape a sh:NodeShape ;
+    sh:targetClass :InheritanceRule ;
+    sh:property [
+        sh:path :from ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ; sh:class :TargetSchema ;
+        sh:message "needs exactly one :from (a :TargetSchema)"
+    ] ;
+    sh:property [
+        sh:path :to ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ; sh:class :TargetSchema ;
+        sh:message "needs exactly one :to (a :TargetSchema)"
+    ] ;
+    sh:property [
+        sh:path :through ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ;
+        sh:message "needs exactly one :through predicate"
+    ] ;
+    sh:property [
+        sh:path :on ; sh:minCount 1 ; sh:nodeKind sh:IRI ;
+        sh:message "needs at least one :on predicate"
     ] .

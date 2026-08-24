@@ -8,7 +8,7 @@ import { runPreparation } from "./steps/preparation.js"
 import { runMatch } from "./steps/match.js"
 import { runMerge } from "./steps/merge.js"
 import { runResolve } from "./steps/resolve.js"
-import { geocodeTargets, runEnrich } from "./steps/enrich.js"
+import { loadEnrichConfig, runEnrich } from "./steps/enrich.js"
 import { runPublish } from "./steps/publish.js"
 import { DataFactory } from "n3"
 import path from "path"
@@ -75,15 +75,17 @@ export async function federate(root = process.cwd()) {
     })
     const matchStep   = await journal.step("match",   { after: [mapStep] },   () => runMatch(ctx, PATHS.matches, PATHS.registry, PATHS.registryHistory))
     const mergeStep   = await journal.step("merge",   { after: [matchStep] }, () => runMerge(ctx, PATHS.merged, PATHS.provenance))
-    // Enrichment is opt-in: no :EnrichRule declared → no enrich step, no journal
-    // entry. The last step writes final.ttl — resolve's output is only an
-    // intermediate resolved.ttl when an enrich step follows.
-    const enrichTargets = await geocodeTargets(defStore)
-    const resolveOut = enrichTargets.length ? PATHS.resolved : PATHS.final
+    // Enrichment is opt-in: without geocoding or inheritance rules, resolve
+    // writes final.ttl directly. Otherwise its output is the intermediate that
+    // enrich reads.
+    const enrichConfig = await loadEnrichConfig(defStore)
+    const shouldEnrich = enrichConfig.geocodeClasses.length > 0
+        || enrichConfig.inheritance.length > 0
+    const resolveOut = shouldEnrich ? PATHS.resolved : PATHS.final
     let lastStep = await journal.step("resolve", { after: [mergeStep] }, () => runResolve(ctx, resolveOut))
-    if (enrichTargets.length)
+    if (shouldEnrich)
         lastStep = await journal.step("enrich", { after: [lastStep] },
-            () => runEnrich(ctx, enrichTargets, PATHS.resolved, PATHS.final, PATHS.provenance, PATHS.geocache))
+            () => runEnrich(ctx, enrichConfig, PATHS.resolved, PATHS.final, PATHS.provenance, PATHS.geocache))
     // Publishing is opt-in the same way: no publication.ttl → no publish step.
     if (fs.existsSync(abs(PATHS.publication)))
         await journal.step("publish", { after: [lastStep] }, () => runPublish(ctx, abs(PATHS.catalog)))

@@ -56,9 +56,9 @@ instance and the full data flow.
 ### Configuring the pipeline
 
 Edit `config/federation.ttl` — the federation's decisions (sources, target
-schemas, field mappings, match/merge/resolve rules, an opt-in `:EnrichRule`
-to geocode a schema's entities via Nominatim). It's the one required
-file; see [`example/config/federation.ttl`](example/config/federation.ttl) for
+schemas, field mappings, match/merge/resolve rules, and an opt-in `:EnrichRule`
+to geocode entities or inherit values across an entity relationship). It's the
+one required file; see [`example/config/federation.ttl`](example/config/federation.ttl) for
 a worked example and [`src/validate/federation.shacl.ttl`](src/validate/federation.shacl.ttl)
 for the full contract it must satisfy. Then, per source:
 
