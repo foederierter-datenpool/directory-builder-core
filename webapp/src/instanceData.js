@@ -34,13 +34,13 @@ export const federationLabel = fedQuads.find((q) =>
 // DCAT-AP page keys off: no catalog, no page and no nav entry.
 const FIXED = [PATHS.curation, PATHS.ingestLog, PATHS.federateLog, PATHS.mapped,
                PATHS.matches, PATHS.merged, PATHS.provenance, PATHS.final, PATHS.about, PATHS.query,
-               PATHS.catalog]
+               PATHS.queryExamples, PATHS.catalog]
 const [fixedTexts, extractedTexts, preparationTexts] = await Promise.all([
     Promise.all(FIXED.map(fetchText)),
     Promise.all(extractedPaths.map(fetchText)),
     Promise.all(preparationPaths.map(fetchText)),
 ])
 
-export const [curationTtl, ingestLogTtl, federateLogTtl, mappedTtl, matchesTtl, mergedTtl, provenanceTtl, finalTtl, aboutMd, querySparql, catalogTtl] = fixedTexts
+export const [curationTtl, ingestLogTtl, federateLogTtl, mappedTtl, matchesTtl, mergedTtl, provenanceTtl, finalTtl, aboutMd, querySparql, queryExamplesTtl, catalogTtl] = fixedTexts
 export const extractedByPath = Object.fromEntries(extractedPaths.map((p, i) => [p, extractedTexts[i]]))
 export const preparationByPath = Object.fromEntries(preparationPaths.map((p, i) => [p, preparationTexts[i]]))

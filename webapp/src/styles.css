@@ -52,3 +52,19 @@ main { flex: 1; min-height: 0 }
 .data-tree-file a { color: #555; text-decoration: none }
 .data-tree-file a:hover { color: #000; text-decoration: underline }
 .data-tree-file code { color: #666; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 12px }
+.query-page { display: flex; flex-direction: column; min-height: 100%; overflow: visible }
+.query-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 0.65rem; padding: 0.5rem 1rem; border-bottom: 1px solid #ddd }
+.query-example-select, .query-visual-toggle { box-sizing: border-box; min-height: 30px; border: 1px solid #ccc; border-radius: 4px; background: white; color: #444; font-size: 13px }
+.query-example-select { max-width: 30rem; padding: 0.3rem 0.5rem; cursor: pointer }
+.query-visual-toggle { display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.3rem 0.65rem; cursor: pointer }
+.query-visual-toggle[aria-expanded="true"] { border-color: #888; background: #f5f5f5 }
+.query-toggle-caret { transition: transform 0.15s ease }
+.query-visual-toggle[aria-expanded="true"] .query-toggle-caret { transform: rotate(180deg) }
+.sparnatural-wrap { flex: 0 0 auto; padding: 0.6rem; border-bottom: 1px solid #ddd; background: white; color: #222 }
+.sparnatural-wrap[hidden] { display: none }
+.query-builder-status { padding: 0.5rem; color: #666; font-size: 13px }
+.query-builder-error { padding: 0.5rem; color: #a22; font-size: 13px }
+.query-editor { flex: 1 0 auto; min-height: 0; overflow: visible }
+.query-editor .yasgui .tabsList,
+.query-editor .yasgui .controlbar { display: none !important }
+.yasr .dataTable td > div.rowNumber { margin-right: 8px }

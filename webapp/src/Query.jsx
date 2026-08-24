@@ -1,14 +1,18 @@
-// Query view: a Yasgui SPARQL editor wired to an in-browser n3 store (no server) —
-// a fetch interceptor routes the fake endpoint through Comunica.
-// Reads:  data/pipeline/final.ttl (loaded into the store)
-// Does:   renders the Query page; answers SPARQL against final.ttl in-browser
+// Query view: Yasgui and Sparnatural wired to an in-browser n3 store.
+// Reads:  data/pipeline/final.ttl, config/federation.ttl, and the optional
+//         webapp/content/{query.sparql,query-examples.ttl}
+// Does:   renders prepared, textual and visual SPARQL queries; a fetch
+//         interceptor routes the fake endpoint through Comunica
 
 import { storeFromTurtles } from "@foerderfunke/sem-ops-utils/core"
 import { NAMESPACES } from "@directory-builder/core/utils"
 import { queryEngine } from "@foerderfunke/sem-ops-utils/sparql"
-import { finalTtl, querySparql } from "./instanceData.js"
+import { displayPrefixes, federationTtl, finalTtl, queryExamplesTtl, querySparql } from "./instanceData.js"
+import { readQueryExamples } from "./queryExamples.js"
+import { buildSparnaturalConfig, buildSparnaturalQuery } from "./sparnaturalConfig.js"
 import HelpTip from "./HelpTip.jsx"
-import React, { useEffect, useRef } from "react"
+import SparnaturalBuilder from "./SparnaturalBuilder.jsx"
+import React, { useCallback, useEffect, useRef, useState } from "react"
 import "@zazuko/yasgui/build/yasgui.min.css"
 import Yasgui from "@zazuko/yasgui"
 import { Writer } from "n3"
@@ -17,12 +21,21 @@ import { Writer } from "n3"
 // run in-browser against an n3 Store. So we point Yasgui at this fake URL and
 // install a fetch interceptor that routes those requests through Comunica.
 const ENDPOINT = "http://local/sparql"
+const EDITOR_HEIGHT = "300px"
 
 const store = storeFromTurtles([finalTtl])
 
 // Instances own the editor's starting query via webapp/content/query.sparql
 // (fetched at runtime like the About prose); plain select-all without one.
 const INITIAL_QUERY = querySparql || "SELECT * WHERE { ?s ?p ?o } LIMIT 100"
+const QUERY_EXAMPLES = readQueryExamples(queryExamplesTtl)
+    .map((example) => example.visual
+        ? { ...example, visual: buildSparnaturalQuery(federationTtl, example.visual) }
+        : example)
+    .filter((example) => example.query || example.visual)
+const TEXT_EXAMPLES = QUERY_EXAMPLES.filter((example) => example.query)
+const VISUAL_EXAMPLES = QUERY_EXAMPLES.filter((example) => example.visual)
+const SPARNATURAL_CONFIG = buildSparnaturalConfig(federationTtl, finalTtl)
 
 Yasgui.Yasqe.defaults.value = INITIAL_QUERY
 
@@ -135,37 +148,105 @@ const sharedQueryFromUrl = () => {
 }
 
 export default function Query() {
-    const ref = useRef(null)
+    const editorRef = useRef(null)
+    const yasguiRef = useRef(null)
+    const [visualOpen, setVisualOpen] = useState(false)
+    const [visualExample, setVisualExample] = useState(null)
+
+    const setEditorQuery = useCallback((query, run = false) => {
+        const tab = yasguiRef.current?.getTab()
+        if (!tab || !query) return
+        tab.setQuery(query)
+        if (run) tab.getYasqe()?.query()
+    }, [])
+
+    const runEditorQuery = useCallback(() => {
+        yasguiRef.current?.getTab()?.getYasqe()?.query()
+    }, [])
+
     useEffect(() => {
         installInterceptor()
         installShareOverride()
-        const el = ref.current
+        const el = editorRef.current
         if (!el) return
         const y = new Yasgui(el, {
             requestConfig: { endpoint: ENDPOINT, method: "POST" },
             copyEndpointOnNewTab: false,
             populateFromUrl: false,
+            yasqe: { editorHeight: EDITOR_HEIGHT },
+            yasr: { prefixes: displayPrefixes },
         })
+        yasguiRef.current = y
+        y.getTab()?.getYasqe()?.setSize(null, EDITOR_HEIGHT)
         const shared = sharedQueryFromUrl()
         if (shared) y.getTab()?.setQuery(shared)
-        return () => { el.innerHTML = ""; y?.destroy?.() }
+        return () => {
+            yasguiRef.current = null
+            el.innerHTML = ""
+            y?.destroy?.()
+        }
     }, [])
+
+    const selectExample = (event) => {
+        const example = QUERY_EXAMPLES.find(({ id }) => id === event.target.value)
+        if (!example) return
+        if (example.visual) {
+            setVisualExample(example)
+            setVisualOpen(true)
+            return
+        }
+        setVisualExample(null)
+        setVisualOpen(false)
+        setEditorQuery(example.query, true)
+    }
+
     return (
-        <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
-            <style>{`
-                .yasgui .controlbar { display: none; }
-                .yasr .dataTable td > div.rowNumber { margin-right: 8px; }
-            `}</style>
-            <div style={{ display: "flex", padding: "0.5rem 1rem", borderBottom: "1px solid #ddd" }}>
+        <div className="query-page">
+            <div className="query-toolbar">
                 <HelpTip title="Query" label="About the query editor">
                     <div>
                         An editor for SPARQL, the query language for graph data, running entirely
                         in your browser against the finished directory: no server, no endpoint.
                         Share links carry the query in the URL.
                     </div>
+                    <div>
+                        Choose a prepared example or build a query visually. The visual builder
+                        writes SPARQL into the editor; its play button runs the query there.
+                    </div>
                 </HelpTip>
+                {QUERY_EXAMPLES.length > 0 && (
+                    <select className="query-example-select" defaultValue="" onChange={selectExample}
+                        aria-label="Example queries">
+                        <option value="" disabled>Choose an example…</option>
+                        {TEXT_EXAMPLES.map((example) => (
+                            <option key={example.id} value={example.id}>{example.name}</option>
+                        ))}
+                        {VISUAL_EXAMPLES.length > 0 && (
+                            <optgroup label="Visual query builder">
+                                {VISUAL_EXAMPLES.map((example) => (
+                                    <option key={example.id} value={example.id}>{example.name}</option>
+                                ))}
+                            </optgroup>
+                        )}
+                    </select>
+                )}
+                {SPARNATURAL_CONFIG && (
+                    <button className="query-visual-toggle" type="button"
+                        aria-expanded={visualOpen} title="Powered by Sparnatural"
+                        onClick={() => setVisualOpen((open) => !open)}>
+                        Build visually <span className="query-toggle-caret" aria-hidden="true">▾</span>
+                    </button>
+                )}
             </div>
-            <div ref={ref} className="page" style={{ flex: 1, minHeight: 0, overflow: "auto" }} />
+            <SparnaturalBuilder
+                open={visualOpen}
+                config={SPARNATURAL_CONFIG}
+                endpoint={ENDPOINT}
+                onQuery={setEditorQuery}
+                onSubmit={runEditorQuery}
+                example={visualExample}
+            />
+            <div ref={editorRef} className="query-editor page" />
         </div>
     )
 }

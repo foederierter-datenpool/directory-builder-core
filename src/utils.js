@@ -112,6 +112,7 @@ export const PATHS = {
     geocache:       "registry/geocache.json",
     about:          "webapp/content/about.md",
     query:          "webapp/content/query.sparql",
+    queryExamples:  "webapp/content/query-examples.ttl",
     fetchScript: (name) => `sources/${name}/fetch.js`,
     exporter:    (name) => `webapp/exporters/${name}.js`,
     staticDir:   (name) => `sources/${name}/static/`,
