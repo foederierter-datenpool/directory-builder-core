@@ -5,7 +5,7 @@ const directoryNode = (name, path) => ({
     files: [],
 })
 
-// Convert ["data/pipeline/final.ttl", ...] into a directory tree. The virtual
+// Convert ["data/directory.ttl", ...] into a directory tree. The virtual
 // module already sorts paths; sorting here keeps this helper safe on any input.
 export function buildDataFileTree(paths) {
     const root = directoryNode("data", "data")

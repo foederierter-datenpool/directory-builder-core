@@ -1,5 +1,5 @@
 // Query view: Yasgui and Sparnatural wired to an in-browser n3 store.
-// Reads:  data/pipeline/final.ttl, config/federation.ttl, and the optional
+// Reads:  data/directory.ttl, config/federation.ttl, and the optional
 //         webapp/content/{query.sparql,query-examples.ttl}
 // Does:   renders prepared, textual and visual SPARQL queries; a fetch
 //         interceptor routes the fake endpoint through Comunica

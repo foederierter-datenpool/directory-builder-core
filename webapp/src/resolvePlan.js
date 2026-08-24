@@ -1,5 +1,5 @@
 // How resolve settles each Merge conflict: the strategy federation.ttl assigns
-// to the predicate, the value(s) that survived into final.ttl, and any curated
+// to the predicate, the value(s) that survived into directory.ttl, and any curated
 // :ValueCorrection (curation.ttl) touching the field — a correction's
 // :entity is translated member → cluster via matches.ttl, mirroring the engine.
 // Reads:  config/{federation,curation}.ttl, data/pipeline/{matches,final}.ttl

@@ -66,7 +66,7 @@
     dcatap:availability <http://publications.europa.eu/resource/authority/planned-availability/EXPERIMENTAL> .
 
 # Stamped onto the distribution the publish step derives (its accessURL is
-# final.ttl under :federation :baseUrl, which the webapp serves verbatim).
+# directory.ttl under :federation :baseUrl, which the webapp serves verbatim).
 :distributionDefaults a :DistributionTemplate ;
     dct:license <http://dcat-ap.de/def/licenses/dl-by-de/2.0> ;
     dcatde:licenseAttributionByText "CityOpen Data; CivicHub Directory; ReadCity Programmes — aggregiert durch Example e.V." ;

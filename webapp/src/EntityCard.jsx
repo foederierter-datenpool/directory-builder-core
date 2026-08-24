@@ -62,7 +62,7 @@ function SourceTags({ sources }) {
 function ValueCell({ values, highlight, resolution }) {
     const [idx, setIdx] = useState(0)
     // idx persists across re-renders, so clamp when `values` shrinks (e.g.
-    // rendering final.ttl where every (s,p) has exactly one value).
+    // rendering directory.ttl where every (s,p) has exactly one value).
     const safeIdx = idx % values.length
     const cur = values[safeIdx]
     const multi = values.length > 1

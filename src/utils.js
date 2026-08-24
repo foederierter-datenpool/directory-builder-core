@@ -129,10 +129,10 @@ export const PATHS = {
     mapped:      "data/pipeline/mapped.ttl",
     matches:     "data/pipeline/matches.ttl",
     merged:      "data/pipeline/merged.ttl",
-    provenance:  "data/pipeline/provenance.ttl",
+    provenance:  "data/provenance.ttl",
     resolved:    "data/pipeline/resolved.ttl",
-    final:       "data/pipeline/final.ttl",
-    catalog:     "data/publish/catalog.ttl",
+    final:       "data/directory.ttl",
+    catalog:     "data/catalog.ttl",
 }
 
 // Format family of a file-type IRI (EU file-type authority): the code before

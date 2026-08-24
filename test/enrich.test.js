@@ -13,7 +13,7 @@ import fs from "fs"
 // :EnrichRule on their schema. The first federate geocodes through structured
 // Nominatim queries (stubbed): the plain street hits directly, the suffixed one
 // misses and hits on the tail-stripped retry. Coordinates land directly on the
-// entities in final.ttl; only the tail-stripped lookup leaves a trace — the
+// entities in directory.ttl; only the tail-stripped lookup leaves a trace — the
 // street that hit as `adjusted` in the cache, the full query string as a
 // cdp:geocodedAs annotation in provenance.ttl. The second federate runs
 // entirely from the committed cache — its network stub only throws.
@@ -76,7 +76,7 @@ test("enrich geocodes via Nominatim with a tail-stripped retry, cached for offli
     })
     await pipeline.federate()
     assert.deepEqual(streets.toSorted(), ["Badstraße 10", "Rathenower Straße 16", "Rathenower Straße 16, Haus H"])
-    // resolve's output is the coordinate-free intermediate; enrich writes final.ttl
+    // resolve's output is the coordinate-free intermediate; enrich writes directory.ttl
     assert.ok(!fs.readFileSync(path.join(root, PATHS.resolved), "utf8").includes("latitude"))
     const cold = geoOf(root)
     assert.equal(cold.subjects.length, 2)

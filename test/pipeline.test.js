@@ -219,7 +219,7 @@ test("federate rejects when a mapped field never reaches the extracted output", 
 // (owl:sameAs; the typo also breaks the fuzzy match) and pins the correction to
 // the source record carrying the typo (:beta-b1, translated to its minted
 // cluster at resolve): the wrong literal is rewritten, the conflict collapses,
-// and final.ttl comes out byte-identical to the clean fixture's.
+// and directory.ttl comes out byte-identical to the clean fixture's.
 
 test("a curated :ValueCorrection rewrites a known-wrong literal at resolve", async () => {
     const curation = `

@@ -59,8 +59,9 @@ data/pipeline/extracted/<source>.ttl
 data/pipeline/mapped.ttl         schema: vocabulary, both sources
 data/pipeline/matches.ttl        cross-source match evidence
 data/pipeline/merged.ttl         clustered, minted cluster IRIs
-data/pipeline/provenance.ttl     which source said what
-data/pipeline/final.ttl          one resolved record per organisation
+data/provenance.ttl              which source said what
+data/directory.ttl               one resolved record per organisation
+data/catalog.ttl                 DCAT-AP.de catalog metadata (when publishing)
 data/pipeline/federate-log.ttl   journaled extract→…→resolve steps
 ```
 

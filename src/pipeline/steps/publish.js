@@ -10,7 +10,7 @@ const RDF_TYPE = `${NS.rdf}type`
 const DATETIME = df.namedNode(`${NS.xsd}dateTime`)
 const TURTLE_MEDIA_TYPE = df.namedNode("https://www.iana.org/assignments/media-types/text/turtle")
 // Webapp routes (hash router). Download is where a human gets the other
-// formats: they are built in the browser from final.ttl on click, so they have
+// formats: they are built in the browser from directory.ttl on click, so they have
 // no URL and cannot be distributions — this page is how they are reachable.
 // Pipeline is the run's own methodology view (per-source lanes, fetch → lift →
 // extract → map → match → merge → resolve), which is what
@@ -21,7 +21,7 @@ const PIPELINE_ROUTE = "#/pipeline"
 // ---- Publish step ----------------------------------------------------------
 // DCAT-AP.de catalog metadata for the directory: publication.ttl carried
 // through, plus what only the run knows — dct:modified and the Turtle
-// distribution. Its accessURL is final.ttl under the deployed webapp, which
+// distribution. Its accessURL is directory.ttl under the deployed webapp, which
 // serves data/ verbatim; the :DistributionTemplate's remaining properties
 // (license, attribution) are stamped onto it. Turtle is the only distribution
 // there can be — the webapp's other formats (JSON-LD, the per-schema CSV/JSON

@@ -14,7 +14,7 @@ config/
                         # field mappings, match/merge/resolve rules
   curation.ttl          # optional: curated owl:sameAs pairs, value corrections
   publication.ttl       # optional: DCAT-AP.de catalog metadata; present turns
-                        # the publish step on (→ data/publish/catalog.ttl).
+                        # the publish step on (→ data/catalog.ttl).
                         # `init publication` drafts one from federation.ttl
 sources/<name>/
   fetch.js              # how to fetch this source

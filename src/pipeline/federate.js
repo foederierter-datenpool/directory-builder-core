@@ -76,7 +76,7 @@ export async function federate(root = process.cwd()) {
     const matchStep   = await journal.step("match",   { after: [mapStep] },   () => runMatch(ctx, PATHS.matches, PATHS.registry, PATHS.registryHistory))
     const mergeStep   = await journal.step("merge",   { after: [matchStep] }, () => runMerge(ctx, PATHS.merged, PATHS.provenance))
     // Enrichment is opt-in: without geocoding or inheritance rules, resolve
-    // writes final.ttl directly. Otherwise its output is the intermediate that
+    // writes directory.ttl directly. Otherwise its output is the intermediate that
     // enrich reads.
     const enrichConfig = await loadEnrichConfig(defStore)
     const shouldEnrich = enrichConfig.geocodeClasses.length > 0

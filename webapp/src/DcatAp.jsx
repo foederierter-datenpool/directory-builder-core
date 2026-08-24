@@ -1,5 +1,5 @@
 // DCAT-AP view: the published catalog, as the file a portal actually reads.
-// Reads:  data/publish/catalog.ttl (written by the publish step, which only
+// Reads:  data/catalog.ttl (written by the publish step, which only
 //         runs when the instance declares a config/publication.ttl)
 // Does:   links to the served catalog.ttl and renders it syntax-highlighted
 

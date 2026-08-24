@@ -1,5 +1,5 @@
 // Consumer-facing directory: one compact card per resolved entity, with a type filter.
-// Reads:  finalEntities from mergeEntities.js (← data/pipeline/final.ttl), federation.ttl
+// Reads:  finalEntities from mergeEntities.js (← data/directory.ttl), federation.ttl
 // Does:   renders the Directory page (filtered list of compact <EntityCard>)
 
 import EntityCard from "./EntityCard.jsx"

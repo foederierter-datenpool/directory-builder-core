@@ -8,7 +8,7 @@ import { DataFactory } from "n3"
 const df = DataFactory
 
 // One value per (subject, predicate). schema:identifier and cdp:fromSource
-// are dropped — final.ttl is the consumer-facing artifact, source attribution
+// are dropped — directory.ttl is the consumer-facing artifact, source attribution
 // lives in provenance.ttl.
 // A strategy returns either one quad (collapse the group to a single value) or an
 // array of quads (keep several). The caller flattens, so both forms compose.

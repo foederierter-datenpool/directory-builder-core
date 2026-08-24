@@ -105,7 +105,7 @@ ${schemas.map((s) => `:${localName(s)} :publishedAs ${datasetIri(s)} .`).join("\
 ${datasets.join("\n")}
 
 # Stamped onto the distribution the publish step derives (its accessURL is
-# final.ttl under :federation :baseUrl, which the webapp serves verbatim).
+# directory.ttl under :federation :baseUrl, which the webapp serves verbatim).
 :distributionDefaults a :DistributionTemplate ;
     # "Andere geschlossene Lizenz" — a placeholder that grants nothing. Replace
     # it with the licence you publish under: http://dcat-ap.de/def/licenses/

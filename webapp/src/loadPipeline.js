@@ -28,7 +28,7 @@ const LANE_BORDER = "#bbb"
 const basename = (path) => path.replace(/^.*\//, "")
 
 // Output file(s) per step type, by the PATHS conventions (name = source name).
-// The last step writes final.ttl, so resolve's output is only the intermediate
+// The last step writes directory.ttl, so resolve's output is only the intermediate
 // resolved.ttl when an enrich step follows.
 const STEP_OUTPUTS = {
     Extract: ({ name }) => [PATHS.extracted(name)],
@@ -110,7 +110,7 @@ export function loadPipeline(stepTtls, federationTtl) {
         laneEdges.push({ from: laneId, to: iri, value: retrievalBySubject.get(sourceIri), centered: true })
     }
 
-    // End sink so the last step's output (final.ttl) is shown on a visible
+    // End sink so the last step's output (directory.ttl) is shown on a visible
     // edge — enrich when it ran, resolve otherwise.
     const lastIri = [...stepType].find(([, t]) => t === "Enrich")?.[0]
         ?? [...stepType].find(([, t]) => t === "Resolve")?.[0]

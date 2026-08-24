@@ -16,4 +16,4 @@
 # owl:sameAs forces two records together regardless of score; owl:differentFrom
 # pins two apart even when they clear the match rule. A :ValueCorrection is
 # applied at resolve, so merged.ttl keeps showing the source conflict and only
-# final.ttl carries the fix.
+# directory.ttl carries the fix.

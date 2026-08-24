@@ -77,7 +77,7 @@ function readTargetSchemas() {
 }
 const TARGET_SCHEMAS = readTargetSchemas()
 
-// A schema's slice of final.ttl: its entities (by rdf:type) and the columns
+// A schema's slice of directory.ttl: its entities (by rdf:type) and the columns
 // they actually carry — declared target fields first, in declaration order,
 // then whatever else the pipeline added (e.g. enrich's schema:latitude).
 function schemaRows(schema) {
@@ -173,7 +173,7 @@ export default function Download() {
     const [schemaFormat, setSchemaFormat] = useState("csv")
 
     const onDownload = async () => {
-        if (format === "ttl")    return triggerDownload(finalTtl, "text/turtle", "final.ttl")
+        if (format === "ttl")    return triggerDownload(finalTtl, "text/turtle", "directory.ttl")
         if (format === "jsonld") return triggerDownload(
             JSON.stringify(await turtleToJsonLdObj(finalTtl), null, 2), "application/ld+json", "final.jsonld")
         const build = format === "csv" ? buildDataCsv : buildDataJson
