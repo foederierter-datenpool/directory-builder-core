@@ -1,12 +1,11 @@
 // Public map of resolved PostalAddress entities that carry coordinates.
 
 import { locations } from "./locationData.js"
+import { highlightTurtle } from "./highlightTurtle.js"
 import Modal from "./Modal.jsx"
 import L from "leaflet"
 import "leaflet/dist/leaflet.css"
 import React, { useEffect, useRef, useState } from "react"
-import Prism from "prismjs"
-import "prismjs/components/prism-turtle.js"
 import "prismjs/themes/prism-okaidia.css"
 
 const markerOptions = {
@@ -53,7 +52,7 @@ function AddressModal({ location, onClose, onSelectEntity }) {
 }
 
 function TurtleModal({ entity, onClose }) {
-    const highlighted = Prism.highlight(entity.turtle, Prism.languages.turtle, "turtle")
+    const highlighted = highlightTurtle(entity.turtle)
     return (
         <Modal title={entity.label} onClose={onClose}>
             <pre className="language-turtle location-turtle">

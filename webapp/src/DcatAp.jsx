@@ -6,9 +6,8 @@
 import { catalogTtl } from "./instanceData.js"
 import { PATHS } from "@directory-builder/core/utils"
 import HelpTip from "./HelpTip.jsx"
+import { highlightTurtle } from "./highlightTurtle.js"
 import React from "react"
-import Prism from "prismjs"
-import "prismjs/components/prism-turtle.js"
 import "prismjs/themes/prism-okaidia.css"
 
 // The deployed catalog: the webapp serves data/ verbatim, so the file behind
@@ -17,7 +16,7 @@ const CATALOG_URL = `${import.meta.env.BASE_URL}${PATHS.catalog}`
 
 // Prism escapes the source as it highlights, so the returned markup is safe to
 // inject; highlighting once at module load keeps re-renders free.
-const HIGHLIGHTED = Prism.highlight(catalogTtl, Prism.languages.turtle, "turtle")
+const HIGHLIGHTED = highlightTurtle(catalogTtl)
 
 export default function DcatAp() {
     return (
