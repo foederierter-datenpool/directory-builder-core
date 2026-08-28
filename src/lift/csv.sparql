@@ -1,0 +1,23 @@
+# CSV lift: the first row is treated as headers, so each data row becomes a node
+# with xyz:<header> properties (like json.sparql's object keys). SPARQL Anything
+# picks the CSV triplifier from the .csv extension — a fetch.js that writes raw
+# files without that suffix silently gets the wrong triplifier.
+#
+# Headers become xyz:<header> directly, which is what a :SourceField's
+# :fieldPath matches against, so headers must be slugs: ASCII letters, digits
+# and underscore. Spaces and non-ASCII are percent-encoded into the predicate
+# ("Max. Fördersumme" → xyz:Max.%20F%C3%B6rdersumme), and the map step also uses
+# the :fieldPath as a SPARQL variable, which rules out "-" and "." besides. A
+# source whose export has prose headers needs its fetch.js to rewrite the header
+# row. A UTF-8 BOM on the first header is stripped by the triplifier.
+PREFIX xyz: <http://sparql.xyz/facade-x/data/>
+PREFIX fx: <http://sparql.xyz/facade-x/ns/>
+CONSTRUCT {
+    ?s ?p ?o
+} WHERE {
+    SERVICE <x-sparql-anything:> {
+        fx:properties fx:location ?_location ;
+            fx:csv.headers true .
+        ?s ?p ?o .
+    }
+}
