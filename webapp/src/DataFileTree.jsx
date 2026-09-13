@@ -1,4 +1,4 @@
-import { buildDataFileTree, encodedPath } from "./dataFiles.js"
+import { buildDataFileTree, encodedPath, githubDataUrl } from "./dataFiles.js"
 import React from "react"
 
 const fileUrl = (filePath) =>
@@ -34,10 +34,7 @@ function Directory({ directory }) {
 export default function DataFileTree({ files, repositoryUrl }) {
     if (!files.length) return null
     const tree = buildDataFileTree(files)
-    const cleanRepositoryUrl = repositoryUrl?.replace(/\.git$/, "").replace(/\/$/, "")
-    const branchUrl = cleanRepositoryUrl?.includes("github.com/")
-        ? `${cleanRepositoryUrl}/tree/gh-pages/data`
-        : null
+    const branchUrl = githubDataUrl(repositoryUrl)
 
     return (
         <details className="data-file-menu">
@@ -48,9 +45,13 @@ export default function DataFileTree({ files, repositoryUrl }) {
                 <p>
                     {files.length} files: raw source data and every generated pipeline artifact
                     published with this directory.
-                    {branchUrl && <>{" "}<a href={branchUrl} target="_blank" rel="noreferrer">
-                        Browse <code>data/</code> on the <code>gh-pages</code> branch.
-                    </a></>}
+                    {" "}Browse <code>data/</code> on:{" "}
+                    <a href={fileUrl("data/")} target="_blank" rel="noreferrer">
+                        this site
+                    </a>
+                    {branchUrl && <> or on <a href={branchUrl} target="_blank" rel="noreferrer">
+                        GitHub
+                    </a></>}.
                 </p>
                 <DirectoryContents directory={tree} />
             </div>

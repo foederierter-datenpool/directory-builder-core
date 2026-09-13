@@ -30,3 +30,8 @@ export function buildDataFileTree(paths) {
 
 export const encodedPath = (filePath) =>
     filePath.split("/").map(encodeURIComponent).join("/")
+
+export const githubDataUrl = (repositoryUrl, filePath = "data") => {
+    const repo = repositoryUrl?.replace(/\/$/, "").replace(/\.git$/, "")
+    return /^https?:\/\/github\.com\//.test(repo ?? "") ? `${repo}/tree/gh-pages/${encodedPath(filePath)}` : null
+}

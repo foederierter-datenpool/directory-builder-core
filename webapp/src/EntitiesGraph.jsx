@@ -8,7 +8,8 @@
 // The entity DIMENSION, complementing the Map view's field-level journey.
 // Reads:  config/federation.ttl (via loadEntities.js)
 
-import { federationTtl as ttl } from "./instanceData.js"
+import { federationTtl as ttl, repositoryUrl } from "./instanceData.js"
+import { githubDataUrl } from "./dataFiles.js"
 import { loadEntities, loadEntityLinks } from "./loadEntities.js"
 import { loadSources } from "./loadMap.js"
 import { useSourceParam } from "./useSourceParam.js"
@@ -20,6 +21,7 @@ import HelpTip from "./HelpTip.jsx"
 
 const SOURCES = loadSources(ttl)
 const SOURCE_OPTS = SOURCES.map((s) => ({ key: s.iri, label: s.label }))
+const PREPARATION_REPO_URL = githubDataUrl(repositoryUrl, "data/pipeline/preparation")
 
 // Flow mode: cool → warm across the columns; lavender for the entity column is a
 // hue the Map view doesn't use elsewhere, so it reads as its own thing.
@@ -86,10 +88,13 @@ function ViewsHelp() {
             ))}
             <div>
                 Recorded cleanup changes (before → after values) and match keys are available
-                as per-source Turtle files in{" "}
+                as per-source Turtle files. Browse <code>data/pipeline/preparation/</code> on:{" "}
                 <a href={`${import.meta.env.BASE_URL}data/pipeline/preparation/`} target="_blank" rel="noreferrer">
-                    <code>data/pipeline/preparation/</code>
-                </a>.
+                    this site
+                </a>
+                {PREPARATION_REPO_URL && <> or on <a href={PREPARATION_REPO_URL} target="_blank" rel="noreferrer">
+                    GitHub
+                </a></>}.
             </div>
         </HelpTip>
     )

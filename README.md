@@ -146,10 +146,9 @@ Engines journal their executed steps as p-plan RDF (`data/ingest/ingest-log.ttl`
 The federation pipeline also writes `data/pipeline/preparation/<source>.ttl`:
 per-source Turtle files containing recorded before/after cleanup values and
 normalised match keys. These complement `data/provenance.ttl`, which traces the
-federated values' origins. Vite generates a plain HTML file index at
-`data/pipeline/preparation/`, linked from the Entities info modal and also served
-in development. The Turtle files are also listed under Pipeline → Pipeline
-files. Their contents load only when a file is opened.
+federated values' origins. The Entities info modal links to
+`data/pipeline/preparation/` on the published site and, for GitHub repositories,
+on the `gh-pages` branch. Their contents load only when a file is opened.
 
 Minting is write-once: the match step keeps an identity registry
 (`registry/identity.ttl`, created on the first run) assigning each source
@@ -184,6 +183,13 @@ warns when the two disagree).
 `webapp build` stages the instance's `config/`, `data/` and
 `webapp/{content,exporters}/` into `webapp/dist/` next to the bundle —
 `webapp/dist/` is the complete site, ready to publish as-is.
+
+Vite generates a minimal HTML index in `data/` and each of its subdirectories,
+with relative links to files, child directories and the parent. These indexes
+also work in development, skip hidden files and preserve any existing
+`index.html`. Pipeline → Pipeline files links to `data/` on the site and, for
+GitHub repositories, on the `gh-pages` branch. Browsing an index loads no data
+files until a link is opened.
 
 The two are independent: the dev server never needs a prior build — `webapp
 build` exists only to produce the deployable. Both show whatever `data/` the
