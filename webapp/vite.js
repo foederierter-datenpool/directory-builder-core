@@ -3,6 +3,7 @@ import path from "path"
 
 const DATA_FILES_MODULE = "virtual:instance-data-files"
 const RESOLVED_DATA_FILES_MODULE = `\0${DATA_FILES_MODULE}`
+const PREPARATION_DIR = "data/pipeline/preparation"
 
 // Every public artifact under data/, as a URL-shaped relative path. Hidden
 // operating-system files are not pipeline artifacts and stay out of the index.
@@ -24,9 +25,19 @@ export function instanceDataFiles(root) {
     return files.sort()
 }
 
-// Pipeline.jsx needs a directory inventory, while the files themselves remain
-// runtime-served static artifacts. A virtual module puts the build-time list in
-// the bundle without creating another public metadata file.
+const preparationIndex = (root) => {
+    const items = instanceDataFiles(root)
+        .filter((file) => path.posix.dirname(file) === PREPARATION_DIR && file.endsWith(".ttl"))
+        .map((file) => {
+            const name = path.posix.basename(file)
+            const label = name.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c])
+            return `<li><a href="${encodeURIComponent(name)}">${label}</a></li>`
+        })
+    return `<!doctype html>\n<html lang="en">\n<meta charset="utf-8">\n<title>Preparation files</title>\n<h1>Preparation files</h1>\n<ul>\n${items.join("\n")}\n</ul>\n</html>\n`
+}
+
+// Pipeline.jsx reads a virtual file inventory. The preparation directory also
+// has a plain HTML index for browsing its Turtle files without the webapp.
 export function instanceDataIndex({ root = process.cwd() } = {}) {
     return {
         name: "instance-data-index",
@@ -36,6 +47,9 @@ export function instanceDataIndex({ root = process.cwd() } = {}) {
         load(id) {
             if (id === RESOLVED_DATA_FILES_MODULE)
                 return `export default ${JSON.stringify(instanceDataFiles(root))}`
+        },
+        generateBundle() {
+            this.emitFile({ type: "asset", fileName: `${PREPARATION_DIR}/index.html`, source: preparationIndex(root) })
         },
     }
 }
@@ -51,6 +65,14 @@ export function serveInstanceData({ root = process.cwd() } = {}) {
         const url = req.url.split("?")[0]
         const rel = url.startsWith(base) ? url.slice(base.length) : null
         if (!rel || !/^(config|data|webapp\/(content|exporters))\//.test(rel)) return next()
+        if (rel === PREPARATION_DIR) {
+            res.writeHead(301, { Location: `${base}${PREPARATION_DIR}/` })
+            return res.end()
+        }
+        if (rel === `${PREPARATION_DIR}/` || rel === `${PREPARATION_DIR}/index.html`) {
+            res.setHeader("Content-Type", "text/html; charset=utf-8")
+            return res.end(preparationIndex(root))
+        }
         const file = path.join(root, rel)
         // Own the 404: falling through would hit the SPA fallback, which
         // serves index.html with 200 — instanceData would parse HTML as TTL.

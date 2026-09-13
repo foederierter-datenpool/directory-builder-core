@@ -266,8 +266,8 @@ export default function MapGraph() {
                         A value merely <em>cleaned in place</em> (whitespace collapsed, an
                         abbreviation expanded, a phone reduced to digits) makes no new field, so it
                         stays green and nothing changes shape here.
-                        The <strong>Cleanup</strong> view (on the Entities page) lists
-                        the before → after value changes the extract step made. Turn on
+                        The preparation files available on the <strong>Pipeline</strong> page record
+                        the extract step's before → after value changes. Turn on
                         {" "}<strong>Show data flow</strong> here to watch one record's values
                         travel the arrows.
                     </div>

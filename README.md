@@ -143,6 +143,14 @@ aren't available yet.
 Engines journal their executed steps as p-plan RDF (`data/ingest/ingest-log.ttl`,
 `data/pipeline/federate-log.ttl`) — evidence of what ran, not a plan.
 
+The federation pipeline also writes `data/pipeline/preparation/<source>.ttl`:
+per-source Turtle files containing recorded before/after cleanup values and
+normalised match keys. These complement `data/provenance.ttl`, which traces the
+federated values' origins. Vite generates a plain HTML file index at
+`data/pipeline/preparation/`, linked from the Entities info modal and also served
+in development. The Turtle files are also listed under Pipeline → Pipeline
+files. Their contents load only when a file is opened.
+
 Minting is write-once: the match step keeps an identity registry
 (`registry/identity.ttl`, created on the first run) assigning each source
 record to its minted entity IRI. A cluster with a known member reuses the
