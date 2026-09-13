@@ -43,8 +43,7 @@ export default function DataFileTree({ files, repositoryUrl }) {
             </summary>
             <div className="data-file-menu-panel">
                 <p>
-                    {files.length} files: raw source data and every generated pipeline artifact
-                    published with this directory.
+                    {files.length} files published with this directory.
                     {" "}Browse <code>data/</code> on:{" "}
                     <a href={fileUrl("data/")} target="_blank" rel="noreferrer">
                         this site
