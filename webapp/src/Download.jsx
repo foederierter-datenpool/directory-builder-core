@@ -213,6 +213,10 @@ export default function Download() {
                 </HelpTip>
             </div>
             <h3 style={{ margin: "0 0 0.75rem" }}>Federated directory</h3>
+            <p style={{ margin: "0 0 0.75rem", maxWidth: 720, lineHeight: 1.5 }}>
+                RDF (Turtle or JSON-LD) preserves the complete directory graph. The other
+                export formats are lossy derivatives.
+            </p>
             <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
                 <label style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem" }}>
                     Format:
