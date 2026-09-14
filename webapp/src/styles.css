@@ -68,3 +68,9 @@ main { flex: 1; min-height: 0 }
 .query-editor .yasgui .tabsList,
 .query-editor .yasgui .controlbar { display: none !important }
 .yasr .dataTable td > div.rowNumber { margin-right: 8px }
+
+.api-page { max-width: 100ch; line-height: 1.5; overflow-wrap: anywhere }
+.api-page table { width: 100%; border-collapse: collapse; margin: 1rem 0; text-align: left }
+.api-page th, .api-page td { padding: 0.5rem; border-bottom: 1px solid #ddd; vertical-align: top }
+.api-page code { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 0.9em }
+.api-page pre { padding: 0.75rem; background: #f5f5f5; border-radius: 4px; overflow-x: auto }

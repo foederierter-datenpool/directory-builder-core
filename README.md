@@ -210,6 +210,10 @@ renders — and the Query page's starting query the same way, via
 the page title and `:repository "https://github.com/…"` adds the GitHub links
 (nav, static-source folders); both stay generic/hidden when absent.
 
+The APIs page shows a short default guide to `directory-api`. Provide
+`webapp/content/apis.md` to replace it with your instance's endpoints and examples.
+The file is optional and is served/published with the other webapp content.
+
 Instances can inject **exporters** — output adapters mapping the directory
 into an external schema. The federation declares them (`:federation
 :hasExporter "x"`), the module lives at `webapp/exporters/x.js` in the instance

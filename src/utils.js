@@ -111,6 +111,7 @@ export const PATHS = {
     registryHistory: "registry/history.ttl",
     geocache:       "registry/geocache.json",
     about:          "webapp/content/about.md",
+    apis:           "webapp/content/apis.md",
     query:          "webapp/content/query.sparql",
     queryExamples:  "webapp/content/query-examples.ttl",
     fetchScript: (name) => `sources/${name}/fetch.js`,

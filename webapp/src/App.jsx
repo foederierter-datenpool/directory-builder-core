@@ -19,6 +19,7 @@ const MatchGraph  = lazy(() => import("./MatchGraph.jsx"))
 const MergeTables = lazy(() => import("./MergeTables.jsx"))
 const Query       = lazy(() => import("./Query.jsx"))
 const Sources     = lazy(() => import("./Sources.jsx"))
+const Apis        = lazy(() => import("./Apis.jsx"))
 
 if (federationLabel) document.title = federationLabel
 
@@ -63,18 +64,6 @@ function Nav() {
                 {repositoryUrl && <a href={repositoryUrl} target="_blank" rel="noreferrer">GitHub</a>}
             </div>
         </nav>
-    )
-}
-
-function Apis() {
-    return (
-        <div className="page">
-            <p><strong>TODO</strong>:</p>
-            <ul>
-                <li>OpenAPI / Swagger</li>
-                <li>SPARQL endpoint</li>
-            </ul>
-        </div>
     )
 }
 
