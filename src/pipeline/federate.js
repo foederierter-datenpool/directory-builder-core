@@ -3,7 +3,7 @@ import { CDP, enabledSources, parseTtl, PATHS, prefixes, sourceGraph, sourceName
 import { extractedOutputHasMappedFields } from "../validate.js"
 import { COMMON_PREFIXES, writeTurtleFile } from "./write-turtle.js"
 import { MAPPED_GRAPH, runMap } from "./steps/map.js"
-import { runExtract } from "./steps/extract.js"
+import { harvestObservations, runExtract } from "./steps/extract.js"
 import { runPreparation } from "./steps/preparation.js"
 import { runMatch } from "./steps/match.js"
 import { runMerge } from "./steps/merge.js"
@@ -39,7 +39,10 @@ export async function federate(root = process.cwd()) {
 
     const store = newStore()
     const journal = stepJournal()
-    const ctx = { store, defStore, abs, quads: federationQuads }
+    // When each source was last fetched, read once per run from the ingest log
+    // and handed to every extract (see harvestObservations).
+    const observations = await harvestObservations(abs)
+    const ctx = { store, defStore, abs, quads: federationQuads, observations }
 
     const extractSteps = []
     for (const src of sources) {
