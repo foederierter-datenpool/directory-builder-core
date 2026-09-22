@@ -39,15 +39,25 @@ export async function ingest(root = process.cwd()) {
 
     // ---- Run steps ----------------------------------------------------------
 
-    // All :hasRunParam values grouped by name, handed to every fetcher as one
-    // JSON argument — each fetcher picks the parameters it needs.
-    const runParams = {}
-    for (const r of await sparqlSelect(`
-        PREFIX : <${CDP}>
-        SELECT ?name ?value WHERE { :federation :hasRunParam [ :name ?name ; :value ?value ] } ORDER BY ?name ?value`, [defStore])) {
-        (runParams[r.name] ??= []).push(r.value)
+    // All :hasRunParam values of one subject, grouped by name.
+    const runParamsOf = async (subject) => {
+        const params = {}
+        for (const r of await sparqlSelect(`
+            PREFIX : <${CDP}>
+            SELECT ?name ?value WHERE { ${subject} :hasRunParam [ :name ?name ; :value ?value ] } ORDER BY ?name ?value`, [defStore])) {
+            (params[r.name] ??= []).push(r.value)
+        }
+        return params
     }
-    const paramsJson = JSON.stringify(runParams)
+
+    // Run params reach each fetcher as one JSON argument, which picks the
+    // parameters it needs. The federation's are the baseline; a :Source may
+    // declare its own, replacing the federation's values of the same name
+    // outright (not appending to them) — a param means different things per
+    // source, whether it caps records or names a partition, and no single
+    // federation-wide value fits sources of different sizes and shapes.
+    // Names the source doesn't mention still come from the federation.
+    const federationParams = await runParamsOf(":federation")
 
     const runStart = new Date()
     const harvests = []
@@ -57,6 +67,7 @@ export async function ingest(root = process.cwd()) {
 
     for (const [iri, s] of sources) {
         const name = sourceName(iri)
+        const paramsJson = JSON.stringify({ ...federationParams, ...await runParamsOf(`<${iri}>`) })
         fetchStepOf.set(iri, await journal.step("fetch", { source: iri }, () => {
             harvests.push({ source: iri, ...runFetch(ctx, { name, fetchUrl: s.fetchUrl, paramsJson }) })
         }))
