@@ -77,11 +77,14 @@ export const runMatch = async ({ store, defStore, abs }, outPath, registryPath, 
             ?c :on ?on ; :weight ?weight .
             OPTIONAL { ?c :minSimilarity ?minSim }
         }`, [defStore])
-    // Hard criteria: fields that must be identical in both records (pass/fail gates).
+    // Hard criteria: fields that must be identical in both records (pass/fail
+    // gates). :optional true relaxes a gate to "reject when both present and
+    // different" — without it a record missing the field matches nothing.
     const hardRows = await sparqlSelect(`
         PREFIX : <${CDP}>
-        SELECT ?match ?on WHERE {
+        SELECT ?match ?on ?optional WHERE {
             ?match a :MatchRule ; :hasHardCriterion ?h . ?h :on ?on .
+            OPTIONAL { ?h :optional ?optional }
         }`, [defStore])
     // Criteria keyed by their owning rule, so each pass scores on its own fields.
     const criteriaByMatch = new Map()
@@ -96,7 +99,7 @@ export const runMatch = async ({ store, defStore, abs }, outPath, registryPath, 
     const hardByMatch = new Map()
     for (const r of hardRows) {
         if (!hardByMatch.has(r.match)) hardByMatch.set(r.match, [])
-        hardByMatch.get(r.match).push({ pred: df.namedNode(r.on) })
+        hardByMatch.get(r.match).push({ pred: df.namedNode(r.on), optional: r.optional === "true" })
     }
 
     // A criterion :on a relationship predicate (an entity link, e.g. schema:address
@@ -198,6 +201,9 @@ export const runMatch = async ({ store, defStore, abs }, outPath, registryPath, 
             .filter(qu => qu.subject.termType === "NamedNode")
             .map(qu => qu.subject.value))]
 
+        // Only a predicate's first quad: a criterion on a multi-valued field
+        // compares one arbitrary member, so two records listing the same values
+        // in a different order fail the gate. Hard criteria must be single-valued.
         const valOf = (s, pred) => {
             const qs = store.getQuads(df.namedNode(s), pred, null, MAPPED_GRAPH)
             if (!qs.length) return null
@@ -218,7 +224,14 @@ export const runMatch = async ({ store, defStore, abs }, outPath, registryPath, 
             const ha = hardVals.get(a), hb = hardVals.get(b)
 
             for (let i = 0; i < hard.length; i++) {
-                if (ha[i] == null || hb[i] == null || ha[i] !== hb[i]) return null
+                // Absent on either side: an optional gate doesn't apply (the
+                // records may still match on the weighted criteria), a required
+                // one rejects.
+                if (ha[i] == null || hb[i] == null) {
+                    if (hard[i].optional) continue
+                    return null
+                }
+                if (ha[i] !== hb[i]) return null
             }
             const va = weightedVals.get(a), vb = weightedVals.get(b)
             const scores = []
@@ -256,17 +269,25 @@ export const runMatch = async ({ store, defStore, abs }, outPath, registryPath, 
         }
 
         // Grouping turns the O(n²) all-pairs scan into a per-bucket
-        // O(Σ mᵢ²) one. The hard checks are redundant after bucketing, 
+        // O(Σ mᵢ²) one. The hard checks are redundant after bucketing,
         // but introduces a cheap correctness check
-        // buckets: a subject's bucket key is the JSON of its hard
-        // value **tuple** (hardVals), so subjects sharing identical hard values
-        // land in the same bucket. 
+        // buckets: a subject's bucket key is the JSON of its **required** hard
+        // value tuple, so subjects sharing identical required hard values land
+        // in the same bucket. Optional criteria stay out of the key — a record
+        // missing one still has to be compared — and matches() gates on them
+        // within the bucket. All-optional (or no) hard criteria means one
+        // bucket, i.e. the plain all-pairs scan.
+        const requiredIdx = hard.map((h, i) => h.optional ? -1 : i).filter(i => i >= 0)
         const buckets = new Map()
-        if (hard.length) {
+        // A required hard value the record simply doesn't carry makes it
+        // unmatchable — correct, but silent until now: the run looks healthy
+        // while the record sits out of the federation entirely.
+        let unmatchable = 0
+        if (requiredIdx.length) {
             for (const s of subjects) {
                 const hv = hardVals.get(s)
-                if (hv.some(v => v == null)) continue
-                const key = JSON.stringify(hv)
+                if (requiredIdx.some(i => hv[i] == null)) { unmatchable++; continue }
+                const key = JSON.stringify(requiredIdx.map(i => hv[i]))
                 if (!buckets.has(key)){
                     buckets.set(key, [])
                 }
@@ -275,6 +296,7 @@ export const runMatch = async ({ store, defStore, abs }, outPath, registryPath, 
         } else {
             buckets.set("", subjects)
         }
+        if (unmatchable) console.warn(`match: ${rule.match.split("#").pop()} ${unmatchable} of ${subjects.length} entities carry no value for a required hard criterion and can match nothing — declare :optional true on the criterion to let them fall through`)
 
         for (const bucket of buckets.values()) {
             for (let i = 0; i < bucket.length; i++) {
