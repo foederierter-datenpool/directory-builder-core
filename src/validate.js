@@ -6,13 +6,16 @@ import fs from "fs"
 // The facade-x namespace lifted source fields land under: xyz:<fieldPath>.
 const XYZ = NAMESPACES.xyz
 
+const RDF_TYPE = `${NAMESPACES.rdf}type`
+
 // Instance integrity checks. Each check takes { abs, ttl, quads } (path
 // resolver rooted at the instance, federation.ttl raw + parsed) and returns
 // problem strings. validate() runs them all; empty result = valid. Runs
 // automatically before the engines; `directory-builder validate` triggers it
 // on its own.
 
-const checks = [sourcesFoldersInSync, federationConformsToShape, noLegacyCurationFile, catalogConformsToShape]
+const checks = [sourcesFoldersInSync, federationConformsToShape, noLegacyCurationFile, catalogConformsToShape,
+                hardCriteriaCoveredBySources]
 
 export async function validate(root = process.cwd()) {
     const abs = (p) => path.join(root, p)
@@ -79,6 +82,51 @@ async function catalogConformsToShape({ abs }) {
     if (!fs.existsSync(abs(PATHS.catalog))) return []
     const report = await catalogValidator.validate({ dataset: turtleToDataset(fs.readFileSync(abs(PATHS.catalog), "utf8")) })
     return report.results.map((r) => `${PATHS.catalog}: ${r.focusNode.value} ${r.message.map((m) => m.value).join("; ")}`)
+}
+
+// Every source feeding a match rule's target supplies the fields the rule gates
+// on. A hard criterion rejects a pair unless both sides carry the value, so a
+// source that never fills the predicate stops participating in federation
+// entirely — and the run still looks healthy. Same class of bug as the drift
+// check (config naming a field no source supplies); match rules just weren't
+// covered by it. Statically decidable from :Mapping/:hasFieldMapping, so it
+// fails before a run rather than producing a quietly wrong directory.
+// :optional true on the criterion opts into fall-through instead.
+function hardCriteriaCoveredBySources({ quads }) {
+    const o = (s, p) => quads.filter((q) => q.subject.value === s && q.predicate.value === `${CDP}${p}`).map((q) => q.object.value)
+    const typed = (cls) => quads.filter((q) => q.predicate.value === RDF_TYPE && q.object.value === `${CDP}${cls}`).map((q) => q.subject.value)
+    const enabled = new Set(enabledSources(quads))
+    const problems = []
+    for (const rule of typed("MatchRule")) {
+        const target = o(rule, "forTarget")[0]
+        if (!target) continue   // the shape check reports a missing :forTarget
+        const mappings = quads
+            .filter((q) => q.predicate.value === `${CDP}toTarget` && q.object.value === target)
+            .map((q) => q.subject.value)
+        for (const crit of o(rule, "hasHardCriterion")) {
+            if (o(crit, "optional")[0] === "true") continue
+            const pred = o(crit, "on")[0]
+            if (!pred) continue
+            // Engine-internal predicates (cdp:matchString, the normalised
+            // matching surface) come from extract.sparql, not from a mapping —
+            // nothing in the config declares them, so there is nothing to check.
+            if (pred.startsWith(CDP)) continue
+            for (const mapping of mappings) {
+                const src = o(mapping, "fromSource")[0]
+                if (!src || !enabled.has(src)) continue
+                // A target field is filled either by a field mapping or, for an
+                // entity link (schema:address, schema:provider), by a
+                // :hasRelationship naming the same :TargetField.
+                const mapped = [
+                    ...o(mapping, "hasFieldMapping").flatMap((fm) => o(fm, "to")),
+                    ...o(mapping, "hasRelationship").flatMap((rel) => o(rel, "toTargetField")),
+                ].flatMap((tgt) => o(tgt, "targetPredicate"))
+                if (!mapped.includes(pred))
+                    problems.push(`${PATHS.federation}: ${shrink(rule, { "": CDP })} gates on ${shrink(pred, NAMESPACES)} as a hard criterion, but ${shrink(src, { "": CDP })} maps nothing to it — every record of that source would be unmatchable (map the field, disable the source, or declare :optional true on the criterion)`)
+            }
+        }
+    }
+    return problems
 }
 
 // Post-extract drift check (config ↔ real data): the map step reads xyz:<fieldPath>
