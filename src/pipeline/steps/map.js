@@ -24,8 +24,8 @@ const buildDirectInsert = ({ sourceGraph, source, targetClass, target }, fields)
     // drop the field (AWO's numeric ids hit exactly this). Whitespace-only
     // values count as empty too — caritas emits " " categories, which resolve
     // could otherwise surface as a field's value over the real ones.
-    const optLit = (subj, path) =>
-        `OPTIONAL { ${subj} xyz:${path} ${v(path)} . ` +
+    const litBranch = (subj, path, lead = "") =>
+        `{ ${lead}${subj} xyz:${path} ${v(path)} . ` +
         `FILTER(isLiteral(${v(path)}) && REPLACE(STR(${v(path)}), "\\\\s+", "") != "") }`
 
     const insertBlock = fields
@@ -45,7 +45,15 @@ const buildDirectInsert = ({ sourceGraph, source, targetClass, target }, fields)
         bgp.push(`OPTIONAL { ?entity cdp:targetSchema ?_ts }`)
         bgp.push(`FILTER(!bound(?_ts) || ?_ts = ${short(target)})`)
     }
-    for (const f of topLevel) bgp.push(optLit("?entity", f.fieldPath))
+    // One UNION branch per field, not one OPTIONAL each. Parallel OPTIONALs over
+    // multi-valued fields cartesian-product: a record with 15 areas, 54
+    // subareas, 7 applicants and 8 keywords produced 45,360 intermediate rows,
+    // each re-running the regex FILTER. The output was still correct, because
+    // the INSERT rewrites the same triples and the store dedupes them -- the
+    // whole cost was rows nobody could see. Branches make it additive: 15 + 54 +
+    // 7 + 8. The growth was multiplicative in the number of multi-valued fields,
+    // so each new one multiplied again rather than adding.
+    const branches = topLevel.map(f => litBranch("?entity", f.fieldPath))
 
     const byParent = new Map()
     for (const f of subFields) {
@@ -54,10 +62,18 @@ const buildDirectInsert = ({ sourceGraph, source, targetClass, target }, fields)
     }
     let parentIdx = 0
     for (const [parent, subs] of byParent) {
-        const pv    = `?_p${parentIdx++}`
-        const inner = subs.map(s => `    ${optLit(pv, s.fieldPath)}`).join("\n")
-        bgp.push(`OPTIONAL {\n    ?entity xyz:${parent} ${pv} .\n${inner}\n  }`)
+        const pv = `?_p${parentIdx++}`
+        // A sub-field carries its parent hop into its own branch: only one
+        // branch binds at a time, so sharing the parent variable is safe.
+        for (const sub of subs) branches.push(litBranch(pv, sub.fieldPath, `?entity xyz:${parent} ${pv} . `))
     }
+
+    // Wrapped in one OPTIONAL rather than left bare. The INSERT writes the type
+    // and cdp:fromSource unconditionally, so an entity whose fields are all
+    // absent or all whitespace has to still produce a row -- a bare UNION would
+    // match nothing for it and drop it from the mapped graph entirely, which is
+    // how it would leave the federation without anything being reported.
+    if (branches.length) bgp.push(`OPTIONAL {\n    ${branches.join("\n    UNION\n    ")}\n  }`)
 
     // The target schema's :targetClass becomes the record's rdf:type here in the
     // mapped graph — this is where schema: vocabulary first enters; the extract step
