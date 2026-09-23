@@ -119,6 +119,10 @@ export async function* harvest({
 // reach for it on a source whose corpus does not fit in memory; iterate instead.
 export const collect = async (iterable) => {
     const items = []
-    for await (const result of iterable) items.push(...result.items)
+    // One at a time rather than push(...result.items): the spread passes every
+    // item as a separate argument and exceeds V8's argument limit once a single
+    // partition carries enough of them (~150k), which an unpartitioned harvest
+    // of a large corpus reaches easily.
+    for await (const result of iterable) for (const item of result.items) items.push(item)
     return items
 }

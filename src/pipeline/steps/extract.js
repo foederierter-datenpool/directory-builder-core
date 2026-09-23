@@ -52,7 +52,13 @@ export const runExtract = async ({ abs, quads, observations }, sourceIri) => {
         const fileStore = storeFromTurtles([fs.readFileSync(path.join(inAbs, f), "utf8")])
         // The observation store rides alongside the document: additive and
         // opt-in, so an extract that ignores cdp:observedAt is unaffected.
-        allQuads.push(...await sparqlConstruct(extractQuery, [fileStore, observations ?? newStore()]))
+        const quads = await sparqlConstruct(extractQuery, [fileStore, observations ?? newStore()])
+        // Appended one at a time, not with push(...quads): the spread passes
+        // every quad as a separate argument and blows V8's argument limit once
+        // a single file yields enough of them (~150k), killing the run with a
+        // RangeError two steps away from the source that caused it. That ceiling
+        // ran directly against runLift's advice to emit few large files.
+        for (const quad of quads) allQuads.push(quad)
     }
     await writeTurtleFile(abs(outPath), allQuads, prefixes("xyz", "cdp"))
 }
