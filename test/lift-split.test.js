@@ -83,3 +83,33 @@ test("records carry no triples from their siblings", async () => {
         assert.ok(!text.includes(other), `${file} has none of the sibling's`)
     }
 })
+
+// A chunked source used to have to restate emit's wrapper class as a lift
+// selector in federation.ttl. The three cases below are what makes supplying it
+// safe: it applies only where emit's marker is actually present.
+test("a chunked source needs no selector declared at all", async () => {
+    const { abs } = stage({ "chunk.html": htmlChunk(page("alpha", "Alpha"), page("beta", "Beta")) })
+    await lift(abs, HTML, [])                      // no :hasLiftParam selector
+    assert.deepEqual(lifted(abs), ["alpha.ttl", "beta.ttl"])
+    assert.match(read(abs, "alpha.ttl"), /Alpha/)
+})
+
+test("an unchunked source that forgot its selector still fails, and says why", async () => {
+    // The reason the default is conditional on the marker: without it, this
+    // configuration error would become a file that silently lifts nothing.
+    // SPARQL Anything exits 0 and writes no file at all when a query variable is
+    // left unbound, so the cause has to be named here or the run dies on a stat
+    // error about a file nobody asked about.
+    const { abs } = stage({ "page.html": "<html><body><h1>Solo</h1></body></html>" })
+    await assert.rejects(() => lift(abs, HTML, []),
+        /produced no output at all[\s\S]*left unbound[\s\S]*hasLiftParam/)
+})
+
+test("a declared selector is never overridden", async () => {
+    // Even on a chunked file: the author may want to scope differently.
+    const { abs } = stage({ "chunk.html": htmlChunk(page("alpha", "Alpha")) })
+    await lift(abs, HTML, [["selector", "h1"]])
+    const files = lifted(abs)
+    assert.deepEqual(files, ["chunk.ttl"], "selecting h1 yields no record wrappers, so nothing is split")
+    assert.match(read(abs, "chunk.ttl"), /Alpha/)
+})
