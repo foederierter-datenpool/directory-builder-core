@@ -59,25 +59,58 @@ export async function ingest(root = process.cwd()) {
     // Names the source doesn't mention still come from the federation.
     const federationParams = await runParamsOf(":federation")
 
+    // Sources are independent -- separate endpoints, separate raw directories,
+    // separate lift invocations -- so they run as concurrent per-source chains
+    // rather than as one loop of every fetch followed by one loop of every lift.
+    // A source's lift starts as soon as its own fetch finishes, which is what
+    // the journal has always declared; only the execution was serial.
+    //
+    // Bounded, because lift spawns a JVM per raw file: the limit is the number
+    // of sources in flight, so it also bounds concurrent JVMs.
+    const [concurrencyRow] = await sparqlSelect(`
+        PREFIX : <${CDP}>
+        SELECT ?n WHERE { :federation :maxConcurrentSources ?n }`, [defStore])
+    const maxConcurrent = Math.max(1, Number(concurrencyRow?.n) || 3)
+
     const runStart = new Date()
     const harvests = []
     const journal = stepJournal()
-    const fetchStepOf = new Map()
     const ctx = { abs, root }
 
-    for (const [iri, s] of sources) {
+    const runSource = async ([iri, s]) => {
         const name = sourceName(iri)
         const paramsJson = JSON.stringify({ ...federationParams, ...await runParamsOf(`<${iri}>`) })
-        fetchStepOf.set(iri, await journal.step("fetch", { source: iri }, () => {
-            harvests.push({ source: iri, ...runFetch(ctx, { name, fetchUrl: s.fetchUrl, paramsJson }) })
-        }))
-    }
-
-    for (const [iri, s] of sources) {
-        const name = sourceName(iri)
-        await journal.step("lift", { source: iri, after: [fetchStepOf.get(iri)] },
+        const fetchStep = await journal.step("fetch", { source: iri }, async () => {
+            harvests.push({ source: iri, ...await runFetch(ctx, { name, fetchUrl: s.fetchUrl, paramsJson }) })
+        })
+        await journal.step("lift", { source: iri, after: [fetchStep] },
             () => runLift(ctx, { jar, name, format: s.format, params: s.params }))
     }
+
+    // A failing source stops further sources being started, which keeps the
+    // old fail-fast intent, but sources already running are allowed to finish
+    // rather than being abandoned mid-fetch. The first error is rethrown once
+    // everything has settled.
+    const entries = [...sources]
+    const errors = []
+    const inFlight = new Set()
+    let next = 0
+    while (next < entries.length && !errors.length) {
+        if (inFlight.size >= maxConcurrent) await Promise.race(inFlight)
+        if (errors.length) break
+        const p = runSource(entries[next++])
+            .catch((e) => { errors.push(e) })
+            .finally(() => inFlight.delete(p))
+        inFlight.add(p)
+    }
+    await Promise.all(inFlight)
+    if (errors.length) throw errors[0]
+
+    // Concurrency makes completion order arbitrary, so the log is written in
+    // :hasSource declaration order — an unchanged harvest must not produce a
+    // reordered file and a spurious diff.
+    const declared = entries.map(([iri]) => iri)
+    harvests.sort((a, b) => declared.indexOf(a.source) - declared.indexOf(b.source))
 
     const dt = (s) => `"${s}"^^xsd:dateTime`
     const runId = "run" + runStart.toISOString().replace(/\D/g, "").slice(0, 14)
