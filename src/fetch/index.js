@@ -19,6 +19,8 @@ import pMap from "p-map"
 import pRetry, { AbortError } from "p-retry"
 
 export { AbortError }
+export { harvest, collect } from "./harvest.js"
+export { emit } from "./emit.js"
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
