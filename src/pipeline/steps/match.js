@@ -5,6 +5,9 @@ import { CDP, NAMESPACES, parseTtl, prefixes, shrink, turtlePrefixBlock } from "
 import { token_set_ratio, token_sort_ratio, ratio } from "fuzzball"
 import { DataFactory } from "n3"
 import { createHash } from "crypto"
+import { Worker } from "worker_threads"
+import os from "os"
+import path from "path"
 import fs from "fs"
 
 const df = DataFactory
@@ -23,6 +26,98 @@ const MATCH_CLUSTER = df.namedNode(CDP + "MatchCluster")
 // https://github.com/nol13/fuzzball.js
 const ALGORITHMS = { token_set_ratio, token_sort_ratio, ratio }
 const DEFAULT_ALGORITHM = "token_set_ratio"
+
+// Below this many pairs the work is not worth a worker's startup, so scoring
+// stays in-process. Measured: fuzzball alone starts in milliseconds -- unlike a
+// worker that would have to re-import a query engine -- but a few thousand pairs
+// still finish before a thread is ready.
+export const WORKER_PAIR_THRESHOLD = 200_000
+
+// Score every unit's pairs, in workers when there is enough work to pay for
+// them. Returns matches in unit order either way: a unit is scored by exactly
+// one worker, so a stable sort by unit index reproduces the sequential order
+// exactly, whichever worker finished first.
+export const scorePairs = async ({ units, pairCount, hard, weighted, minScore, algoName,
+                            hardVals, weightedVals, sourceOf, dedupsWithin, workers, score,
+                            // Injectable so a test can force the worker path on a
+                            // workload small enough to compare exhaustively.
+                            threshold = WORKER_PAIR_THRESHOLD }) => {
+    const sequential = () => {
+        const out = []
+        for (const [order, { members, against }] of units.entries()) {
+            const pairs = against
+                ? against.map(b => [members[0], b])
+                : members.flatMap((a, i) => members.slice(i + 1).map(b => [a, b]))
+            for (const [a, b] of pairs) {
+                if (a === b) continue
+                const sa = sourceOf.get(a)
+                if (sa === sourceOf.get(b) && !dedupsWithin(sa)) continue
+                const m = score(a, b)
+                if (m) out.push({ order, a, b, ...m })
+            }
+        }
+        return out
+    }
+    if (workers <= 1 || pairCount < threshold) return sequential()
+
+    // Only the subjects a worker actually needs cross the boundary, remapped to
+    // local indices: the copy of the value table is what caps the speedup, so it
+    // is kept to the slice each worker scores.
+    const weight = (u) => u.against ? u.against.length : u.members.length * (u.members.length - 1) / 2
+    const slices = Array.from({ length: workers }, () => ({ units: [], work: 0 }))
+    for (const [order, unit] of [...units.entries()].sort((x, y) => weight(y[1]) - weight(x[1]))) {
+        const slice = slices.reduce((a, b) => (a.work <= b.work ? a : b))
+        slice.units.push({ order, unit })
+        slice.work += weight(unit)
+    }
+
+    const sourceIndex = new Map()
+    const dedupFlags = []
+    const sourceIdOf = (iri) => {
+        const src = sourceOf.get(iri)
+        if (!sourceIndex.has(src)) { sourceIndex.set(src, dedupFlags.length); dedupFlags.push(!!dedupsWithin(src)) }
+        return sourceIndex.get(src)
+    }
+
+    const runSlice = ({ units: assigned }) => new Promise((resolve, reject) => {
+        const local = new Map()
+        const iris = []
+        const idx = (iri) => {
+            if (!local.has(iri)) { local.set(iri, iris.length); iris.push(iri) }
+            return local.get(iri)
+        }
+        const payloadUnits = assigned.map(({ order, unit }) => ({
+            order,
+            members: unit.members.map(idx),
+            against: unit.against?.map(idx),
+        }))
+        const worker = new Worker(path.join(import.meta.dirname, "match-worker.js"), {
+            workerData: {
+                units: payloadUnits,
+                hardVals: iris.map(i => hardVals.get(i)),
+                weightedVals: iris.map(i => weightedVals.get(i)),
+                sourceOf: iris.map(sourceIdOf),
+                dedupsWithin: dedupFlags,
+                hard: hard.map(h => ({ optional: !!h.optional })),
+                weighted: weighted.map(c => ({ weight: c.weight, minSim: c.minSim })),
+                minScore, algo: algoName,
+            },
+        })
+        worker.on("message", (found) => resolve(found.map(f => ({
+            order: f.order, a: iris[f.a], b: iris[f.b], aggregate: f.aggregate,
+            scores: f.scores.map(sc => ({
+                pred: weighted[sc.i].pred, sim: sc.sim, weight: weighted[sc.i].weight,
+                valueA: sc.valueA, valueB: sc.valueB,
+            })),
+        }))))
+        worker.on("error", reject)
+    })
+
+    const found = (await Promise.all(slices.filter(s => s.units.length).map(runSlice))).flat()
+    // Stable sort by unit index: a unit lives in one slice, so its pairs stay in
+    // the order that slice produced them, which is the sequential order.
+    return found.sort((x, y) => x.order - y.order)
+}
 
 export const runMatch = async ({ store, defStore, abs }, outPath, registryPath, historyPath) => {
     // The identity registry (minted IRI :hasMember source IRI, one assignment
@@ -49,6 +144,14 @@ export const runMatch = async ({ store, defStore, abs }, outPath, registryPath, 
         PREFIX : <${CDP}>
         SELECT ?harvestingModeActive WHERE { :federation :harvestingModeActive ?harvestingModeActive }`, [defStore])
     const harvesting = harvestingRow?.harvestingModeActive !== "false"
+
+    // Scoring runs in worker threads when a rule has enough pairs to pay for
+    // them. Capped below the core count by default: the main thread still has
+    // to apply every result, and it is the one holding the whole store.
+    const [workerRow] = await sparqlSelect(`
+        PREFIX : <${CDP}>
+        SELECT ?n WHERE { :federation :maxMatchWorkers ?n }`, [defStore])
+    const workers = Math.max(1, Number(workerRow?.n) || Math.min(4, Math.max(1, os.cpus().length - 1)))
     // Identity events this run, appended to history.ttl (the registry's
     // provenance): when each entity was first minted, gained a member, or
     // absorbed/split off another. Append-only and written only when non-empty,
@@ -338,25 +441,33 @@ export const runMatch = async ({ store, defStore, abs }, outPath, registryPath, 
         // up more than once. Comparing it twice would duplicate its evidence in
         // the match log, so each unordered pair is considered once.
         const considered = new Set()
-        const considerPair = (a, b) => {
+        const considerPair = (a, b, m) => {
             if (a === b) return
             const key = a < b ? `${a}|${b}` : `${b}|${a}`
             if (considered.has(key)) return
             considered.add(key)
             const sa = sourceOf.get(a)
             if (sa === sourceOf.get(b) && !dedupsWithin(sa)) return  // source trusts its own IDs
-            const m = matches(a, b)
             if (!m) return
             if (distinctPairs.has(`${a}|${b}`)) { keptDistinct++; return }  // owl:differentFrom veto
             union(a, b); evidence.push({ a, b, ...m })
         }
 
-        for (const bucket of buckets.values()) {
-            for (let i = 0; i < bucket.length; i++) {
-                for (let j = i + 1; j < bucket.length; j++) considerPair(bucket[i], bucket[j])
-            }
-        }
-        for (const a of unblocked) for (const b of subjects) considerPair(a, b)
+        // Work units in a fixed order: each bucket, then each unblocked record
+        // against every subject. The order is what makes the parallel path
+        // reproducible -- results are applied in it regardless of which worker
+        // finishes first, so clustering cannot depend on scheduling.
+        const units = [...buckets.values()].map(members => ({ members }))
+        for (const a of unblocked) units.push({ members: [a], against: subjects })
+        const pairCount = units.reduce((n, u) =>
+            n + (u.against ? u.against.length : u.members.length * (u.members.length - 1) / 2), 0)
+
+        const scored = await scorePairs({
+            units, pairCount, subjects, hard, weighted, minScore, algoName,
+            hardVals, weightedVals, sourceOf, dedupsWithin, workers,
+            score: matches,
+        })
+        for (const { a, b, ...m } of scored) considerPair(a, b, m)
 
         const clusters = new Map()
         for (const s of subjects) {
