@@ -33,6 +33,11 @@ const DEFAULT_ALGORITHM = "token_set_ratio"
 // still finish before a thread is ready.
 export const WORKER_PAIR_THRESHOLD = 200_000
 
+// Progress is reported once per this many comparisons. A bitmask, not a modulo:
+// the test runs once per pair, in the one loop where per-iteration cost is the
+// runtime.
+export const PROGRESS_MASK = 0xFFFFF
+
 // Score every unit's pairs, in workers when there is enough work to pay for
 // them. Returns matches in unit order either way: a unit is scored by exactly
 // one worker, so a stable sort by unit index reproduces the sequential order
@@ -41,15 +46,19 @@ export const scorePairs = async ({ units, pairCount, hard, weighted, minScore, a
                             hardVals, weightedVals, sourceOf, dedupsWithin, workers, score,
                             // Injectable so a test can force the worker path on a
                             // workload small enough to compare exhaustively.
-                            threshold = WORKER_PAIR_THRESHOLD }) => {
+                            threshold = WORKER_PAIR_THRESHOLD, onProgress,
+                            // Injectable so a test can see progress without a million pairs.
+                            progressMask = PROGRESS_MASK }) => {
     const sequential = () => {
         const out = []
+        let compared = 0
         for (const [order, { members, against }] of units.entries()) {
             const pairs = against
                 ? against.map(b => [members[0], b])
                 : members.flatMap((a, i) => members.slice(i + 1).map(b => [a, b]))
             for (const [a, b] of pairs) {
                 if (a === b) continue
+                if ((++compared & progressMask) === 0) onProgress?.(compared, pairCount)
                 const sa = sourceOf.get(a)
                 if (sa === sourceOf.get(b) && !dedupsWithin(sa)) continue
                 const m = score(a, b)
@@ -79,6 +88,12 @@ export const scorePairs = async ({ units, pairCount, hard, weighted, minScore, a
         return sourceIndex.get(src)
     }
 
+    const perWorker = new Map()
+    const onWorkerProgress = (worker, n) => {
+        perWorker.set(worker, n)
+        onProgress?.([...perWorker.values()].reduce((a, b) => a + b, 0), pairCount)
+    }
+
     const runSlice = ({ units: assigned }) => new Promise((resolve, reject) => {
         const local = new Map()
         const iris = []
@@ -100,16 +115,21 @@ export const scorePairs = async ({ units, pairCount, hard, weighted, minScore, a
                 dedupsWithin: dedupFlags,
                 hard: hard.map(h => ({ optional: !!h.optional })),
                 weighted: weighted.map(c => ({ weight: c.weight, minSim: c.minSim })),
-                minScore, algo: algoName,
+                minScore, algo: algoName, progressMask,
             },
         })
-        worker.on("message", (found) => resolve(found.map(f => ({
+        worker.on("message", (msg) => {
+            // Each worker counts its own slice; the parent sums them, so the
+            // figure reported is comparisons across the whole rule.
+            if (msg.progress != null) { onWorkerProgress(worker, msg.progress); return }
+            resolve(msg.found.map(f => ({
             order: f.order, a: iris[f.a], b: iris[f.b], aggregate: f.aggregate,
             scores: f.scores.map(sc => ({
                 pred: weighted[sc.i].pred, sim: sc.sim, weight: weighted[sc.i].weight,
                 valueA: sc.valueA, valueB: sc.valueB,
             })),
-        }))))
+            })))
+        })
         worker.on("error", reject)
     })
 
@@ -462,10 +482,20 @@ export const runMatch = async ({ store, defStore, abs }, outPath, registryPath, 
         const pairCount = units.reduce((n, u) =>
             n + (u.against ? u.against.length : u.members.length * (u.members.length - 1) / 2), 0)
 
+        // Throttled so the mask's ~1-per-million cadence does not become the
+        // output's cadence: at 1.24e8 pairs that would be 120 lines.
+        const ruleName = rule.match.split("#").pop()
+        let lastReport = 0
         const scored = await scorePairs({
             units, pairCount, subjects, hard, weighted, minScore, algoName,
             hardVals, weightedVals, sourceOf, dedupsWithin, workers,
             score: matches,
+            onProgress: (done, total) => {
+                const now = Date.now()
+                if (now - lastReport < 2000) return
+                lastReport = now
+                console.log(`match: ${ruleName} scored ${done.toLocaleString()} of ${total.toLocaleString()} pairs (${Math.round(done / total * 100)}%)`)
+            },
         })
         for (const { a, b, ...m } of scored) considerPair(a, b, m)
 
