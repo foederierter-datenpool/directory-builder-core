@@ -8,7 +8,7 @@ import fs from "fs"
 // whichever applies, plus the federation's run params as one JSON argument.
 // fetch.js is optional for static sources: without it, the default fetch
 // copies static/ verbatim. Returns the harvest record for the ingest log.
-export const runFetch = ({ abs, root }, { name, fetchUrl, paramsJson }) => {
+export const runFetch = async ({ abs, root }, { name, fetchUrl, paramsJson }) => {
     const outDir = PATHS.raw(name)
     const origin = fetchUrl ?? abs(PATHS.staticDir(name))
     console.log(`fetch  ${fetchUrl ?? PATHS.staticDir(name)} (params ${paramsJson}) → ${outDir}`)
@@ -16,7 +16,7 @@ export const runFetch = ({ abs, root }, { name, fetchUrl, paramsJson }) => {
     fs.rmSync(abs(outDir), { recursive: true, force: true })
     fs.mkdirSync(abs(outDir), { recursive: true })
     const script = abs(PATHS.fetchScript(name))
-    if (fs.existsSync(script)) run("node", [script, abs(outDir), origin, paramsJson])
+    if (fs.existsSync(script)) await run("node", [script, abs(outDir), origin, paramsJson], { label: name })
     else localCopyFallback({ name, fetchUrl, origin, outDir: abs(outDir) })
     const harvest = { time: new Date().toISOString() }
     // Static sources have no live harvest — record the files' git commit

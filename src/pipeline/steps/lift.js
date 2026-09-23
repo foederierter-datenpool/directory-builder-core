@@ -33,7 +33,7 @@ export async function ensureJar(abs) {
 
 // Lift step: SPARQL Anything turns each raw file into TTL, via the bundled
 // query for the source's :format, with the source's :hasLiftParam variables.
-export const runLift = ({ abs }, { jar, name, format, params }) => {
+export const runLift = async ({ abs }, { jar, name, format, params }) => {
     // One JVM per raw file (~1s startup each): fine at small N, costly at
     // nationwide scale. The lever is fewer raw files, not fewer JVMs per file —
     // SPARQL Anything v1.1.0 binds one constant fx:location per invocation
@@ -42,12 +42,12 @@ export const runLift = ({ abs }, { jar, name, format, params }) => {
     // (JSON: merge records into one array; HTML: wrap N entries per file and
     // scope the extract to each wrapper).
     const liftQuery = liftQueryFor(format)
-    const liftOne = (location, outPath) => {
+    const liftOne = async (location, outPath) => {
         const args = ["-jar", jar, "-q", liftQuery,
                       "-v", `location=${location}`,
                       "-f", "TTL", "-o", outPath]
         for (const [pName, value] of params) args.push("-v", `${pName}=${value}`)
-        run("java", args)
+        await run("java", args, { label: name })
     }
     const inAbs = abs(PATHS.raw(name))
     const outAbs = abs(PATHS.lifted(name))
@@ -58,6 +58,6 @@ export const runLift = ({ abs }, { jar, name, format, params }) => {
     console.log(`lift   ${PATHS.raw(name)} (${files.length} files) → ${PATHS.lifted(name)}`)
     for (const f of files) {
         const stem = path.basename(f, path.extname(f))
-        liftOne(path.join(inAbs, f), path.join(outAbs, `${stem}.ttl`))
+        await liftOne(path.join(inAbs, f), path.join(outAbs, `${stem}.ttl`))
     }
 }
