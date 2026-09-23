@@ -214,3 +214,44 @@ test("collect drains a partition too large for a push spread", async () => {
     }))
     assert.equal(items.length, BIG)
 })
+
+// A development cap. Distinct from truncation: both fall short of the source's
+// reported total, and only the caller knows which is which.
+test("limit stops the harvest at exactly that many records", async () => {
+    const items = await collect(harvest({
+        fetchOne: async (_p, page) => ({ items: Array.from({ length: 100 }, (_, i) => (page - 1) * 100 + i), total: 5000 }),
+        limit: 250,
+        retry: FAST,
+    }))
+    assert.equal(items.length, 250, "trimmed mid-page, not rounded up to a page boundary")
+})
+
+test("a capped run is marked capped and not truncated", async () => {
+    for await (const r of harvest({
+        fetchOne: async (_p, page) => ({ items: page <= 5 ? [1, 2, 3] : [], total: 999 }),
+        limit: 4,
+        retry: FAST,
+    })) {
+        assert.equal(r.capped, true)
+        assert.equal(r.truncated, false, "stopping deliberately is not the source truncating us")
+    }
+})
+
+test("limit stops launching further partitions", async () => {
+    let touched = 0
+    await collect(harvest({
+        partitions: [...Array(50).keys()],
+        fetchOne: async () => { touched++; return { items: [1, 2], total: 2 } },
+        limit: 4,
+        concurrency: 1,
+        retry: FAST,
+    }))
+    assert.ok(touched <= 3, `stopped early, touched ${touched} of 50 partitions`)
+})
+
+test("an uncapped harvest is unaffected", async () => {
+    for await (const r of harvest({
+        fetchOne: async (_p, page) => ({ items: page === 1 ? [1, 2, 3] : [], total: 3 }),
+        retry: FAST,
+    })) assert.equal(r.capped, false)
+})
