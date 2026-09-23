@@ -71,44 +71,25 @@ const WRITERS = {
 //
 // ---- Reading a chunk back -------------------------------------------------
 //
-// The wrapper changes the lifted shape, so a chunking source's extract has to
-// scope every pattern to a record. That is the same three steps for every
-// source, and the obvious way to write them is slow enough to cancel the
-// benefit, so both are spelled out here rather than left to be rediscovered.
+// Nothing special. The lift step splits a chunk into one file per record before
+// extract sees it, so a chunked source's extract is the same free-floating query
+// an unchunked source writes -- one record per store, patterns unambiguous.
 //
-// 1. Bind the record root. The class and data-name are the only handle:
+// Two contracts worth relying on:
 //
-//        ?rec xhtml:class "cdp-record" ; xhtml:data-name ?name .
-//
-// 2. Reach descendants. Facade-X nests by rdf:_N and has no descendant axis:
-//
-//        ?rec (!rdf:type)* ?node .
-//
-// 3. Re-root every existing pattern onto ?node.
-//
-// Step 3 is the one that bites. Unchunked, patterns match free-floating because
-// a file holds one document and there is nothing else to hit; chunked, they
-// cross-join — at 200 records per file, 200 canonical links against 200 h1s is
-// 40,000 bogus pairs. It does not error, it produces a plausible directory with
-// wrong values.
-//
-// Bind ?node ONCE, above any UNION, and let each branch filter that shared set.
-// Opening a fresh (!rdf:type)* path inside every branch measures ~90 ms per
-// record per field — linear in both, so a six-field source is slower chunked
-// than unchunked, and an adopter would reasonably conclude chunking does not
-// work.
-//
-// Two further contracts worth relying on:
-//
-//   • The name passed to emit reaches the extract as xhtml:data-name on the
-//     record div. That is the record's identity, and it saves a source-specific
-//     id trick — a slug regexed out of a canonical URL, say.
+//   • The name passed to emit names the record's lifted file, and reaches the
+//     extract as data-name on the record element. That is the record's identity,
+//     and it saves a source-specific id trick -- a slug regexed out of a
+//     canonical URL, say.
 //   • <link> and <meta> from each document's head survive inside the record
-//     div rather than being hoisted out of it, so an extract may depend on them.
+//     rather than being hoisted out of it, so an extract may depend on them.
 //
-// A fixture for this needs TWO records in one file. With one, every pattern
-// matches its own page however badly scoped the query is, so a cross-join
-// regression is invisible.
+// Chunk size is now purely a lift concern: more records per file is fewer JVM
+// starts, and extract is unaffected because it never sees the chunk. Before the
+// split existed, the chunk reached extract intact and every pattern had to be
+// anchored to its own record and walked down from -- which scanned the whole
+// file per record and cost more than the JVM starts it saved.
+
 export const RECORD_CLASS = "cdp-record"
 
 // The lift selector that matches what the HTML wrapper writes. Exported so a
