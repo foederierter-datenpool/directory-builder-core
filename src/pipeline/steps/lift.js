@@ -56,8 +56,35 @@ export const runLift = async ({ abs }, { jar, name, format, params }) => {
     fs.rmSync(outAbs, { recursive: true, force: true })
     fs.mkdirSync(outAbs, { recursive: true })
     console.log(`lift   ${PATHS.raw(name)} (${files.length} files) → ${PATHS.lifted(name)}`)
+    let empty = 0
     for (const f of files) {
         const stem = path.basename(f, path.extname(f))
-        await liftOne(path.join(inAbs, f), path.join(outAbs, `${stem}.ttl`))
+        const outPath = path.join(outAbs, `${stem}.ttl`)
+        await liftOne(path.join(inAbs, f), outPath)
+        if (!hasTriples(outPath)) empty++
     }
+    // A lift that matched nothing still exits 0 and writes a file holding only
+    // prefix declarations, so the run looks healthy and the failure surfaces two
+    // steps later as a drift error blaming the source data or extract.sparql.
+    // The cause is knowable here and nowhere else: the query, the format and the
+    // params are all in hand. Reported rather than thrown, because a source can
+    // legitimately harvest nothing; the drift check still fails the run.
+    if (empty) {
+        const shown = params.length ? params.map(([n, v]) => `${n}=${v}`).join(", ") : "none"
+        console.warn(`lift   ${name}: ${empty} of ${files.length} file(s) produced no triples — `
+            + `the ${localName(format).toLowerCase()} lift matched nothing in them (lift params: ${shown}). `
+            + `A selector or format that does not match the raw files is the usual cause.`)
+    }
+}
+
+// Whether a lifted Turtle file holds anything beyond its prefix header.
+// SPARQL Anything writes prefixes first, so anything past a few kilobytes
+// certainly has content and only a small file needs reading.
+const PREFIX_HEADER_BYTES = 8192
+const hasTriples = (file) => {
+    const { size } = fs.statSync(file)
+    if (size > PREFIX_HEADER_BYTES) return true
+    return fs.readFileSync(file, "utf8")
+        .split("\n")
+        .some(line => line.trim() !== "" && !/^\s*(@?prefix|PREFIX)\s/i.test(line))
 }
