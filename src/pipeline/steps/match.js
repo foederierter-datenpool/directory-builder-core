@@ -86,6 +86,23 @@ export const runMatch = async ({ store, defStore, abs }, outPath, registryPath, 
             ?match a :MatchRule ; :hasHardCriterion ?h . ?h :on ?on .
             OPTIONAL { ?h :optional ?optional }
         }`, [defStore])
+    // Blocking keys: fields that partition the comparison space without deciding
+    // anything. A hard criterion is trivially a valid partition -- if differing
+    // values mean rejection, differing records need not be compared -- but the
+    // reverse does not hold, which is why this is a separate declaration. A
+    // normalised name token partitions well, yet gating on it would reject
+    // "Programme X" against "EU Programme X", the very pairs the weighted
+    // scoring exists to catch.
+    const blockingRows = await sparqlSelect(`
+        PREFIX : <${CDP}>
+        SELECT ?match ?on WHERE {
+            ?match a :MatchRule ; :hasBlockingKey ?b . ?b :on ?on .
+        }`, [defStore])
+    const blockingByMatch = new Map()
+    for (const r of blockingRows) {
+        if (!blockingByMatch.has(r.match)) blockingByMatch.set(r.match, [])
+        blockingByMatch.get(r.match).push({ pred: df.namedNode(r.on) })
+    }
     // Criteria keyed by their owning rule, so each pass scores on its own fields.
     const criteriaByMatch = new Map()
     for (const r of criteriaRows) {
@@ -191,6 +208,7 @@ export const runMatch = async ({ store, defStore, abs }, outPath, registryPath, 
         const mintedPrefix = rule.prefix
         const minScore     = parseFloat(rule.minScore)
         const hard     = hardByMatch.get(rule.match) ?? []
+        const blocking = blockingByMatch.get(rule.match) ?? []
         const weighted = criteriaByMatch.get(rule.match) ?? []
         const algoName = rule.algo ?? DEFAULT_ALGORITHM
         if (!ALGORITHMS[algoName]) throw new Error(`match: unknown :matchAlgorithm "${algoName}" — use ${Object.keys(ALGORITHMS).join(", ")}`)
@@ -278,38 +296,67 @@ export const runMatch = async ({ store, defStore, abs }, outPath, registryPath, 
         // within the bucket. All-optional (or no) hard criteria means one
         // bucket, i.e. the plain all-pairs scan.
         const requiredIdx = hard.map((h, i) => h.optional ? -1 : i).filter(i => i >= 0)
+        // Every value of a blocking predicate, not just the first: a record
+        // belongs in one bucket per value, and a pair meeting in any bucket is
+        // compared. More keys therefore means more recall, never less — the
+        // opposite of a multi-valued hard criterion, which valOf silently
+        // reduces to one arbitrary member.
+        const valuesOf = (s, pred) => store.getQuads(df.namedNode(s), pred, null, MAPPED_GRAPH)
+            .map(qu => qu.object.termType === "NamedNode" ? (mintedThisRun.get(qu.object.value) ?? qu.object.value) : qu.object.value)
+        // Prefixed by which declaration produced them, so two blocking keys
+        // sharing a value don't collide into one bucket.
+        const blockVals = new Map(subjects.map(s =>
+            [s, blocking.flatMap((b, i) => valuesOf(s, b.pred).map(v => `${i}\u0000${v}`))]))
+
         const buckets = new Map()
+        const intoBucket = (key, s) => {
+            if (!buckets.has(key)) buckets.set(key, [])
+            buckets.get(key).push(s)
+        }
+        // A record carrying no blocking value rules nothing out, so it has to be
+        // compared against everything. That is the cost of not knowing, and it
+        // is why a blocking key must never make a record unmatchable the way a
+        // missing hard value does — blocking narrows the question, it never
+        // answers it.
+        const unblocked = []
         // A required hard value the record simply doesn't carry makes it
         // unmatchable — correct, but silent until now: the run looks healthy
         // while the record sits out of the federation entirely.
         let unmatchable = 0
-        if (requiredIdx.length) {
-            for (const s of subjects) {
-                const hv = hardVals.get(s)
-                if (requiredIdx.some(i => hv[i] == null)) { unmatchable++; continue }
-                const key = JSON.stringify(requiredIdx.map(i => hv[i]))
-                if (!buckets.has(key)){
-                    buckets.set(key, [])
-                }
-                buckets.get(key).push(s)
-            }
-        } else {
-            buckets.set("", subjects)
+        for (const s of subjects) {
+            const hv = hardVals.get(s)
+            if (requiredIdx.length && requiredIdx.some(i => hv[i] == null)) { unmatchable++; continue }
+            const hardKey = requiredIdx.map(i => hv[i])
+            if (!blocking.length) { intoBucket(JSON.stringify(hardKey), s); continue }
+            const bv = blockVals.get(s)
+            if (!bv.length) { unblocked.push(s); continue }
+            for (const v of bv) intoBucket(JSON.stringify([...hardKey, v]), s)
         }
         if (unmatchable) console.warn(`match: ${rule.match.split("#").pop()} ${unmatchable} of ${subjects.length} entities carry no value for a required hard criterion and can match nothing — declare :optional true on the criterion to let them fall through`)
 
+        // Blocking puts a record in several buckets, so the same pair can come
+        // up more than once. Comparing it twice would duplicate its evidence in
+        // the match log, so each unordered pair is considered once.
+        const considered = new Set()
+        const considerPair = (a, b) => {
+            if (a === b) return
+            const key = a < b ? `${a}|${b}` : `${b}|${a}`
+            if (considered.has(key)) return
+            considered.add(key)
+            const sa = sourceOf.get(a)
+            if (sa === sourceOf.get(b) && !dedupsWithin(sa)) return  // source trusts its own IDs
+            const m = matches(a, b)
+            if (!m) return
+            if (distinctPairs.has(`${a}|${b}`)) { keptDistinct++; return }  // owl:differentFrom veto
+            union(a, b); evidence.push({ a, b, ...m })
+        }
+
         for (const bucket of buckets.values()) {
             for (let i = 0; i < bucket.length; i++) {
-                for (let j = i + 1; j < bucket.length; j++) {
-                    const a = bucket[i], b = bucket[j], sa = sourceOf.get(a)
-                    if (sa === sourceOf.get(b) && !dedupsWithin(sa)) continue  // source trusts its own IDs
-                    const m = matches(a, b)
-                    if (!m) continue
-                    if (distinctPairs.has(`${a}|${b}`)) { keptDistinct++; continue }  // owl:differentFrom veto
-                    union(a, b); evidence.push({ a, b, ...m })
-                }
+                for (let j = i + 1; j < bucket.length; j++) considerPair(bucket[i], bucket[j])
             }
         }
+        for (const a of unblocked) for (const b of subjects) considerPair(a, b)
 
         const clusters = new Map()
         for (const s of subjects) {
@@ -390,6 +437,17 @@ export const runMatch = async ({ store, defStore, abs }, outPath, registryPath, 
         }
 
         console.log(`match: ${rule.match.split("#").pop()} ${subjects.length} entities in ${buckets.size} bucket(s) → ${clusters.size} clusters (${multiMember} multi-member, ${sameAsUnions} sameAs unions, ${keptDistinct} kept distinct)`)
+        // A blocking key that is too aggressive loses true matches silently —
+        // the pairs are never compared, so no score exists to notice missing.
+        // The shape of the buckets is the only warning an author gets, so it is
+        // reported rather than left to be inferred from a bucket count: the
+        // largest bucket is where the time actually goes, and the unblocked
+        // count is how many records the key failed to place at all.
+        if (blocking.length) {
+            const sizes = [...buckets.values()].map(b => b.length).sort((x, y) => x - y)
+            const median = sizes.length ? sizes[sizes.length >> 1] : 0
+            console.log(`match: ${rule.match.split("#").pop()} blocking — largest bucket ${sizes.at(-1) ?? 0}, median ${median}, ${considered.size} pairs compared, ${unblocked.length} entities unblocked (compared against all)`)
+        }
     }
 
     // cdp:matchString was extract's private matching surface (a normalised name the
