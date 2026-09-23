@@ -17,7 +17,8 @@
   },
   "exports": {
     ".": "./src/index.js",
-    "./utils": "./src/utils.js"
+    "./utils": "./src/utils.js",
+    "./fetch": "./src/fetch/index.js"
   },
   "publishConfig": {
     "access": "public"
@@ -33,6 +34,8 @@
     "lucide-react": "^1.14.0",
     "marked": "^18.0.5",
     "n3": "^2.0.3",
+    "p-map": "^7.0.8",
+    "p-retry": "^8.0.1",
     "prismjs": "^1.30.0",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
