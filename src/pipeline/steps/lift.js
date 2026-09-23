@@ -5,6 +5,23 @@ import fs from "fs"
 
 const SPARQL_ANYTHING_VERSION = "v1.1.0"
 
+// A shared budget for concurrent JVMs, held across every source rather than per
+// source. Bounds compose multiplicatively: with sources running concurrently and
+// each lifting its own files concurrently, two per-scope limits of 3 and 4 would
+// permit 12 JVMs, each with its own heap. One global budget is what actually
+// bounds the machine.
+export const jvmBudget = (limit) => {
+    let active = 0
+    const queue = []
+    const next = () => {
+        if (active >= limit || !queue.length) return
+        active++
+        const { fn, resolve, reject } = queue.shift()
+        Promise.resolve().then(fn).then(resolve, reject).finally(() => { active--; next() })
+    }
+    return (fn) => new Promise((resolve, reject) => { queue.push({ fn, resolve, reject }); next() })
+}
+
 // The generic lift queries ship with the engine — they resolve against this
 // package, not the instance root like everything else in PATHS.
 const liftQueryFor = (formatIri) =>
@@ -33,7 +50,7 @@ export async function ensureJar(abs) {
 
 // Lift step: SPARQL Anything turns each raw file into TTL, via the bundled
 // query for the source's :format, with the source's :hasLiftParam variables.
-export const runLift = async ({ abs }, { jar, name, format, params }) => {
+export const runLift = async ({ abs, budget = jvmBudget(1) }, { jar, name, format, params }) => {
     // One JVM per raw file (~1s startup each): fine at small N, costly at
     // nationwide scale. The lever is fewer raw files, not fewer JVMs per file —
     // SPARQL Anything v1.1.0 binds one constant fx:location per invocation
@@ -56,13 +73,18 @@ export const runLift = async ({ abs }, { jar, name, format, params }) => {
     fs.rmSync(outAbs, { recursive: true, force: true })
     fs.mkdirSync(outAbs, { recursive: true })
     console.log(`lift   ${PATHS.raw(name)} (${files.length} files) → ${PATHS.lifted(name)}`)
-    let empty = 0
-    for (const f of files) {
+    // Files of one source lift concurrently, through the shared budget. Each
+    // invocation is its own JVM process with no shared state, so this is only a
+    // question of how many the machine should run at once -- which is the
+    // budget's job, not this loop's. Measured at 2.1x on six files, short of
+    // linear because a single JVM already uses more than one core.
+    const produced = await Promise.all(files.map((f) => budget(async () => {
         const stem = path.basename(f, path.extname(f))
         const outPath = path.join(outAbs, `${stem}.ttl`)
         await liftOne(path.join(inAbs, f), outPath)
-        if (!hasTriples(outPath)) empty++
-    }
+        return hasTriples(outPath)
+    })))
+    const empty = produced.filter((ok) => !ok).length
     // A lift that matched nothing still exits 0 and writes a file holding only
     // prefix declarations, so the run looks healthy and the failure surfaces two
     // steps later as a drift error blaming the source data or extract.sparql.
