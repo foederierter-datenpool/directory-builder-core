@@ -38,10 +38,23 @@ export async function* harvest({
     retry: retryOptions,
     delayMs = 0,
     maxPages = 1000,
+    limit = Infinity,
     onProgress,
 } = {}) {
     if (typeof fetchOne !== "function") throw new TypeError("harvest needs a fetchOne(partition, page) callback")
     const list = [...partitions]
+    // A deliberate cap, for development runs. It is tracked here rather than
+    // left to the caller because a capped harvest and a truncated one look
+    // identical downstream -- both fall short of the source's reported total --
+    // and only the caller knows which is which. Marking it means emit can skip
+    // the completeness check instead of every fetcher restating its own
+    // expectation and rounding it to a page boundary.
+    //
+    // With concurrency > 1 the exact set of partitions that contribute to a
+    // capped run is whichever finished first; use concurrency 1 when a capped
+    // run needs to be reproducible.
+    let taken = 0
+    const capped = () => taken >= limit
     // Dedup spans partitions, which is the whole point: a detail page appears on
     // several listing pages, and the same entry under several postal codes. It
     // has to be applied here rather than by the caller, because the duplicate
@@ -66,6 +79,7 @@ export async function* harvest({
             if (result?.total != null) total = result.total
             pages = page
             for (const item of batch) {
+                if (capped()) break
                 fetched++
                 if (seen) {
                     const key = dedupBy(item)
@@ -73,7 +87,9 @@ export async function* harvest({
                     seen.add(key)
                 }
                 items.push(item)
+                taken++
             }
+            if (capped()) break
             if (delayMs) await new Promise((r) => setTimeout(r, delayMs))
             if (!batch.length) {
                 // An empty page is the usual end-of-partition signal, but it is
@@ -83,12 +99,12 @@ export async function* harvest({
                 // indistinguishable from the page alone; comparing against the
                 // reported total tells them apart. Reported here, not thrown:
                 // acting on it is validation's job (tranche 3).
-                if (total != null && fetched < total) truncated = true
+                if (total != null && fetched < total && !capped()) truncated = true
                 break
             }
             if (total != null && fetched >= total) break
         }
-        return { partition, items, fetched, duplicates: fetched - items.length, pages, total, truncated }
+        return { partition, items, fetched, duplicates: fetched - items.length, pages, total, truncated, capped: capped() }
     }
 
     // Stream results as they finish rather than gathering them: keeps `concurrency`
@@ -97,11 +113,11 @@ export async function* harvest({
     const inFlight = new Map()
     let next = 0
     const start = () => {
-        if (next >= list.length) return
+        if (next >= list.length || capped()) return
         const index = next++
         inFlight.set(index, onePartition(list[index]).then((value) => ({ index, value })))
     }
-    while (inFlight.size < concurrency && next < list.length) start()
+    while (inFlight.size < concurrency && next < list.length && !capped()) start()
 
     while (inFlight.size) {
         const { index, value } = await Promise.race(inFlight.values())

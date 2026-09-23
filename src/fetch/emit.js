@@ -93,6 +93,16 @@ const formatKey = (format) => localName(String(format)).toLowerCase()
 // a chunk at a time instead of being gathered first, which is the whole reason
 // harvest yields per partition.
 //
+// `project` trims each record before it is written. Prefer a size cap that
+// exempts the mapped fields over naming the fields to drop: measured across one
+// real source, the bulk sits in a *different* field in different slices (median
+// record 59 KB, largest 2.3 MB, and the single biggest field was absent from a
+// deny-list drawn up from the first page), so a hand-maintained list silently
+// stops working the next time the API adds a blob. The exemption is the
+// load-bearing half — a mapped field can legitimately be far larger than the
+// threshold that catches the rest. The rule is a callback rather than config
+// precisely because it is not expressible as a field list.
+//
 // Passing harvest's output also makes validation automatic — the reported total
 // and the truncation flag travel with the batches, so the count check needs no
 // argument from the author. It is that check, not the writing, that this is for:
@@ -133,7 +143,7 @@ export const emit = async (source, {
     // written counts what lands on disk; fetched counts what the source handed
     // over before dedup. The completeness check compares fetched against the
     // reported total, so a deduped duplicate is not mistaken for a lost record.
-    let written = 0, fetched = 0, files = 0, reportedTotal, truncated = false
+    let written = 0, fetched = 0, files = 0, reportedTotal, truncated = false, capped = false
     let buffer = []
 
     const flush = () => {
@@ -159,6 +169,7 @@ export const emit = async (source, {
         if (batch.total != null) reportedTotal = (reportedTotal ?? 0) + batch.total
         fetched += batch.fetched ?? batch.items.length
         if (batch.truncated) truncated = true
+        if (batch.capped) capped = true
         for (const item of batch.items) {
             written++
             if (documents && !wrapper) { writeOne(item); continue }
@@ -173,13 +184,17 @@ export const emit = async (source, {
     const seenNote = deduped > 0 ? ` (${deduped} deduplicated)` : ""
     if (truncated)
         throw new Error(`emit: the source truncated the harvest — received ${fetched} records against a reported total of ${expectedTotal ?? "unknown"}. The source stopped returning results before its total was reached (a result cap); partition the harvest more finely.`)
-    if (expectedTotal != null && fetched !== expectedTotal)
+    // A deliberate cap is not a shortfall. Without this every capped run would
+    // have to restate its own expected count -- and round it to a page boundary,
+    // since harvest fetches whole pages -- in each adopting fetcher.
+    if (expectedTotal != null && fetched !== expectedTotal && !capped)
         throw new Error(`emit: received ${fetched} records but the source reported ${expectedTotal}${seenNote}`)
     if (expectations.minRecords != null && written < expectations.minRecords)
         throw new Error(`emit: harvested ${written} records, below the expected floor of ${expectations.minRecords} — the source layout may have changed`)
 
-    console.log(`emit   ${written} records${seenNote} → ${files} file(s) in ${outDir}`)
-    return { written, fetched, deduplicated: deduped, files, total: expectedTotal }
+    const capNote = capped ? ` (capped, of ${expectedTotal ?? "unknown"} available)` : ""
+    console.log(`emit   ${written} records${seenNote}${capNote} → ${files} file(s) in ${outDir}`)
+    return { written, fetched, deduplicated: deduped, files, total: expectedTotal, capped }
 }
 
 // An array of records, or harvest's per-partition results, reach the same loop.

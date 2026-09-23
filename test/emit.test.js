@@ -185,3 +185,26 @@ test("a genuine shortfall is still caught when dedup is in play", async () => {
         retry: FAST,
     }), { outDir: dir, format: "json" }), /truncated|received 2/)
 })
+
+// The friction this removes: a capped run used to fail the completeness check,
+// because the source's reported total is the corpus total. Every adopting
+// fetcher had to restate its own expectation and round it to a page boundary.
+test("a deliberately capped harvest does not fail the completeness check", async () => {
+    const dir = tmp()
+    const r = await emit(harvest({
+        fetchOne: async (_p, page) => ({ items: Array.from({ length: 100 }, (_, i) => ({ id: `${page}-${i}` })), total: 5000 }),
+        limit: 250,
+        retry: FAST,
+    }), { outDir: dir, format: "json" })
+    assert.equal(r.written, 250)
+    assert.equal(r.capped, true)
+    assert.equal(r.total, 5000, "the corpus total is still reported, just not asserted against")
+})
+
+test("a real shortfall still fails when no cap was asked for", async () => {
+    const dir = tmp()
+    await assert.rejects(() => emit(harvest({
+        fetchOne: async (_p, page) => ({ items: page === 1 ? [{ id: 1 }] : [], total: 5000 }),
+        retry: FAST,
+    }), { outDir: dir, format: "json" }), /truncated|received 1/)
+})
