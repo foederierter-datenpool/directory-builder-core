@@ -50,7 +50,9 @@ test("a selector that matches stays quiet", async () => {
     const warnings = await captureWarnings(() => runLift({ abs },
         { jar: JAR, name: "ok", format: HTML, params: [["selector", "div.cdp-record"]] }))
     assert.equal(warnings, "", "no warning when the lift produced triples")
-    const ttl = fs.readFileSync(abs(path.join(PATHS.lifted("ok"), "chunk.ttl")), "utf8")
-    assert.match(ttl, /Alpha/)
-    assert.match(ttl, /Beta/)
+    // The chunk is split into one file per record, so there is no chunk.ttl —
+    // each record's data-name names its own file.
+    assert.deepEqual(fs.readdirSync(abs(PATHS.lifted("ok"))).sort(), ["a.ttl", "b.ttl"])
+    assert.match(fs.readFileSync(path.join(abs(PATHS.lifted("ok")), "a.ttl"), "utf8"), /Alpha/)
+    assert.match(fs.readFileSync(path.join(abs(PATHS.lifted("ok")), "b.ttl"), "utf8"), /Beta/)
 })
