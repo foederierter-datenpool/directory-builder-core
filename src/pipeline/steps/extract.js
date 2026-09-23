@@ -1,6 +1,6 @@
 import { newStore, sparqlConstruct, storeFromTurtles } from "@foerderfunke/sem-ops-utils"
 import { CDP, identifierField, PATHS, prefixes, sourceName } from "../../utils.js"
-import { writeTurtleFile } from "../write-turtle.js"
+import { tripleStore, writeTurtleFile } from "../write-turtle.js"
 import path from "path"
 import fs from "fs"
 
@@ -47,20 +47,19 @@ export const runExtract = async ({ abs, quads, observations }, sourceIri) => {
     const inAbs = abs(inDir)
     const files = fs.readdirSync(inAbs).filter(f => f.endsWith(".ttl")).sort()
     console.log(`extract  ${inDir} (${files.length} files) → ${outPath}`)
-    const allQuads = []
+    // Quads go straight into the store that writeTurtleFile would build anyway.
+    // Accumulating an array first meant holding the whole output twice at peak,
+    // once as quads and once as the dedupe store -- and the array was what
+    // overflowed at 154,519 quads in #23.
+    const out = tripleStore()
     for (const f of files) {
         const fileStore = storeFromTurtles([fs.readFileSync(path.join(inAbs, f), "utf8")])
         // The observation store rides alongside the document: additive and
         // opt-in, so an extract that ignores cdp:observedAt is unaffected.
         const quads = await sparqlConstruct(extractQuery, [fileStore, observations ?? newStore()])
-        // Appended one at a time, not with push(...quads): the spread passes
-        // every quad as a separate argument and blows V8's argument limit once
-        // a single file yields enough of them (~150k), killing the run with a
-        // RangeError two steps away from the source that caused it. That ceiling
-        // ran directly against runLift's advice to emit few large files.
-        for (const quad of quads) allQuads.push(quad)
+        for (const quad of quads) out.add(quad)
     }
-    await writeTurtleFile(abs(outPath), allQuads, prefixes("xyz", "cdp"))
+    await writeTurtleFile(abs(outPath), out, prefixes("xyz", "cdp"))
 }
 
 // No extract.sparql given: resolve the engine's default template with the

@@ -21,13 +21,33 @@ export const usedPrefixes = (prefixMap, quads) => {
     return Object.fromEntries(Object.entries(prefixMap).filter(([, ns]) => iris.some((iri) => iri.startsWith(ns))))
 }
 
+// A Store that holds quads as triples, dropping any graph name.
+export const tripleStore = () => {
+    const store = newStore()
+    return {
+        add: (q) => store.addQuad(df.quad(q.subject, q.predicate, q.object)),
+        get size() { return store.size },
+        quads: () => store.getQuads(null, null, null, null),
+    }
+}
+
 // Dedupe via a Store and sort by subject so the Writer can emit grouped
 // "subject p1 o1; p2 o2." blocks instead of repeating subjects. Strips
 // graph names (writes triples, not quads).
+//
+// Takes either quads or a tripleStore already holding them. A step that
+// produces its output in pieces should hand over the store it filled, rather
+// than an array this would copy into a second one: the dedupe store has to hold
+// everything regardless, so an array beside it is a whole redundant copy of the
+// output at peak.
 export const writeTurtleFile = (filePath, quads, prefixes = {}) => new Promise((resolve, reject) => {
-    const store = newStore()
-    for (const q of quads) store.addQuad(df.quad(q.subject, q.predicate, q.object))
-    const dedup = store.getQuads(null, null, null, null)
+    let store
+    if (typeof quads?.quads === "function") store = quads
+    else {
+        store = tripleStore()
+        for (const q of quads) store.add(q)
+    }
+    const dedup = store.quads()
         .sort((a, b) => a.subject.value.localeCompare(b.subject.value))
     const writer = new Writer({ prefixes })
     for (const q of dedup) writer.addQuad(q)
