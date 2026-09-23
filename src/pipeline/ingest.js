@@ -1,6 +1,6 @@
 import { sparqlSelect, storeFromTurtles } from "@foerderfunke/sem-ops-utils"
 import { CDP, enabledSources, parseTtl, PATHS, prefixes, sourceName, stepJournal, turtlePrefixBlock } from "../utils.js"
-import { ensureJar, runLift } from "./steps/lift.js"
+import { ensureJar, jvmBudget, runLift } from "./steps/lift.js"
 import { runFetch } from "./steps/fetch.js"
 import path from "path"
 import fs from "fs"
@@ -72,10 +72,20 @@ export async function ingest(root = process.cwd()) {
         SELECT ?n WHERE { :federation :maxConcurrentSources ?n }`, [defStore])
     const maxConcurrent = Math.max(1, Number(concurrencyRow?.n) || 3)
 
+    // JVMs are budgeted globally rather than per source, because a source's own
+    // files also lift concurrently: a per-source limit alongside the per-source
+    // count would multiply into far more JVMs than either number suggests.
+    // 4 saturates a typical machine -- a single SPARQL Anything JVM already uses
+    // more than one core, so the return flattens quickly.
+    const [liftRow] = await sparqlSelect(`
+        PREFIX : <${CDP}>
+        SELECT ?n WHERE { :federation :maxConcurrentLifts ?n }`, [defStore])
+    const budget = jvmBudget(Math.max(1, Number(liftRow?.n) || 4))
+
     const runStart = new Date()
     const harvests = []
     const journal = stepJournal()
-    const ctx = { abs, root }
+    const ctx = { abs, root, budget }
 
     const runSource = async ([iri, s]) => {
         const name = sourceName(iri)
