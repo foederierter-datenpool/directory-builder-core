@@ -29,7 +29,13 @@ const build = (n) => {
         weighted: [{ pred: { value: "urn:p:name" }, weight: 1.0, minSim: null }],
         minScore: 0.9,
         algoName: "token_set_ratio",
+        // Mirrors the engine's matches() exactly, hard gate included. A fixture
+        // that scores on similarity alone is not comparing like with like: the
+        // worker applies the hard criterion too, so the two would differ for a
+        // reason that has nothing to do with threading.
         score: (a, b) => {
+            const ha = hardVals.get(a)[0], hb = hardVals.get(b)[0]
+            if (ha != null && hb != null && ha !== hb) return null
             const va = weightedVals.get(a)[0], vb = weightedVals.get(b)[0]
             const sim = token_set_ratio(va, vb) / 100
             if (sim < 0.9) return null
@@ -44,13 +50,15 @@ const unitsFor = (subjects, buckets) => {
 }
 
 test("worker scoring returns exactly what in-process scoring returns", async () => {
-    const base = build(760)                       // ~288k pairs in one bucket, over the threshold
+    const base = build(40)
     const units = unitsFor(base.subjects, [base.subjects])
     const pairCount = base.subjects.length * (base.subjects.length - 1) / 2
-    assert.ok(pairCount > 200_000, `fixture must exceed the worker threshold, got ${pairCount}`)
 
+    // threshold 0 forces the worker path on a workload small enough to compare
+    // pair for pair; the real threshold exists to avoid paying for threads on
+    // work this size, not to change what the answer is.
     const inProcess = await scorePairs({ ...base, units, pairCount, workers: 1 })
-    const parallel  = await scorePairs({ ...base, units, pairCount, workers: 4 })
+    const parallel  = await scorePairs({ ...base, units, pairCount, workers: 4, threshold: 0 })
 
     assert.ok(inProcess.length > 0, "the fixture actually matches something")
     assert.equal(parallel.length, inProcess.length, "same number of matches")
@@ -61,11 +69,11 @@ test("worker scoring returns exactly what in-process scoring returns", async () 
 })
 
 test("worker scoring preserves the evidence each match carries", async () => {
-    const base = build(760)
+    const base = build(40)
     const units = unitsFor(base.subjects, [base.subjects])
     const pairCount = base.subjects.length * (base.subjects.length - 1) / 2
     const [seq] = await scorePairs({ ...base, units, pairCount, workers: 1 })
-    const [par] = await scorePairs({ ...base, units, pairCount, workers: 4 })
+    const [par] = await scorePairs({ ...base, units, pairCount, workers: 4, threshold: 0 })
     assert.equal(par.scores.length, seq.scores.length)
     assert.equal(par.scores[0].pred.value, seq.scores[0].pred.value, "the predicate survives the round trip")
     assert.equal(par.scores[0].weight, seq.scores[0].weight)
@@ -84,11 +92,11 @@ test("work below the threshold never starts a worker", async () => {
 })
 
 test("a pair from one source that trusts its own ids is skipped either way", async () => {
-    const base = { ...build(760), dedupsWithin: () => false }
+    const base = { ...build(40), dedupsWithin: () => false }
     const units = unitsFor(base.subjects, [base.subjects])
     const pairCount = base.subjects.length * (base.subjects.length - 1) / 2
     const seq = await scorePairs({ ...base, units, pairCount, workers: 1 })
-    const par = await scorePairs({ ...base, units, pairCount, workers: 4 })
+    const par = await scorePairs({ ...base, units, pairCount, workers: 4, threshold: 0 })
     assert.deepEqual(par.map(m => [m.a, m.b]), seq.map(m => [m.a, m.b]))
     assert.ok(seq.every(m => base.sourceOf.get(m.a) !== base.sourceOf.get(m.b)),
         "same-source pairs are excluded, and the worker applies the same rule")

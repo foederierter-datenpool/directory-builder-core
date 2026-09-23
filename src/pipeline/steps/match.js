@@ -38,7 +38,10 @@ export const WORKER_PAIR_THRESHOLD = 200_000
 // one worker, so a stable sort by unit index reproduces the sequential order
 // exactly, whichever worker finished first.
 export const scorePairs = async ({ units, pairCount, hard, weighted, minScore, algoName,
-                            hardVals, weightedVals, sourceOf, dedupsWithin, workers, score }) => {
+                            hardVals, weightedVals, sourceOf, dedupsWithin, workers, score,
+                            // Injectable so a test can force the worker path on a
+                            // workload small enough to compare exhaustively.
+                            threshold = WORKER_PAIR_THRESHOLD }) => {
     const sequential = () => {
         const out = []
         for (const [order, { members, against }] of units.entries()) {
@@ -55,7 +58,7 @@ export const scorePairs = async ({ units, pairCount, hard, weighted, minScore, a
         }
         return out
     }
-    if (workers <= 1 || pairCount < WORKER_PAIR_THRESHOLD) return sequential()
+    if (workers <= 1 || pairCount < threshold) return sequential()
 
     // Only the subjects a worker actually needs cross the boundary, remapped to
     // local indices: the copy of the value table is what caps the speedup, so it
