@@ -53,6 +53,12 @@ export async function* harvest({
 
     const onePartition = async (partition) => {
         const items = []
+        // Completeness is measured on what the source handed over, before
+        // dedup. Dedup is intentional loss -- the same detail page linked from
+        // two listings, the same entry under two postal codes -- so counting
+        // the survivors against the source's total would report a shortfall
+        // that is not one, on exactly the sources dedup exists for.
+        let fetched = 0
         let total, pages = 0, truncated = false
         for (let page = 1; page <= maxPages; page++) {
             const result = await retry(() => fetchOne(partition, page), retryOptions)
@@ -60,6 +66,7 @@ export async function* harvest({
             if (result?.total != null) total = result.total
             pages = page
             for (const item of batch) {
+                fetched++
                 if (seen) {
                     const key = dedupBy(item)
                     if (seen.has(key)) continue
@@ -76,12 +83,12 @@ export async function* harvest({
                 // indistinguishable from the page alone; comparing against the
                 // reported total tells them apart. Reported here, not thrown:
                 // acting on it is validation's job (tranche 3).
-                if (total != null && items.length < total) truncated = true
+                if (total != null && fetched < total) truncated = true
                 break
             }
-            if (total != null && items.length >= total) break
+            if (total != null && fetched >= total) break
         }
-        return { partition, items, pages, total, truncated }
+        return { partition, items, fetched, duplicates: fetched - items.length, pages, total, truncated }
     }
 
     // Stream results as they finish rather than gathering them: keeps `concurrency`
