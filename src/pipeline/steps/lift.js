@@ -1,4 +1,6 @@
-import { localName, PATHS } from "../../utils.js"
+import { localName, NAMESPACES, parseTtl, PATHS, prefixes } from "../../utils.js"
+import { RECORD_CLASS } from "../../fetch/emit.js"
+import { writeTurtleFile } from "../write-turtle.js"
 import { run } from "../run.js"
 import path from "path"
 import fs from "fs"
@@ -82,9 +84,12 @@ export const runLift = async ({ abs, budget = jvmBudget(1) }, { jar, name, forma
         const stem = path.basename(f, path.extname(f))
         const outPath = path.join(outAbs, `${stem}.ttl`)
         await liftOne(path.join(inAbs, f), outPath)
-        return hasTriples(outPath)
+        if (!hasTriples(outPath)) return { ok: false, records: 0 }
+        return { ok: true, records: await splitChunk(outPath, stem) }
     })))
-    const empty = produced.filter((ok) => !ok).length
+    const empty = produced.filter((p) => !p.ok).length
+    const split = produced.reduce((n, p) => n + p.records, 0)
+    if (split) console.log(`lift   ${name}: split ${files.length} chunk(s) into ${split} per-record file(s)`)
     // A lift that matched nothing still exits 0 and writes a file holding only
     // prefix declarations, so the run looks healthy and the failure surfaces two
     // steps later as a drift error blaming the source data or extract.sparql.
@@ -97,6 +102,82 @@ export const runLift = async ({ abs, budget = jvmBudget(1) }, { jar, name, forma
             + `the ${localName(format).toLowerCase()} lift matched nothing in them (lift params: ${shown}). `
             + `A selector or format that does not match the raw files is the usual cause.`)
     }
+}
+
+// ---- Splitting a chunked lift back into one file per record ---------------
+//
+// Chunking exists to amortise JVM startup: 1,327 pages in 7 files is 7 JVMs
+// instead of 1,327. But it only pays if nothing downstream has to separate the
+// records again -- and extract does. One store per lifted file is what stops an
+// extract cross-joining across documents, and a chunked file holds many
+// documents, so that isolation stops matching the unit of meaning. The extract
+// then has to anchor every pattern to its own record and walk down from it,
+// which scans the whole file once per record: measured on a real scrape, total
+// extract grows as n^1.2 in the chunk size, so a chunk of 190 turns 7 minutes of
+// extract into roughly 65 hours and eats the 45 minutes chunking saved many
+// times over.
+//
+// Splitting after triplifying keeps both wins: lift still starts one JVM per
+// chunk, and extract still gets one record per store. The same scrape comes out
+// at about 7 minutes total against 51 unchunked.
+//
+// This recognises core's own marker -- emit wrote the wrapper -- rather than
+// guessing at an instance's convention, so it is unconditional: a lifted file
+// carrying record wrappers is always split.
+const XHTML_CLASS     = `${NAMESPACES.xhtml ?? "http://www.w3.org/1999/xhtml#"}class`
+const XHTML_DATA_NAME = `${NAMESPACES.xhtml ?? "http://www.w3.org/1999/xhtml#"}data-name`
+const XYZ_RECORD      = `${NAMESPACES.xyz}${RECORD_CLASS}`
+const XYZ_DATA_NAME   = `${NAMESPACES.xyz}data-name`
+const RDF_TYPE        = `${NAMESPACES.rdf}type`
+
+// A record root is an HTML element carrying the wrapper class, or an XML element
+// typed as the wrapper. Both shapes were checked against the pinned engine.
+const recordRootsOf = (quads) => quads.filter(q =>
+    (q.predicate.value === XHTML_CLASS && q.object.value === RECORD_CLASS) ||
+    (q.predicate.value === RDF_TYPE && q.object.value === XYZ_RECORD)).map(q => q.subject)
+
+const fileSafe = (name) => String(name).replace(/[^A-Za-z0-9._-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 120)
+
+// Partition a lifted chunk into one file per record. Records are disjoint
+// blank-node subtrees, so one traversal from each root covers the file exactly
+// once -- linear in triples, where the in-query walk it replaces was quadratic.
+const splitChunk = async (ttlPath, stem) => {
+    const quads = parseTtl(fs.readFileSync(ttlPath, "utf8"))
+    const roots = recordRootsOf(quads)
+    if (!roots.length) return 0
+
+    const bySubject = new Map()
+    for (const q of quads) {
+        if (!bySubject.has(q.subject.value)) bySubject.set(q.subject.value, [])
+        bySubject.get(q.subject.value).push(q)
+    }
+    const nameOf = (root) => bySubject.get(root.value)
+        ?.find(q => q.predicate.value === XHTML_DATA_NAME || q.predicate.value === XYZ_DATA_NAME)?.object.value
+
+    const dir = path.dirname(ttlPath)
+    const used = new Set()
+    for (const [index, root] of roots.entries()) {
+        // Structure is blank nodes; a NamedNode object is vocabulary, not a
+        // child, so following one would drag every record into every file.
+        const seen = new Set()
+        const subtree = []
+        const stack = [root.value]
+        while (stack.length) {
+            const node = stack.pop()
+            if (seen.has(node)) continue
+            seen.add(node)
+            for (const q of bySubject.get(node) ?? []) {
+                subtree.push(q)
+                if (q.object.termType === "BlankNode") stack.push(q.object.value)
+            }
+        }
+        let base = fileSafe(nameOf(root) ?? `${stem}-${index}`) || `${stem}-${index}`
+        while (used.has(base)) base = `${base}-${index}`
+        used.add(base)
+        await writeTurtleFile(path.join(dir, `${base}.ttl`), subtree, prefixes("xyz", "rdf"))
+    }
+    fs.rmSync(ttlPath)
+    return roots.length
 }
 
 // Whether a lifted Turtle file holds anything beyond its prefix header.
