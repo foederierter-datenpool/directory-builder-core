@@ -21,8 +21,13 @@ export const runFetch = async ({ abs, root }, { name, fetchUrl, paramsJson }) =>
     const harvest = { time: new Date().toISOString() }
     // Static sources have no live harvest — record the files' git commit
     // time instead (the freshness the Sources page shows for them).
+    // stderr is discarded, not inherited: the failure here is expected and
+    // already handled — an instance that isn't a git repo, or static files not
+    // committed yet — but git still prints "fatal: not a git repository", once
+    // per static source, which reads like a real error in an otherwise clean run.
     if (!fetchUrl) try {
-        const iso = execSync(`git log -1 --format=%cI -- "${PATHS.staticDir(name)}"`, { cwd: root, encoding: "utf8" }).trim()
+        const iso = execSync(`git log -1 --format=%cI -- "${PATHS.staticDir(name)}"`,
+            { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim()
         if (iso) harvest.staticCommittedAt = iso
     } catch { /* not committed yet / no git → omit */ }
     return harvest
