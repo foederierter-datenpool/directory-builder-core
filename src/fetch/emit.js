@@ -38,9 +38,43 @@ const WRITERS = {
     },
 }
 
-const UNSUPPORTED = {
-    html: "HTML chunking needs the records wrapped in a container element and the source's extract.sparql scoped to that wrapper",
-    xml:  "XML chunking needs the documents wrapped under a root element and the source's extract.sparql scoped to it",
+// Document mode: opaque bytes plus a filename, for sources that fetch pages
+// rather than records. Chunking several documents into one file is what takes a
+// scrape from one JVM per page to one per chunk, but it is not free: the
+// wrapper changes the file's structure, so the source's extract must scope to
+// it. Both wrappers below were checked against the pinned SPARQL Anything.
+//
+// HTML — each document goes in a div carrying the record class, and the lift's
+// :hasLiftParam selector becomes "div.cdp-record". jsoup drops the nested
+// html/head/body tags but hoists their content into the div, so titles, links
+// and body content survive; a <link rel="canonical"> injected by a fetcher to
+// carry the entity id survives too. An extract that scoped on "head" or "body"
+// must move to the div.
+//
+// XML — each document goes in a cdp-record element under one cdp-records root.
+// The inner XML prologues have to go: a nested <?xml ?> is a hard parse error,
+// not a warning.
+const RECORD_CLASS = "cdp-record"
+
+const WRAPPERS = {
+    html: {
+        ext: "html",
+        wrap: (docs) => `<!DOCTYPE html>\n<html><body>\n`
+            + docs.map((d) => `<div class="${RECORD_CLASS}" data-name="${escapeAttr(d.name)}">\n${d.content}\n</div>`).join("\n")
+            + `\n</body></html>\n`,
+    },
+    xml: {
+        ext: "xml",
+        wrap: (docs) => `<?xml version="1.0" encoding="UTF-8"?>\n<cdp-records>\n`
+            + docs.map((d) => `<${RECORD_CLASS} data-name="${escapeAttr(d.name)}">${stripProlog(d.content)}</${RECORD_CLASS}>`).join("\n")
+            + `\n</cdp-records>\n`,
+    },
+}
+
+const escapeAttr = (s) => String(s ?? "").replaceAll("&", "&amp;").replaceAll('"', "&quot;").replaceAll("<", "&lt;")
+const stripProlog = (xml) => String(xml).replace(/^\uFEFF?\s*<\?xml[^?]*\?>\s*/i, "")
+
+const UNCHUNKABLE = {
     xlsx: "XLSX is a zip container and cannot be chunked by a byte-level tool",
 }
 
@@ -67,16 +101,32 @@ const formatKey = (format) => localName(String(format)).toLowerCase()
 export const emit = async (source, {
     outDir,
     format = "json",
+    mode = "records",
     project,
     chunk = Infinity,
     expect: expectations = {},
     stem = "records",
 } = {}) => {
     if (!outDir) throw new TypeError("emit needs an outDir")
+    if (!["records", "documents"].includes(mode)) throw new TypeError(`emit mode must be "records" or "documents"`)
     const key = formatKey(format)
-    if (UNSUPPORTED[key]) throw new Error(`emit cannot chunk ${key}: ${UNSUPPORTED[key]}`)
-    const writer = WRITERS[key]
-    if (!writer) throw new Error(`emit has no writer for format "${key}" — use ${Object.keys(WRITERS).join(" or ")}`)
+    if (UNCHUNKABLE[key] && chunk !== Infinity) throw new Error(`emit cannot chunk ${key}: ${UNCHUNKABLE[key]}`)
+
+    const documents = mode === "documents"
+    // Projection means dropping fields, which for an opaque document means
+    // parsing it — and parsing the payload is lift's job, not the fetcher's.
+    if (documents && project) throw new Error("emit: project does not apply in document mode — dropping fields from raw markup means parsing it, which is the lift step's job")
+
+    const writer = documents ? null : WRITERS[key]
+    if (!documents && !writer) throw new Error(WRAPPERS[key]
+        // Markup is not a record shape: there is no sensible way to serialise a
+        // parsed object as HTML or XML here. These arrive as fetched documents.
+        ? `emit cannot write ${key} from records — it is a document format, so pass mode: "documents" with { name, content } items`
+        : `emit has no writer for format "${key}" — use ${Object.keys(WRITERS).join(" or ")}`)
+    const wrapper = documents && chunk !== Infinity ? WRAPPERS[key] : null
+    if (documents && chunk !== Infinity && !wrapper)
+        throw new Error(`emit cannot chunk ${key} documents — only ${Object.keys(WRAPPERS).join(" and ")} have a wrapper the lift can be scoped to`)
+    const ext = documents ? (wrapper?.ext ?? key) : writer.ext
 
     fs.mkdirSync(outDir, { recursive: true })
 
@@ -85,9 +135,18 @@ export const emit = async (source, {
 
     const flush = () => {
         if (!buffer.length) return
-        const name = `${stem}-${String(++files).padStart(4, "0")}.${writer.ext}`
-        fs.writeFileSync(path.join(outDir, name), writer.write(buffer))
+        const name = `${stem}-${String(++files).padStart(4, "0")}.${ext}`
+        fs.writeFileSync(path.join(outDir, name), documents ? wrapper.wrap(buffer) : writer.write(buffer))
         buffer = []
+    }
+
+    // Unchunked documents keep one file each, named by the fetcher — the
+    // existing behaviour of every scrape, and the only option when the format
+    // has no wrapper.
+    const writeOne = (doc) => {
+        if (!doc?.name) throw new Error("emit: a document needs a name — { name, content }")
+        files++
+        fs.writeFileSync(path.join(outDir, doc.name.includes(".") ? doc.name : `${doc.name}.${ext}`), doc.content)
     }
 
     for await (const batch of normalise(source)) {
@@ -96,9 +155,10 @@ export const emit = async (source, {
         // minRecords floor is the only check available.
         if (batch.total != null) reportedTotal = (reportedTotal ?? 0) + batch.total
         if (batch.truncated) truncated = true
-        for (const record of batch.items) {
-            buffer.push(project ? project(record) : record)
+        for (const item of batch.items) {
             written++
+            if (documents && !wrapper) { writeOne(item); continue }
+            buffer.push(documents ? item : (project ? project(item) : item))
             if (buffer.length >= chunk) flush()
         }
     }

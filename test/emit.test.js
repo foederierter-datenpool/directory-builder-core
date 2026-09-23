@@ -136,11 +136,16 @@ test("no reported total leaves minRecords as the only available check", async ()
     assert.equal(total, undefined)
 })
 
-test("emit refuses the formats whose chunking is not a pure fetch concern", async () => {
+test("record mode points markup formats at document mode instead of guessing", async () => {
     const dir = tmp()
-    for (const [format, pattern] of [["html", /extract\.sparql/], ["xml", /extract\.sparql/], ["xlsx", /zip container/]])
-        await assert.rejects(() => emit([{ a: 1 }], { outDir: dir, format }), pattern,
-            `${format} must fail loudly rather than write something lift will misread`)
+    for (const format of ["html", "xml"])
+        await assert.rejects(() => emit([{ a: 1 }], { outDir: dir, format }),
+            /it is a document format, so pass mode: "documents"/,
+            `${format} has no record serialisation — it arrives as fetched documents`)
+})
+
+test("emit refuses to chunk a format no byte-level tool can split", async () => {
+    await assert.rejects(() => emit([{ a: 1 }], { outDir: tmp(), format: "xlsx", chunk: 2 }), /zip container/)
 })
 
 test("emit rejects a format it has no writer for", async () => {
