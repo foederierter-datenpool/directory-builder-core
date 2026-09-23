@@ -31,6 +31,21 @@ export const harvestObservations = async (abs) => {
     return store
 }
 
+// Emit at most every INTERVAL, plus whatever is forced. Progress exists so a
+// long step can be told from a stuck one; past that, more lines are noise.
+const PROGRESS_INTERVAL_MS = 2000
+const throttled = (report, interval = PROGRESS_INTERVAL_MS) => {
+    let last = Date.now(), reported = null
+    return (done, force = false) => {
+        const now = Date.now()
+        if (!force && now - last < interval) return
+        if (done === reported) return   // a forced final must not repeat the last line
+        last = now
+        reported = done
+        report(done)
+    }
+}
+
 // Extract step: the source's extract.sparql reshapes its lifted RDF into
 // federation subjects (xyz:/cdp: vocabulary only — schema: enters at map).
 // extract.sparql is optional when the source maps a field to schema:identifier:
@@ -52,13 +67,22 @@ export const runExtract = async ({ abs, quads, observations }, sourceIri) => {
     // once as quads and once as the dedupe store -- and the array was what
     // overflowed at 154,519 quads in #23.
     const out = tripleStore()
-    for (const f of files) {
+    // Time-throttled rather than one line per file: a source can hold 15 lifted
+    // files or 1,328, and the point is to distinguish a working run from a hung
+    // one, which a line every couple of seconds does as well as 1,328 of them.
+    const progress = throttled((done) => console.log(`extract  ${name} (${done}/${files.length} files)`))
+    for (const [index, f] of files.entries()) {
         const fileStore = storeFromTurtles([fs.readFileSync(path.join(inAbs, f), "utf8")])
         // The observation store rides alongside the document: additive and
         // opt-in, so an extract that ignores cdp:observedAt is unaffected.
         const quads = await sparqlConstruct(extractQuery, [fileStore, observations ?? newStore()])
         for (const quad of quads) out.add(quad)
+        progress(index + 1)
     }
+    // A single-file source needs no completion line: the header above already
+    // said how many files there were, and a run that prints (1/1) for every such
+    // source is noise rather than progress.
+    if (files.length > 1) progress(files.length, true)
     await writeTurtleFile(abs(outPath), out, prefixes("xyz", "cdp"))
 }
 

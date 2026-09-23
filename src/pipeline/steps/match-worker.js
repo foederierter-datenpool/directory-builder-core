@@ -14,7 +14,7 @@ import { token_set_ratio, token_sort_ratio, ratio } from "fuzzball"
 
 const ALGORITHMS = { token_set_ratio, token_sort_ratio, ratio }
 
-const { hardVals, weightedVals, sourceOf, dedupsWithin, hard, weighted, minScore, algo, units } = workerData
+const { hardVals, weightedVals, sourceOf, dedupsWithin, hard, weighted, minScore, algo, units, progressMask } = workerData
 const similarity = (a, b) => ALGORITHMS[algo](a ?? "", b ?? "") / 100
 
 // Mirrors the main thread's matches(); values arrive as parallel arrays indexed
@@ -44,6 +44,13 @@ const score = (a, b) => {
     return { scores, aggregate: weightedSum }
 }
 
+// Comparisons done, reported to the parent so a long match can be told from a
+// stuck one. The test is a bitmask rather than a modulo because it runs once per
+// pair -- the one loop where per-iteration cost is the runtime -- and it fires
+// about once per million pairs, so the postMessage is not on the hot path either.
+let compared = 0
+const tick = () => { if ((++compared & progressMask) === 0) parentPort.postMessage({ progress: compared }) }
+
 // A unit is one bucket (or one unblocked record against every subject), carried
 // with the order it had on the main thread so results can be replayed in it.
 const out = []
@@ -51,6 +58,7 @@ for (const { order, members, against } of units) {
     if (against) {
         for (const b of against) {
             if (members[0] === b) continue
+            tick()
             if (sourceOf[members[0]] === sourceOf[b] && !dedupsWithin[sourceOf[members[0]]]) continue
             const m = score(members[0], b)
             if (m) out.push({ order, a: members[0], b, ...m })
@@ -60,10 +68,11 @@ for (const { order, members, against } of units) {
     for (let i = 0; i < members.length; i++) {
         for (let j = i + 1; j < members.length; j++) {
             const a = members[i], b = members[j]
+            tick()
             if (sourceOf[a] === sourceOf[b] && !dedupsWithin[sourceOf[a]]) continue
             const m = score(a, b)
             if (m) out.push({ order, a, b, ...m })
         }
     }
 }
-parentPort.postMessage(out)
+parentPort.postMessage({ found: out, compared })
