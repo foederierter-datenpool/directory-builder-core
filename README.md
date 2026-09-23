@@ -229,9 +229,60 @@ exported separately so bundlers never see the engines' Node imports:
 import { CDP, parseTtl, PATHS } from "@directory-builder/core/utils"
 ```
 
-## Limitations for large datasets
+## Large datasets
 
-- A good hard criterion splits the data into many small groups; a postal code is a typical example. Without any hard criterion every subject lands in one bucket and matching degrades to a full all-pairs O(n²·k) scan, so cost grows quadratically with the number of subjects.
+Scale costs wall-clock, memory, and completeness. What to reach for, and what
+each costs you.
+
+**Fetch**
+- `harvest({ partitions })` — split the query space when an API caps results per
+  query. Caps are often undocumented and silent, so leave headroom.
+- `emit` — sums each partition's reported total and fails the run on a
+  shortfall. This is the check; the writing is incidental.
+- `limit` — marks a deliberate development cap so that check is skipped.
+- `project` — trim records before writing. Prefer a size cap exempting mapped
+  fields; the bulk sits in different fields in different slices, so deny-lists
+  rot.
+- `:maxConcurrentSources` (default 3) — sources fetch and lift as concurrent
+  per-source chains. A source's lift starts as soon as its own fetch finishes.
+
+*Caveat:* a long harvest against a large-response endpoint can hit a Node
+`undici` assertion raised on a socket callback — not a rejected promise, so
+`retry` cannot see it and the process dies. Neither serialising nor
+`connection: close` prevents it. Run each partition in a child process and
+retry it; cache per partition so a crash costs one partition, not the run.
+
+**Lift** — one JVM per raw file.
+- `emit({ chunk })` — pack many documents per file to cut the JVM count.
+- Chunked lifts are split back into one TTL per record automatically, and the
+  lift selector is supplied from `emit`'s own wrapper. Keep `extract.sparql` in
+  its unchunked form — anchoring patterns to a record and walking down from it
+  is what made chunking quadratic before splitting existed.
+- `:maxConcurrentLifts` (default 4) — a global JVM budget, not per source. The
+  two limits compose, so this one bounds the machine.
+
+**Extract** — memory-bound, one store per file, one source at a time.
+
+*Caveat:* a source's extracted quads accumulate in memory until that source is
+written. Streaming them is not available: dedup and sort need the whole output.
+This is the ceiling on a very large source.
+
+Extract is deliberately not parallelised. It is CPU-bound JavaScript, so
+concurrency measured 1.14x, and worker threads measured 0.46x — slower, because
+each worker has to re-import the query engine.
+
+**Match** — all-pairs O(n²·k) without partitioning, ~10.6 µs per comparison.
+- `:hasBlockingKey` — partitions the comparison space without deciding
+  anything. Prefer it to a hard criterion: gating on a normalised name token
+  would reject "Programme X" against "EU Programme X". A record with no blocking
+  value is compared against everything rather than dropped.
+- `:hasHardCriterion` — rejects outright. A valid partition, but only when
+  differing values genuinely mean "not a match".
+- `:maxMatchWorkers` — scoring fans out to worker threads above 200k pairs.
+  Scoring parallelises where extract does not because it needs no query engine.
+
+*Caveat:* a blocking key that is safe at your `:minScore` may not be below it.
+Measure recall at the threshold you actually ship.
 
 ## Roadmap
 
