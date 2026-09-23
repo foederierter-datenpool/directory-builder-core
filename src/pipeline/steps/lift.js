@@ -1,5 +1,5 @@
 import { localName, NAMESPACES, parseTtl, PATHS, prefixes } from "../../utils.js"
-import { RECORD_CLASS } from "../../fetch/emit.js"
+import { RECORD_CLASS, RECORD_SELECTOR } from "../../fetch/emit.js"
 import { writeTurtleFile } from "../write-turtle.js"
 import { run } from "../run.js"
 import path from "path"
@@ -61,11 +61,24 @@ export const runLift = async ({ abs, budget = jvmBudget(1) }, { jar, name, forma
     // (JSON: merge records into one array; HTML: wrap N entries per file and
     // scope the extract to each wrapper).
     const liftQuery = liftQueryFor(format)
+    // A chunked HTML source would otherwise have to restate emit's wrapper class
+    // as a lift selector in federation.ttl -- the same contract in two repos,
+    // where getting them out of step yields an empty lift. When a raw file
+    // actually carries the wrapper and the source declared no selector, the
+    // matching one is supplied here.
+    //
+    // Conditional on the marker being present, which is what makes it safe:
+    // core is recognising something emit wrote, not guessing at a convention,
+    // and an unchunked source that simply forgot its selector has no wrapper,
+    // so it still fails rather than silently lifting nothing.
     const liftOne = async (location, outPath) => {
+        const effective = [...params]
+        if (formatKey(format) === "html" && !params.some(([n]) => n === "selector") && hasRecordWrapper(location))
+            effective.push(["selector", RECORD_SELECTOR])
         const args = ["-jar", jar, "-q", liftQuery,
                       "-v", `location=${location}`,
                       "-f", "TTL", "-o", outPath]
-        for (const [pName, value] of params) args.push("-v", `${pName}=${value}`)
+        for (const [pName, value] of effective) args.push("-v", `${pName}=${value}`)
         await run("java", args, { label: name })
     }
     const inAbs = abs(PATHS.raw(name))
@@ -84,6 +97,15 @@ export const runLift = async ({ abs, budget = jvmBudget(1) }, { jar, name, forma
         const stem = path.basename(f, path.extname(f))
         const outPath = path.join(outAbs, `${stem}.ttl`)
         await liftOne(path.join(inAbs, f), outPath)
+        // No output file at all is a different failure from an empty one: the
+        // engine exits 0 and writes nothing when a variable the query references
+        // was never bound, so the usual cause is a :hasLiftParam the source
+        // never declared. Without this the run aborts on a stat error naming a
+        // file nobody asked about.
+        if (!fs.existsSync(outPath))
+            throw new Error(`lift ${name}: ${f} produced no output at all. `
+                + `The ${formatKey(format)} lift query references a variable that was left unbound — `
+                + `declare the missing :hasLiftParam (lift params given: ${params.length ? params.map(([n, v]) => `${n}=${v}`).join(", ") : "none"}).`)
         if (!hasTriples(outPath)) return { ok: false, records: 0 }
         return { ok: true, records: await splitChunk(outPath, stem) }
     })))
@@ -102,6 +124,21 @@ export const runLift = async ({ abs, budget = jvmBudget(1) }, { jar, name, forma
             + `the ${localName(format).toLowerCase()} lift matched nothing in them (lift params: ${shown}). `
             + `A selector or format that does not match the raw files is the usual cause.`)
     }
+}
+
+const formatKey = (format) => localName(String(format)).toLowerCase()
+
+// Whether a raw file carries emit's record wrapper. emit writes the first
+// wrapper immediately after the document preamble, so the head of the file is
+// enough and a large chunk is never read whole.
+const WRAPPER_PROBE_BYTES = 8192
+const hasRecordWrapper = (file) => {
+    const fd = fs.openSync(file, "r")
+    try {
+        const buffer = Buffer.alloc(WRAPPER_PROBE_BYTES)
+        const read = fs.readSync(fd, buffer, 0, WRAPPER_PROBE_BYTES, 0)
+        return buffer.subarray(0, read).toString("utf8").includes(`class="${RECORD_CLASS}"`)
+    } finally { fs.closeSync(fd) }
 }
 
 // ---- Splitting a chunked lift back into one file per record ---------------
