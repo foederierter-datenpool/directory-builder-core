@@ -199,3 +199,18 @@ test("harvest terminates when there are fewer partitions than concurrency slots"
 test("harvest terminates on an empty partition list", async () => {
     assert.deepEqual(await collect(harvest({ partitions: [], fetchOne: async () => ({ items: [1] }) })), [])
 })
+
+// Same bug class as the extract stack overflow: collect() appended each
+// partition's items with push(...items), so one partition carrying enough of
+// them exceeded V8's argument limit. An unpartitioned harvest of a large corpus
+// reaches that easily.
+test("collect drains a partition too large for a push spread", async () => {
+    const BIG = 160_000
+    const items = await collect(harvest({
+        fetchOne: async (_p, page) => page === 1
+            ? { items: Array.from({ length: BIG }, (_, i) => i), total: BIG }
+            : { items: [], total: BIG },
+        retry: FAST,
+    }))
+    assert.equal(items.length, BIG)
+})
