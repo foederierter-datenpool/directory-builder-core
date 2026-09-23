@@ -84,7 +84,7 @@ test("the count check uses the totals harvest carries, with no argument from the
     }), { outDir: dir, format: "json" }),
     (e) => {
         assert.match(e.message, /truncated/)
-        assert.match(e.message, /wrote 3 records against a reported total of 10/)
+        assert.match(e.message, /received 3 records against a reported total of 10/)
         return true
     })
 })
@@ -107,7 +107,7 @@ test("expect.total overrides what the source claims", async () => {
     const dir = tmp()
     await assert.rejects(
         () => emit([{ id: 1 }], { outDir: dir, format: "json", expect: { total: 2 } }),
-        /harvested 1 records but the source reported 2/)
+        /received 1 records but the source reported 2/)
 })
 
 test("a minRecords floor catches a source whose layout changed", async () => {
@@ -155,4 +155,33 @@ test("emit rejects a format it has no writer for", async () => {
 test("emit requires an outDir and a supported source", async () => {
     await assert.rejects(() => emit([{ a: 1 }], {}), /needs an outDir/)
     await assert.rejects(() => emit("not records", { outDir: tmp() }), /array of records or the async iterable/)
+})
+
+// Regression: completeness was measured on records that survived dedup, so any
+// cross-partition duplicate looked like a lost record. It fired on exactly the
+// sources dedup exists for — the same entry under several postal codes, the same
+// detail page linked from several listings — and blamed a result cap for it.
+test("deduplicated records are not mistaken for a truncated harvest", async () => {
+    const dir = tmp()
+    const corpus = { plz1: [{ id: 1 }, { id: 2 }], plz2: [{ id: 2 }, { id: 3 }] }
+    const r = await emit(harvest({
+        partitions: ["plz1", "plz2"],
+        fetchOne: async (p, page) => ({ items: page === 1 ? corpus[p] : [], total: corpus[p].length }),
+        dedupBy: (i) => i.id,
+        concurrency: 1,
+        retry: FAST,
+    }), { outDir: dir, format: "json" })
+    assert.equal(r.fetched, 4, "the source handed over 4, matching the summed totals")
+    assert.equal(r.written, 3, "3 survive dedup")
+    assert.equal(r.deduplicated, 1)
+})
+
+test("a genuine shortfall is still caught when dedup is in play", async () => {
+    const dir = tmp()
+    await assert.rejects(() => emit(harvest({
+        // reports 5, hands over 2, none duplicated — real loss
+        fetchOne: async (_p, page) => ({ items: page === 1 ? [{ id: 1 }, { id: 2 }] : [], total: 5 }),
+        dedupBy: (i) => i.id,
+        retry: FAST,
+    }), { outDir: dir, format: "json" }), /truncated|received 2/)
 })

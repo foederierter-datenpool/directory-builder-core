@@ -130,7 +130,10 @@ export const emit = async (source, {
 
     fs.mkdirSync(outDir, { recursive: true })
 
-    let written = 0, files = 0, reportedTotal, truncated = false
+    // written counts what lands on disk; fetched counts what the source handed
+    // over before dedup. The completeness check compares fetched against the
+    // reported total, so a deduped duplicate is not mistaken for a lost record.
+    let written = 0, fetched = 0, files = 0, reportedTotal, truncated = false
     let buffer = []
 
     const flush = () => {
@@ -154,6 +157,7 @@ export const emit = async (source, {
         // one that reported nothing leaves reportedTotal undefined, and the
         // minRecords floor is the only check available.
         if (batch.total != null) reportedTotal = (reportedTotal ?? 0) + batch.total
+        fetched += batch.fetched ?? batch.items.length
         if (batch.truncated) truncated = true
         for (const item of batch.items) {
             written++
@@ -165,15 +169,17 @@ export const emit = async (source, {
     flush()
 
     const expectedTotal = expectations.total ?? reportedTotal
+    const deduped = fetched - written
+    const seenNote = deduped > 0 ? ` (${deduped} deduplicated)` : ""
     if (truncated)
-        throw new Error(`emit: the source truncated the harvest — wrote ${written} records against a reported total of ${expectedTotal ?? "unknown"}. The source stopped returning results before its total was reached (a result cap); partition the harvest more finely.`)
-    if (expectedTotal != null && written !== expectedTotal)
-        throw new Error(`emit: harvested ${written} records but the source reported ${expectedTotal}`)
+        throw new Error(`emit: the source truncated the harvest — received ${fetched} records against a reported total of ${expectedTotal ?? "unknown"}. The source stopped returning results before its total was reached (a result cap); partition the harvest more finely.`)
+    if (expectedTotal != null && fetched !== expectedTotal)
+        throw new Error(`emit: received ${fetched} records but the source reported ${expectedTotal}${seenNote}`)
     if (expectations.minRecords != null && written < expectations.minRecords)
         throw new Error(`emit: harvested ${written} records, below the expected floor of ${expectations.minRecords} — the source layout may have changed`)
 
-    console.log(`emit   ${written} records → ${files} file(s) in ${outDir}`)
-    return { written, files, total: expectedTotal }
+    console.log(`emit   ${written} records${seenNote} → ${files} file(s) in ${outDir}`)
+    return { written, fetched, deduplicated: deduped, files, total: expectedTotal }
 }
 
 // An array of records, or harvest's per-partition results, reach the same loop.
