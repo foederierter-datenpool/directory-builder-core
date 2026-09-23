@@ -45,7 +45,21 @@ const WRITERS = {
 // it. Both wrappers below were checked against the pinned SPARQL Anything.
 //
 // HTML — each document goes in a div carrying the record class, and the lift's
-// :hasLiftParam selector becomes "div.cdp-record". jsoup drops the nested
+// :hasLiftParam selector has to match it:
+//
+//     :hasLiftParam [ :name "selector" ; :value "div.cdp-record" ]
+//
+// That is the same contract written in two repos. It cannot be removed from
+// here, because emit runs inside the fetcher's own process and nothing in the
+// config records that a source chose to chunk — so the engine cannot default
+// the selector without breaking an unchunked source that merely forgot one.
+// What it gets instead: the string has a single home (RECORD_SELECTOR below,
+// which a fetcher can assert against), and a selector that does not match is
+// reported by the lift step rather than surfacing two steps later as a drift
+// error blaming the extract. XML needs none of this — its lift takes no
+// selector, so there is nothing to keep in step.
+//
+// jsoup drops the nested
 // html/head/body tags but hoists their content into the div, so titles, links
 // and body content survive; a <link rel="canonical"> injected by a fetcher to
 // carry the entity id survives too. An extract that scoped on "head" or "body"
@@ -95,7 +109,14 @@ const WRITERS = {
 // A fixture for this needs TWO records in one file. With one, every pattern
 // matches its own page however badly scoped the query is, so a cross-join
 // regression is invisible.
-const RECORD_CLASS = "cdp-record"
+export const RECORD_CLASS = "cdp-record"
+
+// The lift selector that matches what the HTML wrapper writes. Exported so a
+// fetcher and its federation.ttl cannot drift apart silently: the class lives
+// here, and this is the one string the config has to agree with.
+//
+//     :hasLiftParam [ :name "selector" ; :value "div.cdp-record" ]
+export const RECORD_SELECTOR = `div.${RECORD_CLASS}`
 
 const WRAPPERS = {
     html: {

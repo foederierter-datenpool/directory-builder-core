@@ -20,7 +20,7 @@ import pRetry, { AbortError } from "p-retry"
 
 export { AbortError }
 export { harvest, collect } from "./harvest.js"
-export { emit } from "./emit.js"
+export { emit, RECORD_CLASS, RECORD_SELECTOR } from "./emit.js"
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
