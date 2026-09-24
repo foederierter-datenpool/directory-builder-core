@@ -11,6 +11,7 @@ import React, { lazy, Suspense, useState } from "react"
 const Directory   = lazy(() => import("./Directory.jsx"))
 const DcatAp      = lazy(() => import("./DcatAp.jsx"))
 const Download    = lazy(() => import("./Download.jsx"))
+const Vocabulary  = lazy(() => import("./Vocabulary.jsx"))
 const Pipeline    = lazy(() => import("./Pipeline.jsx"))
 const EntitiesGraph = lazy(() => import("./EntitiesGraph.jsx"))
 const LocationMap = lazy(() => import("./LocationMap.jsx"))
@@ -52,6 +53,7 @@ function Nav() {
                 <NavLink to="/directory">Directory</NavLink>
                 <NavLink to="/query">Query</NavLink>
                 <NavLink to="/download">Download</NavLink>
+                <NavLink to="/vocabulary">Vocabulary</NavLink>
                 {catalogTtl && <NavLink to="/dcat-ap">DCAT-AP</NavLink>}
                 {hasLocations && <NavLink to="/map">Map</NavLink>}
                 <NavLink to="/apis">APIs</NavLink>
@@ -85,6 +87,7 @@ export default function App() {
                             <Route path="/directory" element={<Directory />} />
                             <Route path="/query" element={<Query />} />
                             <Route path="/download" element={<Download />} />
+                            <Route path="/vocabulary" element={<Vocabulary />} />
                             {catalogTtl && <Route path="/dcat-ap" element={<DcatAp />} />}
                             {hasLocations && <Route path="/map" element={<LocationMap />} />}
                             <Route path="/apis" element={<Apis />} />

@@ -134,6 +134,8 @@ export const PATHS = {
     resolved:    "data/pipeline/resolved.ttl",
     final:       "data/directory.ttl",
     catalog:     "data/catalog.ttl",
+    targetVocabulary: "data/target-vocabulary.ttl",
+    validationReport: "data/pipeline/validation-report.ttl",
 }
 
 // Format family of a file-type IRI (EU file-type authority): the code before

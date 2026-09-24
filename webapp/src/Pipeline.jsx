@@ -15,8 +15,8 @@ import DataFileTree from "./DataFileTree.jsx"
 import HelpTip from "./HelpTip.jsx"
 import React from "react"
 
-const COLUMNS = ["Source", "Fetch", "Lift", "Extract", "Map", "Input", "Match", "Merge", "Resolve", "Enrich", "End"]
-const CENTER_COLUMNS = ["Extract", "Map", "Input", "Match", "Merge", "Resolve", "Enrich", "End"]
+const COLUMNS = ["Source", "Fetch", "Lift", "Extract", "Map", "Input", "Match", "Merge", "Resolve", "Enrich", "Validate", "Publish", "End"]
+const CENTER_COLUMNS = ["Extract", "Map", "Input", "Match", "Merge", "Resolve", "Enrich", "Validate", "Publish", "End"]
 const COLORS = {
     Fetch:   "#d4e7ff",
     Lift:    "#e6f3d8",
@@ -26,6 +26,8 @@ const COLORS = {
     Merge:   "#cfe9d8",
     Resolve: "#c5e0e8",
     Enrich:  "#cfe8e6",   // the made-not-found teal: enrich adds data no source carries
+    Validate: "#e5e8cc",
+    Publish: "#e1e1e1",
 }
 
 const { nodes, edges } = loadPipeline([ingestLogTtl, federateLogTtl], federationTtl)
@@ -50,8 +52,9 @@ export default function Pipeline() {
                         describe the same entity and <strong>merge</strong> folds them into one;
                         {" "}<strong>resolve</strong> picks each field's value; an opt-in
                         {" "}<strong>enrich</strong> step derives data after resolution,
-                        such as geocoded coordinates or values inherited from a linked entity. The last
-                        step writes the final directory.
+                        such as geocoded coordinates or values inherited from a linked entity.
+                        <strong> Validate</strong> checks the final directory against the generated
+                        SHACL shapes before optional catalog publication.
                     </div>
                     <div>
                         It's a record of the last run: evidence of the pipeline, not a live process.

@@ -108,7 +108,7 @@ Via command (root = where you invoke):
 ```sh
 npx directory-builder            # full pipeline: ingest + federate
 npx directory-builder ingest     # fetch + lift only
-npx directory-builder federate   # extract → map → match → merge → resolve (→ enrich) only
+npx directory-builder federate   # extract → map → match → merge → resolve (→ enrich) → validate (→ publish)
 ```
 
 Or programmatically:
@@ -142,6 +142,30 @@ aren't available yet.
 
 Engines journal their executed steps as p-plan RDF (`data/ingest/ingest-log.ttl`,
 `data/pipeline/federate-log.ttl`) — evidence of what ran, not a plan.
+
+After resolve and optional enrichment, the pipeline generates
+`data/target-vocabulary.ttl` from `config/federation.ttl`. This application profile
+combines RDFS term descriptions and SHACL shapes in one deterministic file.
+Optional `sh:*` annotations on target schemas and fields are
+preserved, including nested rules such as `sh:or`. Missing annotations add no
+constraints: datatype, required fields and cardinality are not inferred.
+
+The validate step uses this file directly to check `data/directory.ttl` before
+publication. It saves `data/pipeline/validation-report.ttl`; nonconforming output
+prints the full report and fails the run. The `validate` CLI command remains a
+preflight check of the instance configuration. The webapp's Vocabulary page
+shows and downloads the complete profile, with a config-derived fallback for
+snapshots that do not contain it.
+
+To build the vocabulary alone, run `npx directory-builder vocabulary`
+from an instance directory. This reads only `config/federation.ttl`; it needs no
+source files or existing pipeline output. In this core repository,
+`npm run vocabulary:build` builds it for the bundled example.
+
+RDFS descriptions authored on class or property IRIs in `federation.ttl` describe
+the terms themselves. Labels and comments on target schemas and fields describe
+their local use and stay on the generated shapes. Generation does not fetch
+upstream vocabularies or infer global RDFS domains and ranges from local rules.
 
 The federation pipeline also writes `data/pipeline/preparation/<source>.ttl`:
 per-source Turtle files containing recorded before/after cleanup values and

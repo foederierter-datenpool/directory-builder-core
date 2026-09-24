@@ -135,6 +135,16 @@
     sh:property [
         sh:path :multiValued ; sh:maxCount 1 ; sh:datatype xsd:boolean ;
         sh:message ":multiValued must be a single boolean"
+    ] ;
+    # How the field's value-type constraints relate to :targetPredicate:
+    # :adopted follows an upstream type/option (including a stated XSD representation);
+    # :overridden deliberately differs from an upstream type;
+    # :local makes or defers a choice where upstream supplies no specific type.
+    # Optional so existing instances need not annotate every field.
+    sh:property [
+        sh:path :typeDerivation ; sh:maxCount 1 ;
+        sh:in ( :adopted :overridden :local ) ;
+        sh:message ":typeDerivation must be one of :adopted, :overridden or :local"
     ] .
 
 # ---- Mappings -----------------------------------------------------------

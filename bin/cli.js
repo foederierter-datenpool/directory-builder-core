@@ -8,6 +8,7 @@
 //   directory-builder ingest                   fetch + lift only
 //   directory-builder federate                 extract → map → match → merge → resolve only
 //   directory-builder validate                 check the instance's config ↔ sources/ integrity
+//   directory-builder vocabulary               build the target vocabulary and shapes in one Turtle file
 //   directory-builder webapp                   dev server for the instance's webapp
 //   directory-builder webapp build [--base /x/]  build the webapp → <instance>/webapp/dist/
 //     (base defaults to the path of :federation :baseUrl; --base overrides it)
@@ -17,6 +18,7 @@ import { Pipeline } from "../src/pipeline.js"
 import { validate } from "../src/validate.js"
 import { scaffoldPublication } from "../src/publication.js"
 import { init } from "../src/scaffold.js"
+import { writeTargetVocabulary } from "../src/write-target-vocabulary.js"
 
 const [cmd = "run", ...rest] = process.argv.slice(2)
 const flag = (name) => {
@@ -46,6 +48,7 @@ const commands = {
     run:      () => pipeline.run(),
     ingest:   () => pipeline.ingest(),
     federate: () => pipeline.federate(),
+    vocabulary: () => writeTargetVocabulary(),
     validate: async () => {
         const problems = await validate()
         if (problems.length) { console.error(problems.join("\n")); process.exit(1) }

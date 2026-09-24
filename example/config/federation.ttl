@@ -4,6 +4,8 @@
 @prefix foaf:   <http://xmlns.com/foaf/0.1/> .
 @prefix skos:   <http://www.w3.org/2004/02/skos/core#> .
 @prefix ft:     <http://publications.europa.eu/resource/authority/file-type/> .
+@prefix sh:     <http://www.w3.org/ns/shacl#> .
+@prefix xsd:    <http://www.w3.org/2001/XMLSchema#> .
 
 # A minimal federation: two directories of libraries merged into one set of
 # schema:Organization records, plus a third source whose rows denormalise two
@@ -38,15 +40,53 @@
     rdfs:label "Programme"@en ;
     :hasTargetField :t-identifier, :t-name .
 
+# :typeDerivation compares our value types with the upstream :targetPredicate:
+# :adopted follows an upstream type/option; :overridden deliberately differs;
+# :local makes or defers a choice without a specific upstream type.
+# Adopted schema:Text uses xsd:string here. sh:datatype already requires literals.
 # :multiValued - one value per contributing source is expected; the Merge view doesn't flag these as conflicts
-:t-identifier    a :TargetField ; :targetPredicate schema:identifier ; :multiValued true .
-:t-name          a :TargetField ; :targetPredicate schema:name .
-:t-streetAddress a :TargetField ; :targetPredicate schema:streetAddress .
-:t-postalCode    a :TargetField ; :targetPredicate schema:postalCode .
-:t-locality      a :TargetField ; :targetPredicate schema:addressLocality .
-:t-telephone     a :TargetField ; :targetPredicate schema:telephone .
-:t-email         a :TargetField ; :targetPredicate schema:email .
-:t-homepage      a :TargetField ; :targetPredicate foaf:homepage .
+:t-identifier a :TargetField ;
+    :targetPredicate schema:identifier ;
+    sh:datatype      xsd:string ;
+    :typeDerivation  :adopted ;
+    :multiValued     true ;
+    rdfs:comment     "Uses the upstream Text option for source identifiers."@en .
+
+:t-name a :TargetField ;
+    :targetPredicate schema:name ;
+    sh:datatype      xsd:string ;
+    :typeDerivation  :adopted .
+
+:t-streetAddress a :TargetField ;
+    :targetPredicate schema:streetAddress ;
+    sh:datatype      xsd:string ;
+    :typeDerivation  :adopted .
+
+:t-postalCode a :TargetField ;
+    :targetPredicate schema:postalCode ;
+    sh:datatype      xsd:string ;
+    :typeDerivation  :adopted .
+
+:t-locality a :TargetField ;
+    :targetPredicate schema:addressLocality ;
+    sh:datatype      xsd:string ;
+    :typeDerivation  :adopted .
+
+:t-telephone a :TargetField ;
+    :targetPredicate schema:telephone ;
+    sh:datatype      xsd:string ;
+    :typeDerivation  :adopted .
+
+:t-email a :TargetField ;
+    :targetPredicate schema:email ;
+    sh:datatype      xsd:string ;
+    :typeDerivation  :adopted .
+
+:t-homepage a :TargetField ;
+    :targetPredicate foaf:homepage ;
+    sh:datatype      xsd:string ;
+    :typeDerivation  :overridden ;
+    rdfs:comment     "FOAF expects Document links; this example stores URL strings."@en .
 
 # ---- Sources ------------------------------------------------------------
 # Both are static-file sources: no :fetchUrl, so the engine hands their

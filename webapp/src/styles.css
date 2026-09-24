@@ -9,6 +9,11 @@ nav a:hover { color: #000 }
 nav a.active { font-weight: bold; color: #000 }
 main { flex: 1; min-height: 0 }
 .page { padding: 1rem }
+.vocabulary-page { box-sizing: border-box; height: 100%; overflow: auto; font-size: 13px; line-height: 1.55 }
+.vocabulary-page h1 { margin: 0 0 0.5rem; font-size: 20px }
+.vocabulary-page p { max-width: 90ch }
+.vocabulary-page pre.language-turtle { max-width: 120ch; margin: 0; font-size: 14px }
+.vocabulary-page code, .vocabulary-page code * { font-family: ui-monospace, SFMono-Regular, Consolas, monospace }
 .entity-card { margin: 0 0 1rem 0; padding: 0.6rem 0.9rem; border: 1px solid #ddd; border-radius: 4px; background: #fff }
 .entity-card-header { font-size: 14px; margin-bottom: 0.4rem; color: #444 }
 .entity-card-header code { background: #f5f5f5; padding: 2px 4px; border-radius: 2px; font-size: 12px }

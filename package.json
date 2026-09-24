@@ -9,6 +9,7 @@
   "scripts": {
     "test": "node --test 'test/*.test.js'",
     "example": "cd example && node ../bin/cli.js",
+    "vocabulary:build": "cd example && node ../bin/cli.js vocabulary",
     "webapp": "vite webapp",
     "webapp:build": "vite build webapp"
   },

@@ -4,7 +4,7 @@
 //         Pipeline.jsx
 // Does:   returns { nodes, edges } — Source lane-header nodes (transparent
 //         fill, light-gray border) above each Fetch step, step nodes labelled
-//         by their type (fetch/lift/extract/map/match/merge/resolve/enrich),
+//         by their type (fetch/lift/extract/map/match/merge/resolve/enrich/validate/publish),
 //         and an End sink so the last step's output is shown on a visible edge, plus a
 //         boundary node feeding the match and resolve steps with the
 //         conventional curation file. Edge labels come from federation.ttl —
@@ -28,8 +28,8 @@ const LANE_BORDER = "#bbb"
 const basename = (path) => path.replace(/^.*\//, "")
 
 // Output file(s) per step type, by the PATHS conventions (name = source name).
-// The last step writes directory.ttl, so resolve's output is only the intermediate
-// resolved.ttl when an enrich step follows.
+// Resolve writes the final directory, or the intermediate resolved.ttl when an
+// enrich step follows. Validation and publication produce separate artifacts.
 const STEP_OUTPUTS = {
     Extract: ({ name }) => [PATHS.extracted(name)],
     Map:     () => [PATHS.mapped],
@@ -37,6 +37,8 @@ const STEP_OUTPUTS = {
     Merge:   () => [PATHS.merged, PATHS.provenance],
     Resolve: ({ enriched }) => [enriched ? PATHS.resolved : PATHS.final],
     Enrich:  ({ geocoded }) => [PATHS.final, ...(geocoded ? [PATHS.geocache] : [])],
+    Validate: () => [PATHS.targetVocabulary, PATHS.validationReport],
+    Publish: () => [PATHS.catalog],
 }
 
 export function loadPipeline(stepTtls, federationTtl) {
@@ -110,10 +112,9 @@ export function loadPipeline(stepTtls, federationTtl) {
         laneEdges.push({ from: laneId, to: iri, value: retrievalBySubject.get(sourceIri), centered: true })
     }
 
-    // End sink so the last step's output (directory.ttl) is shown on a visible
-    // edge — enrich when it ran, resolve otherwise.
-    const lastIri = [...stepType].find(([, t]) => t === "Enrich")?.[0]
-        ?? [...stepType].find(([, t]) => t === "Resolve")?.[0]
+    // Older snapshots end at resolve/enrich; current ones validate, then may publish.
+    const lastIri = ["Publish", "Validate", "Enrich", "Resolve"]
+        .map((type) => [...stepType].find(([, t]) => t === type)?.[0]).find(Boolean)
     const endNodes = []
     const endEdges = []
     if (lastIri) {

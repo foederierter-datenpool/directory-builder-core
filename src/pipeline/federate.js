@@ -10,6 +10,7 @@ import { runMerge } from "./steps/merge.js"
 import { runResolve } from "./steps/resolve.js"
 import { loadEnrichConfig, runEnrich } from "./steps/enrich.js"
 import { runPublish } from "./steps/publish.js"
+import { runValidateDirectory } from "./steps/validate-directory.js"
 import { DataFactory } from "n3"
 import path from "path"
 import fs from "fs"
@@ -17,9 +18,9 @@ import fs from "fs"
 const df = DataFactory
 
 // ---- Federate engine -----------------------------------------------------
-// Extract per source, load, then map → match → merge → resolve, plus enrich
-// when an :EnrichRule opts in (one module per step under steps/, sharing the
-// ctx of store + config + path resolver). The
+// Extract per source, load, then map → match → merge → resolve → validate,
+// with optional enrichment before validation and publication after it.
+// Each module under steps/ shares the ctx of store + config + path resolver. The
 // step sequence is the engine's own shape; config declares only the sources,
 // processed in :hasSource declaration order. Paths follow from the source
 // name (PATHS), resolved against the instance `root`. Each step runs through
@@ -89,6 +90,7 @@ export async function federate(root = process.cwd()) {
     if (shouldEnrich)
         lastStep = await journal.step("enrich", { after: [lastStep] },
             () => runEnrich(ctx, enrichConfig, PATHS.resolved, PATHS.final, PATHS.provenance, PATHS.geocache))
+    lastStep = await journal.step("validate", { after: [lastStep] }, () => runValidateDirectory(ctx))
     // Publishing is opt-in the same way: no publication.ttl → no publish step.
     if (fs.existsSync(abs(PATHS.publication)))
         await journal.step("publish", { after: [lastStep] }, () => runPublish(ctx, abs(PATHS.catalog)))
