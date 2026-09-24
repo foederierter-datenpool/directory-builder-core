@@ -5,10 +5,10 @@
 //         interceptor routes the fake endpoint through Comunica
 
 import { storeFromTurtles } from "@foerderfunke/sem-ops-utils/core"
-import { NAMESPACES } from "@directory-builder/core/utils"
 import { queryEngine } from "@foerderfunke/sem-ops-utils/sparql"
 import { displayPrefixes, federationTtl, finalTtl, queryExamplesTtl, querySparql } from "./instanceData.js"
 import { readQueryExamples } from "./queryExamples.js"
+import { bindingsToJson } from "./queryResults.js"
 import { buildSparnaturalConfig, buildSparnaturalQuery } from "./sparnaturalConfig.js"
 import HelpTip from "./HelpTip.jsx"
 import SparnaturalBuilder from "./SparnaturalBuilder.jsx"
@@ -38,30 +38,6 @@ const VISUAL_EXAMPLES = QUERY_EXAMPLES.filter((example) => example.visual)
 const SPARNATURAL_CONFIG = buildSparnaturalConfig(federationTtl, finalTtl)
 
 Yasgui.Yasqe.defaults.value = INITIAL_QUERY
-
-const XSD_STRING = `${NAMESPACES.xsd}string`
-const termToJson = (term) => {
-    if (term.termType === "Literal") {
-        const v = { type: "literal", value: term.value }
-        if (term.language) v["xml:lang"] = term.language
-        else if (term.datatype && term.datatype.value !== XSD_STRING) v.datatype = term.datatype.value
-        return v
-    }
-    if (term.termType === "BlankNode") return { type: "bnode", value: term.value }
-    return { type: "uri", value: term.value }
-}
-
-const collectBindings = (stream) => new Promise((resolve, reject) => {
-    const vars = new Set()
-    const bindings = []
-    stream.on("data", (b) => {
-        const row = {}
-        for (const [k, v] of b) { vars.add(k.value); row[k.value] = termToJson(v) }
-        bindings.push(row)
-    })
-    stream.on("end", () => resolve({ vars: [...vars], bindings }))
-    stream.on("error", reject)
-})
 
 const collectQuadsAsTurtle = (stream) => new Promise((resolve, reject) => {
     const writer = new Writer({ format: "text/turtle" })
@@ -99,8 +75,7 @@ const handleSparql = async (parts) => {
     try {
         const result = await queryEngine.query(query, { sources: [store] })
         if (result.resultType === "bindings") {
-            const { vars, bindings } = await collectBindings(await result.execute())
-            return new Response(JSON.stringify({ head: { vars }, results: { bindings } }), { status: 200, headers: { "Content-Type": SPARQL_JSON } })
+            return new Response(JSON.stringify(await bindingsToJson(result)), { status: 200, headers: { "Content-Type": SPARQL_JSON } })
         }
         if (result.resultType === "boolean") {
             return new Response(JSON.stringify({ head: {}, boolean: await result.execute() }), { status: 200, headers: { "Content-Type": SPARQL_JSON } })
@@ -179,7 +154,10 @@ export default function Query() {
         yasguiRef.current = y
         y.getTab()?.getYasqe()?.setSize(null, EDITOR_HEIGHT)
         const shared = sharedQueryFromUrl()
-        if (shared) y.getTab()?.setQuery(shared)
+        if (shared) {
+            y.getTab()?.setQuery(shared)
+            if (new URLSearchParams(location.hash.slice(SHARE_PREFIX.length)).get("run") === "1") y.getTab()?.getYasqe()?.query()
+        }
         return () => {
             yasguiRef.current = null
             el.innerHTML = ""

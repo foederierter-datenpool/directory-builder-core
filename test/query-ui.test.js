@@ -1,6 +1,9 @@
 import { buildSparnaturalConfig, buildSparnaturalQuery } from "../webapp/src/sparnaturalConfig.js"
 import { formatSparql } from "../webapp/src/formatSparql.js"
 import { readQueryExamples } from "../webapp/src/queryExamples.js"
+import { bindingsToJson } from "../webapp/src/queryResults.js"
+import { queryEngine } from "@foerderfunke/sem-ops-utils/sparql"
+import { Store } from "n3"
 import { NAMESPACES, parseTtl } from "../src/utils.js"
 import assert from "node:assert/strict"
 import { test } from "node:test"
@@ -8,6 +11,21 @@ import { test } from "node:test"
 const SH = "http://www.w3.org/ns/shacl#"
 const DASH = "http://datashapes.org/dash#"
 const CORE = "http://data.sparna.fr/ontologies/sparnatural-config-core#"
+
+test("query results retain selected columns for empty and unbound results", async () => {
+    const store = new Store(parseTtl('<https://example.org/entry> <http://schema.org/name> "Example" .'))
+    const run = async (query) => bindingsToJson(await queryEngine.query(query, { sources: [store] }))
+    assert.deepEqual(await run("SELECT DISTINCT ?value WHERE { ?entry <http://purl.org/dc/terms/modified> ?value } LIMIT 25"), {
+        head: { vars: ["value"] }, results: { bindings: [] },
+    })
+    assert.deepEqual(await run(`SELECT ?missing ?name WHERE {
+        ?entry <http://schema.org/name> ?name .
+        OPTIONAL { ?entry <http://purl.org/dc/terms/modified> ?missing }
+    }`), {
+        head: { vars: ["missing", "name"] },
+        results: { bindings: [{ name: { type: "literal", value: "Example" } }] },
+    })
+})
 
 test("visual SPARQL uses readable prefixes, groups and indentation", () => {
     const query = `PREFIX schema: <http://schema.org/> SELECT ?service ?name WHERE {
