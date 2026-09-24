@@ -27,7 +27,7 @@ if (federationLabel) document.title = federationLabel
 const STORAGE_KEY = "showFederation"
 
 const initialShowFed = () => {
-    try { return localStorage.getItem(STORAGE_KEY) === "true" } catch { return false }
+    try { return localStorage.getItem(STORAGE_KEY) !== "false" } catch { return true }
 }
 
 function Nav() {
