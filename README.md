@@ -187,6 +187,22 @@ untouched, and the revision counter only advances when identity actually moves.
 Unlike `data/`, the registry is accumulated state, not derived output — commit
 it, and review its diff after each harvest.
 
+Geocoding has its own cache in `registry/geocache.json`, independent of identity
+registry persistence and `:harvestingModeActive`. Entries are keyed by a SHA-256
+hash of the address query's street, postcode, city and country. Keys normalise
+case, Unicode composition and whitespace; the original query, coordinates and
+any adjusted street remain stored. Entities sharing a query reuse one result,
+including a cached miss, even if their IRIs change. A changed address uses a
+different entry.
+
+Entity-keyed caches are converted automatically during enrichment using their
+saved queries. Duplicate entries collapse; conflicting results are discarded
+and looked up again when that address is used. Keep the cache between runs.
+Uncached addresses still trigger individual Nominatim requests; this cache does
+not enable batch geocoding. Follow the public service's
+[usage policy](https://operations.osmfoundation.org/policies/nominatim/), which
+discourages large bulk jobs and limits recurring jobs to four requests per minute.
+
 ## Run the webapp
 
 The webapp ships with the package; it fetches an instance's `config/` +

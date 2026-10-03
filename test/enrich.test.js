@@ -105,6 +105,107 @@ test("enrich geocodes via Nominatim with a tail-stripped retry, cached for offli
     assert.deepEqual(geoOf(root), cold)
 })
 
+const addressFixture = (name, entries = {}) => {
+    const root = makeInstance(name, { federation, sources: { alpha } })
+    const abs = (file) => path.join(root, file)
+    fs.mkdirSync(path.dirname(abs(PATHS.geocache)), { recursive: true })
+    fs.writeFileSync(abs(PATHS.geocache), JSON.stringify({ license: "test cache", entries }))
+    fs.mkdirSync(path.dirname(abs(PATHS.resolved)), { recursive: true })
+    return {
+        root,
+        cache: () => JSON.parse(fs.readFileSync(abs(PATHS.geocache), "utf8")),
+        run: async (ttl) => {
+            fs.writeFileSync(abs(PATHS.resolved), `@prefix schema: <${SCHEMA}> .\n${ttl}`)
+            fs.writeFileSync(abs(PATHS.provenance), "")
+            await runEnrich({ abs }, { geocodeClasses: [SCHEMA + "PostalAddress"], inheritance: [] },
+                PATHS.resolved, PATHS.final, PATHS.provenance, PATHS.geocache)
+        },
+    }
+}
+
+test("geocache migrates legacy queries and reuses hits and misses across entity IDs", async (t) => {
+    const hit = {
+        query: { street: "Rathenower Straße 16, Haus H", postalcode: "10559", city: "Berlin", country: "DE" },
+        adjusted: "Rathenower Straße 16", lat: "52.5298", lon: "13.3538",
+    }
+    const miss = { query: { street: "Unknown 1", postalcode: "10559", city: "Berlin" }, lat: null, lon: null }
+    const fixture = addressFixture("geocache-migration", { "urn:old": hit, "urn:duplicate": hit, "urn:missing": miss })
+    t.mock.method(globalThis, "fetch", async () => { throw new Error("cached address must not hit the network") })
+    const addresses = `
+<urn:new> a schema:PostalAddress ; schema:streetAddress "  RATHENOWER   STRAßE 16, HAUS H  " ;
+    schema:postalCode "10559" ; schema:addressLocality "berlin" ; schema:addressCountry "de" .
+<urn:another> a schema:PostalAddress ; schema:streetAddress "Rathenower Straße 16, Haus H" ;
+    schema:postalCode "10559" ; schema:addressLocality "Berlin" ; schema:addressCountry "DE" .
+<urn:new-miss> a schema:PostalAddress ; schema:streetAddress "Unknown 1" ;
+    schema:postalCode "10559" ; schema:addressLocality "Berlin" .`
+    await fixture.run(addresses)
+    assert.deepEqual(geoOf(fixture.root).subjects, ["urn:another", "urn:new"])
+    assert.deepEqual(geoOf(fixture.root).values, ["13.3538", "13.3538", "52.5298", "52.5298"])
+    const cache = fixture.cache()
+    assert.equal(cache.license, "test cache")
+    assert.equal(Object.keys(cache.entries).length, 2, "duplicates collapse, including unused legacy aliases")
+    assert.ok(Object.keys(cache.entries).every((key) => !key.startsWith("urn:")))
+    assert.deepEqual(Object.values(cache.entries).find((entry) => entry.lat != null), hit)
+    assert.deepEqual(Object.values(cache.entries).find((entry) => entry.lat == null), miss)
+    const annotations = parseTtl(fs.readFileSync(path.join(fixture.root, PATHS.provenance), "utf8"))
+        .filter((q) => q.predicate.value.endsWith("#geocodedAs"))
+    assert.deepEqual(annotations.map((q) => q.subject.value).toSorted(), ["urn:another", "urn:new"])
+    assert.ok(annotations.every((q) => q.object.value === "Rathenower Straße 16, 10559 Berlin, DE"))
+    await fixture.run(addresses.replaceAll("urn:new", "urn:reminted"))
+    assert.deepEqual(geoOf(fixture.root).subjects, ["urn:another", "urn:reminted"])
+    assert.deepEqual(fixture.cache(), cache, "warm reruns leave the address cache unchanged")
+    assert.equal(fs.existsSync(path.join(fixture.root, PATHS.registry)), false)
+})
+
+test("geocache shares cold lookups but distinguishes changed address components and skips incomplete addresses", async (t) => {
+    const fixture = addressFixture("geocache-addresses")
+    const queries = []
+    t.mock.method(globalThis, "fetch", async (url) => {
+        queries.push(Object.fromEntries(new URL(url).searchParams))
+        return { ok: true, json: async () => [{ lat: String(queries.length), lon: "13" }] }
+    })
+    const address = (iri, street = "Schönhauser Allee 182", postcode = "10119", city = "Berlin", country = "DE") =>
+        `<${iri}> a schema:PostalAddress ; schema:streetAddress "${street}" ; schema:postalCode "${postcode}" ;
+            schema:addressLocality "${city}" ; schema:addressCountry "${country}" .`
+    await fixture.run(address("urn:a") + address("urn:b", "Scho\u0308nhauser Allee 182"))
+    assert.equal(queries.length, 1, "two entities with equivalent addresses share a single cold lookup")
+    assert.deepEqual(geoOf(fixture.root).values, ["1", "1", "13", "13"])
+    for (const args of [
+        ["Schönhauser Allee 183"],
+        ["Schönhauser Allee 182", "10120"],
+        ["Schönhauser Allee 182", "10119", "Other city"],
+        ["Schönhauser Allee 182", "10119", "Berlin", ""],
+    ]) await fixture.run(address("urn:a", ...args))
+    assert.equal(queries.length, 5, "each changed query requires its own lookup, even with the same IRI")
+    assert.ok(geoOf(fixture.root).values.includes("5"), "the entity gets its current query's coordinates")
+    assert.equal(Object.keys(fixture.cache().entries).length, 5, "previous addresses remain reusable")
+    await fixture.run('<urn:a> a schema:PostalAddress ; schema:addressLocality "Berlin" .')
+    assert.equal(queries.length, 5)
+    assert.deepEqual(geoOf(fixture.root).subjects, [], "an incomplete address never receives stale coordinates")
+})
+
+test("geocache refreshes conflicting legacy results once per address", async (t) => {
+    const query = { street: "Lehrter Straße 68", postalcode: "10557", city: "Berlin", country: "DE" }
+    const fixture = addressFixture("geocache-conflict", {
+        "urn:old-a": { query, lat: "52.5262801", lon: "13.3628471" },
+        "urn:old-b": { query, lat: "52.5269425", lon: "13.3621018" },
+        "urn:old-c": { query, lat: "52.5262801", lon: "13.3628471" },
+    })
+    const warnings = []
+    t.mock.method(console, "warn", (message) => warnings.push(message))
+    const fetch = t.mock.method(globalThis, "fetch", async () => ({
+        ok: true, json: async () => [{ lat: "52.5269", lon: "13.3621" }],
+    }))
+    await fixture.run(["urn:new-a", "urn:new-b"].map((iri) => `
+        <${iri}> a schema:PostalAddress ; schema:streetAddress "Lehrter Straße 68" ;
+            schema:postalCode "10557" ; schema:addressLocality "Berlin" ; schema:addressCountry "DE" .`).join("\n"))
+    assert.equal(fetch.mock.callCount(), 1)
+    assert.equal(warnings.length, 1)
+    assert.match(warnings[0], /1 address\(es\).*conflicting/)
+    assert.deepEqual(Object.values(fixture.cache().entries), [{ query, lat: "52.5269", lon: "13.3621" }])
+    assert.deepEqual(geoOf(fixture.root).values, ["13.3621", "13.3621", "52.5269", "52.5269"])
+})
+
 const inheritanceFederation = `
 @prefix :       <https://civic-data.de/pipeline#> .
 @prefix schema: <http://schema.org/> .

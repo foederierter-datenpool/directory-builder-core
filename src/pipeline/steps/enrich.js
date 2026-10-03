@@ -2,6 +2,7 @@ import { sparqlSelect } from "@foerderfunke/sem-ops-utils"
 import { CDP, groupBySubject, NAMESPACES, parseTtl, prefixes, prefixesOf } from "../../utils.js"
 import { writeTurtleFile } from "../write-turtle.js"
 import { DataFactory } from "n3"
+import { createHash } from "node:crypto"
 import path from "path"
 import fs from "fs"
 
@@ -29,9 +30,9 @@ const ENRICH_STEP = df.namedNode(`${CDP}enrichStep`)
 // It runs after resolve on purpose: merge has collapsed duplicates and
 // :ValueCorrection has rewritten known-wrong literals, so each canonical
 // address is looked up exactly once, with corrected values. Lookups go through
-// a committed cache keyed by entity IRI (registry/geocache.json) — a warm
-// cache needs no network, and a cached miss is retried only when the address
-// changes. Results are ODbL: "© OpenStreetMap contributors".
+// a committed cache keyed by address query (registry/geocache.json) — a warm
+// cache needs no network, even when entity IRIs change. Cached misses are
+// reused too. Results are ODbL: "© OpenStreetMap contributors".
 //
 // A street that misses is retried once with any sub-address tail ("Haus H",
 // "4.OG") stripped — from the query only, never from the data. Coordinates
@@ -63,6 +64,14 @@ const QUERY_FIELDS = {
     city:       `${SCHEMA}addressLocality`,
     country:    `${SCHEMA}addressCountry`,
 }
+
+// Keep address components separate, including an absent country. Only case,
+// Unicode composition and whitespace are normalised; house numbers and accents
+// remain significant. The original query stays in the cache for inspection.
+const addressKey = (query) => createHash("sha256").update(JSON.stringify(
+    Object.keys(QUERY_FIELDS).map((field) => (query[field] ?? "")
+        .normalize("NFC").trim().replace(/\s+/gu, " ").toLowerCase()),
+)).digest("hex")
 
 // Resolve schema references in the rule to their classes once. The inheritance
 // direction is destination --:through--> source: an Angebot points to the
@@ -166,11 +175,29 @@ const geocode = async ({ abs }, quads, targetClasses, cachePath) => {
         ? JSON.parse(fs.readFileSync(abs(cachePath), "utf8"))
         : { license: "Data © OpenStreetMap contributors, ODbL 1.0 — https://osm.org/copyright", entries: {} }
 
+    // Read both entity-keyed and address-keyed caches through their saved query.
+    // Conflicting results for one address need a fresh lookup, not an arbitrary
+    // choice based on which entity happened to be listed first.
+    const entries = {}
+    const conflicts = new Set()
+    for (const entry of Object.values(cache.entries)) {
+        const key = addressKey(entry.query)
+        const previous = entries[key]
+        if (previous && (previous.lat !== entry.lat || previous.lon !== entry.lon
+            || previous.adjusted !== entry.adjusted)) {
+            conflicts.add(key)
+            delete entries[key]
+        }
+        if (!conflicts.has(key)) entries[key] = entry
+    }
+    if (conflicts.size) console.warn(`enrich: ${conflicts.size} address(es) have conflicting cached results; fresh lookups required when used`)
+
     const wanted = new Set(targetClasses)
     const entities = [...groupBySubject(quads)]
         .filter(([, row]) => row.get(RDF_TYPE)?.some((t) => wanted.has(t)))
 
     let lookups = 0, skipped = 0
+    const keys = new Map()
     const throttled = async (query) => { if (lookups++) await sleep(THROTTLE_MS); return lookup(query) }
     for (const [iri, row] of entities) {
         const query = {}
@@ -180,8 +207,9 @@ const geocode = async ({ abs }, quads, targetClasses, cachePath) => {
         }
         // Too little to pin a location — counted, not fatal (the summary line shows it).
         if (!query.street || !(query.postalcode || query.city)) { skipped++; continue }
-        const hit = cache.entries[iri]
-        if (hit && JSON.stringify(hit.query) === JSON.stringify(query)) continue
+        const key = addressKey(query)
+        keys.set(iri, key)
+        if (entries[key]) continue
         let adjusted
         let { lat, lon } = await throttled(query)
         const stripped = query.street.replace(SUB_ADDRESS, "")
@@ -190,13 +218,13 @@ const geocode = async ({ abs }, quads, targetClasses, cachePath) => {
             if (lat != null) adjusted = stripped
         }
         if (lat == null) console.warn(`enrich: no Nominatim result for <${iri}> (${Object.values(query).join(", ")})`)
-        cache.entries[iri] = { query, ...(adjusted && { adjusted }), lat, lon }
+        entries[key] = { query, ...(adjusted && { adjusted }), lat, lon }
     }
 
     const provenance = []
     const coordinates = entities.flatMap(([iri]) => {
-        const { query, adjusted, lat, lon } = cache.entries[iri] ?? {}
-        if (lat == null) return []
+        const { query, adjusted, lat, lon } = entries[keys.get(iri)] ?? {}
+        if (lat == null || lon == null) return []
         if (adjusted)
             provenance.push(df.quad(df.namedNode(iri), df.namedNode(`${CDP}geocodedAs`),
                 df.literal(queryString({ ...query, street: adjusted }))))
@@ -207,8 +235,8 @@ const geocode = async ({ abs }, quads, targetClasses, cachePath) => {
     })
 
     fs.mkdirSync(path.dirname(abs(cachePath)), { recursive: true })
-    const entries = Object.fromEntries(Object.entries(cache.entries).sort(([a], [b]) => a.localeCompare(b)))
-    fs.writeFileSync(abs(cachePath), JSON.stringify({ license: cache.license, endpoint: NOMINATIM, entries }, null, 4) + "\n")
+    const sorted = Object.fromEntries(Object.entries(entries).sort(([a], [b]) => a.localeCompare(b)))
+    fs.writeFileSync(abs(cachePath), JSON.stringify({ license: cache.license, endpoint: NOMINATIM, entries: sorted }, null, 4) + "\n")
     console.log(`enrich: geocoded ${coordinates.length / 2}/${entities.length} entities`
         + ` (${lookups} lookup(s), ${skipped} lacking address fields)`)
     return { coordinates, provenance }
