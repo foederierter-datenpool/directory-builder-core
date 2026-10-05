@@ -1,0 +1,41 @@
+# Optional shared geocoder for instances with thousands of addresses.
+name: ${COMPOSE_PROJECT_NAME:-directory-geocoder-germany}
+
+services:
+  nominatim:
+    # Multi-architecture image (ARM64 and AMD64), pinned to a known build.
+    image: mediagis/nominatim:5.3@sha256:7923a8e67197fc6d4f4ecb7c0e8bbedffeddcfdf4519596fe946e46a28f5a9f8
+    stop_grace_period: 2m
+    cpus: ${NOMINATIM_CPUS:-4}
+    mem_limit: ${NOMINATIM_MEMORY:-10g}
+    shm_size: 1g
+    ports:
+      - "127.0.0.1:${NOMINATIM_PORT:-8088}:8080"
+    environment:
+      PBF_URL: ${PBF_URL:-https://download.geofabrik.de/europe/germany-latest.osm.pbf}
+      IMPORT_STYLE: address
+      FREEZE: "true"
+      THREADS: ${NOMINATIM_THREADS:-2}
+      NOMINATIM_OSM2PGSQL_BINARY: /app/directory-osm2pgsql.sh
+      OSM2PGSQL_CACHE_MB: ${OSM2PGSQL_CACHE_MB:-2048}
+      GUNICORN_WORKERS: "1"
+      # Internal PostgreSQL only; no database port is exposed.
+      NOMINATIM_PASSWORD: ${NOMINATIM_PASSWORD:-local-geocoder}
+      # Bound PostgreSQL memory alongside the osm2pgsql node cache.
+      POSTGRES_SHARED_BUFFERS: 512MB
+      POSTGRES_MAINTENANCE_WORK_MEM: 512MB
+      POSTGRES_AUTOVACUUM_WORK_MEM: 128MB
+      POSTGRES_WORK_MEM: 16MB
+      POSTGRES_EFFECTIVE_CACHE_SIZE: 4GB
+    volumes:
+      - database:/var/lib/postgresql/16/main
+      - project:/nominatim
+      - ./osm2pgsql.sh:/app/directory-osm2pgsql.sh:ro
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://localhost:8080/status"]
+      timeout: 10s
+      start_period: 24h
+
+volumes:
+  database:
+  project:

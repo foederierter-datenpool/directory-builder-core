@@ -60,6 +60,8 @@ export const runExtract = async ({ abs, quads, observations }, sourceIri) => {
     // Run CONSTRUCT per file so each lifted TTL stays isolated in its
     // own store — the extract SPARQL can't cross-join across documents.
     const inAbs = abs(inDir)
+    if (!fs.existsSync(inAbs))
+        throw new Error(`Missing ingested data for ${name}: ${inDir}. Run ingest before federate, or run the full pipeline.`)
     const files = fs.readdirSync(inAbs).filter(f => f.endsWith(".ttl")).sort()
     console.log(`extract  ${inDir} (${files.length} files) → ${outPath}`)
     // Quads go straight into the store that writeTurtleFile would build anyway.

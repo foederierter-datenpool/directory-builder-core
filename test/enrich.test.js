@@ -5,8 +5,26 @@ import { loadEnrichConfig, runEnrich } from "../src/pipeline/steps/enrich.js"
 import { makeInstance } from "./helpers/instance.js"
 import assert from "node:assert/strict"
 import { test } from "node:test"
+import { createServer } from "node:http"
 import path from "path"
 import fs from "fs"
+
+const PUBLIC_ENDPOINT = "https://nominatim.openstreetmap.org/search"
+const geocodeEnvironment = (t, values = {}) => {
+    for (const [key, value] of Object.entries({
+        GEOCODE_ENDPOINT: PUBLIC_ENDPOINT, GEOCODE_DELAY_MS: undefined,
+        GEOCODE_CACHE_ONLY: undefined, GEOCODE_DATASET: undefined,
+        GEOCODE_RETRY_MISSES: undefined, ...values,
+    })) {
+        const previous = process.env[key]
+        if (value === undefined) delete process.env[key]
+        else process.env[key] = value
+        t.after(() => {
+            if (previous === undefined) delete process.env[key]
+            else process.env[key] = previous
+        })
+    }
+}
 
 // ---- The enrich step: geocoding via Nominatim, through the committed cache --
 // One source, two address-carrying records (one with a sub-address tail), an
@@ -62,6 +80,7 @@ const geoOf = (root) => {
 }
 
 test("enrich geocodes via Nominatim with a tail-stripped retry, cached for offline reruns", async (t) => {
+    geocodeEnvironment(t)
     const root = makeInstance("enrich", { federation, sources: { alpha } })
     assert.deepEqual(await validate(root), [])
     const pipeline = new Pipeline({ root })
@@ -69,7 +88,7 @@ test("enrich geocodes via Nominatim with a tail-stripped retry, cached for offli
 
     // federate 1 — cold cache: the full "Haus H" street misses, its retry hits
     const streets = []
-    t.mock.method(globalThis, "fetch", async (url) => {
+    const fetch = t.mock.method(globalThis, "fetch", async (url) => {
         const street = new URL(url).searchParams.get("street")
         streets.push(street)
         return { ok: true, json: async () => street.includes("Haus") ? [] : [{ lat: "52.5490", lon: "13.3877" }] }
@@ -83,11 +102,12 @@ test("enrich geocodes via Nominatim with a tail-stripped retry, cached for offli
     for (const s of cold.subjects) assert.match(s, /^urn:test:addr-/, "coordinates sit directly on the entity")
     assert.deepEqual(cold.values, ["13.3877", "13.3877", "52.5490", "52.5490"])
 
-    // the cache names its endpoint, and `adjusted` appears only on the entry
+    // each entry names its endpoint, and `adjusted` appears only on the entry
     // whose lookup needed the stripped street
     const cache = JSON.parse(fs.readFileSync(path.join(root, PATHS.geocache), "utf8"))
-    assert.equal(cache.endpoint, "https://nominatim.openstreetmap.org/search")
+    assert.equal(cache.endpoint, undefined)
     const entries = Object.values(cache.entries)
+    assert.ok(entries.every((entry) => entry.endpoint === PUBLIC_ENDPOINT))
     assert.equal(entries.find((e) => e.query.street === "Badstraße 10").adjusted, undefined)
     assert.equal(entries.find((e) => e.query.street.includes("Haus")).adjusted, "Rathenower Straße 16")
 
@@ -100,7 +120,7 @@ test("enrich geocodes via Nominatim with a tail-stripped retry, cached for offli
     assert.equal(geocodedAs[0].object.value, "Rathenower Straße 16, 10559 Berlin")
 
     // federate 2 — warm cache: no network at all
-    t.mock.method(globalThis, "fetch", async () => { throw new Error("network hit despite warm cache") })
+    fetch.mock.mockImplementation(async () => { throw new Error("network hit despite warm cache") })
     await pipeline.federate()
     assert.deepEqual(geoOf(root), cold)
 })
@@ -124,6 +144,7 @@ const addressFixture = (name, entries = {}) => {
 }
 
 test("geocache migrates legacy queries and reuses hits and misses across entity IDs", async (t) => {
+    geocodeEnvironment(t)
     const hit = {
         query: { street: "Rathenower Straße 16, Haus H", postalcode: "10559", city: "Berlin", country: "DE" },
         adjusted: "Rathenower Straße 16", lat: "52.5298", lon: "13.3538",
@@ -145,8 +166,8 @@ test("geocache migrates legacy queries and reuses hits and misses across entity 
     assert.equal(cache.license, "test cache")
     assert.equal(Object.keys(cache.entries).length, 2, "duplicates collapse, including unused legacy aliases")
     assert.ok(Object.keys(cache.entries).every((key) => !key.startsWith("urn:")))
-    assert.deepEqual(Object.values(cache.entries).find((entry) => entry.lat != null), hit)
-    assert.deepEqual(Object.values(cache.entries).find((entry) => entry.lat == null), miss)
+    assert.deepEqual(Object.values(cache.entries).find((entry) => entry.lat != null), { ...hit, endpoint: PUBLIC_ENDPOINT })
+    assert.deepEqual(Object.values(cache.entries).find((entry) => entry.lat == null), { ...miss, endpoint: PUBLIC_ENDPOINT })
     const annotations = parseTtl(fs.readFileSync(path.join(fixture.root, PATHS.provenance), "utf8"))
         .filter((q) => q.predicate.value.endsWith("#geocodedAs"))
     assert.deepEqual(annotations.map((q) => q.subject.value).toSorted(), ["urn:another", "urn:new"])
@@ -158,6 +179,7 @@ test("geocache migrates legacy queries and reuses hits and misses across entity 
 })
 
 test("geocache shares cold lookups but distinguishes changed address components and skips incomplete addresses", async (t) => {
+    geocodeEnvironment(t)
     const fixture = addressFixture("geocache-addresses")
     const queries = []
     t.mock.method(globalThis, "fetch", async (url) => {
@@ -185,6 +207,7 @@ test("geocache shares cold lookups but distinguishes changed address components 
 })
 
 test("geocache refreshes conflicting legacy results once per address", async (t) => {
+    geocodeEnvironment(t)
     const query = { street: "Lehrter Straße 68", postalcode: "10557", city: "Berlin", country: "DE" }
     const fixture = addressFixture("geocache-conflict", {
         "urn:old-a": { query, lat: "52.5262801", lon: "13.3628471" },
@@ -202,8 +225,203 @@ test("geocache refreshes conflicting legacy results once per address", async (t)
     assert.equal(fetch.mock.callCount(), 1)
     assert.equal(warnings.length, 1)
     assert.match(warnings[0], /1 address\(es\).*conflicting/)
-    assert.deepEqual(Object.values(fixture.cache().entries), [{ query, lat: "52.5269", lon: "13.3621" }])
+    assert.deepEqual(Object.values(fixture.cache().entries), [{ query, lat: "52.5269", lon: "13.3621",
+        endpoint: "https://nominatim.openstreetmap.org/search" }])
     assert.deepEqual(geoOf(fixture.root).values, ["13.3621", "13.3621", "52.5269", "52.5269"])
+})
+
+const postalAddress = (id, street = `Teststraße ${id}`) => `
+<urn:address-${id}> a schema:PostalAddress ; schema:streetAddress "${street}" ;
+    schema:postalCode "10115" ; schema:addressLocality "Berlin" ; schema:addressCountry "DE" .`
+
+test("geocoding settings have no effect without an instance geocode rule", async (t) => {
+    geocodeEnvironment(t, { GEOCODE_ENDPOINT: "not a URL", GEOCODE_DELAY_MS: "invalid", GEOCODE_CACHE_ONLY: "invalid" })
+    const fixture = addressFixture("geocache-opt-in")
+    const original = fixture.cache()
+    const abs = (file) => path.join(fixture.root, file)
+    fs.writeFileSync(abs(PATHS.resolved), `@prefix schema: <${SCHEMA}> .\n${postalAddress(1)}`)
+    t.mock.method(globalThis, "fetch", async () => { throw new Error("geocoding is not enabled") })
+    await runEnrich({ abs }, { geocodeClasses: [], inheritance: [] },
+        PATHS.resolved, PATHS.final, PATHS.provenance, PATHS.geocache)
+    assert.deepEqual(geoOf(fixture.root).subjects, [])
+    assert.deepEqual(fixture.cache(), original)
+})
+
+test("cache-only mode accepts cached misses and legacy hits without changing their origin", async (t) => {
+    geocodeEnvironment(t, { GEOCODE_ENDPOINT: "http://127.0.0.1:8088/search", GEOCODE_CACHE_ONLY: "true",
+        GEOCODE_RETRY_MISSES: "true" })
+    const query = { street: "Teststraße 1", postalcode: "10115", city: "Berlin", country: "DE" }
+    const hit = { query, lat: "52.5", lon: "13.4" }
+    const miss = { query: { ...query, street: "Teststraße 2" }, lat: null, lon: null }
+    const fixture = addressFixture("geocache-offline-legacy", { old: hit, missing: miss })
+    const origin = "http://legacy-geocoder/search"
+    fs.writeFileSync(path.join(fixture.root, PATHS.geocache), JSON.stringify({ ...fixture.cache(), endpoint: origin }))
+    t.mock.method(globalThis, "fetch", async () => { throw new Error("no network") })
+    await fixture.run(postalAddress(1) + postalAddress(2) + '<urn:incomplete> a schema:PostalAddress .')
+    assert.deepEqual(geoOf(fixture.root).subjects, ["urn:address-1"])
+    assert.equal(fixture.cache().endpoint, undefined)
+    assert.ok(Object.values(fixture.cache().entries).every((entry) => entry.endpoint === origin))
+})
+
+test("default geocoding discovers local Nominatim once and needs no service for cached coordinates", async (t) => {
+    geocodeEnvironment(t, { GEOCODE_ENDPOINT: undefined, GEOCODE_DATASET: "berlin" })
+    const fixture = addressFixture("geocache-auto-local")
+    const requests = []
+    const fetch = t.mock.method(globalThis, "fetch", async (url) => {
+        requests.push(new URL(url).pathname)
+        assert.equal(new URL(url).origin, "http://127.0.0.1:8088")
+        return { ok: true, json: async () => new URL(url).pathname === "/status"
+            ? { status: 0, data_updated: "2026-10-02T19:38:48+00:00" } : [{ lat: "52.5", lon: "13.4" }] }
+    })
+    const addresses = postalAddress(1) + postalAddress(2) + postalAddress(3, "Teststraße 1")
+    await fixture.run(addresses)
+    assert.deepEqual(requests, ["/status", "/search", "/search"])
+    assert.equal(geoOf(fixture.root).subjects.length, 3)
+    assert.ok(Object.values(fixture.cache().entries).every((entry) =>
+        entry.endpoint === "http://127.0.0.1:8088/search" && entry.dataset === "berlin"
+        && entry.dataUpdated === "2026-10-02T19:38:48+00:00"))
+    fetch.mock.mockImplementation(async () => { throw new Error("cached coordinates need no health probe") })
+    await fixture.run(addresses)
+    assert.equal(fetch.mock.callCount(), 3)
+})
+
+for (const failure of ["unavailable", "not-ready", "lookup-failure", "malformed-result"]) {
+    test(`automatic public fallback is throttled after local ${failure}`, async (t) => {
+        geocodeEnvironment(t, { GEOCODE_ENDPOINT: undefined, GEOCODE_DELAY_MS: "0", GEOCODE_DATASET: "berlin" })
+        const delays = []
+        t.mock.method(globalThis, "setTimeout", (callback, delay) => {
+            delays.push(delay)
+            return setImmediate(callback)
+        })
+        const fixture = addressFixture(`geocache-fallback-${failure}`)
+        let probes = 0, local = 0, publicRequests = 0
+        t.mock.method(globalThis, "fetch", async (url) => {
+            const { hostname, pathname } = new URL(url)
+            if (hostname === "nominatim.openstreetmap.org") {
+                publicRequests++
+                return { ok: true, json: async () => [{ lat: "52.5", lon: "13.4" }] }
+            }
+            assert.equal(hostname, "127.0.0.1")
+            if (pathname === "/status") {
+                probes++
+                if (failure === "unavailable") throw new Error("connection refused")
+                return { ok: true, json: async () => ({ status: failure === "not-ready" ? 700 : 0 }) }
+            }
+            local++
+            // Complete one local lookup before the service fails.
+            if (local === 1) return { ok: true, json: async () => [{ lat: "52.6", lon: "13.5" }] }
+            if (failure === "malformed-result") return { ok: true, json: async () => ({ error: "broken" }) }
+            throw new Error("connection reset")
+        })
+        const midRun = failure === "lookup-failure" || failure === "malformed-result"
+        await fixture.run(postalAddress(1) + postalAddress(2) + (midRun ? postalAddress(3) : ""))
+        assert.deepEqual(delays, [1100], "the local zero delay cannot disable public throttling")
+        assert.equal(publicRequests, 2)
+        assert.equal(probes, 1)
+        assert.equal(local, midRun ? 2 : 0)
+        const publicEntries = Object.values(fixture.cache().entries).filter((entry) => entry.endpoint === PUBLIC_ENDPOINT)
+        assert.equal(publicEntries.length, 2)
+        assert.ok(publicEntries.every((entry) => entry.dataset === undefined && entry.dataUpdated === undefined),
+            "local dataset provenance must not be attached to fallback results")
+    })
+}
+
+test("cached misses retry after endpoint or dataset changes, while successful coordinates remain reusable", async (t) => {
+    geocodeEnvironment(t, { GEOCODE_ENDPOINT: "http://localhost:8088/search", GEOCODE_DATASET: "berlin" })
+    const query = { street: "Teststraße 1", postalcode: "10115", city: "Berlin", country: "DE" }
+    const hit = { query, lat: "52.5", lon: "13.4" }
+    const miss = { query: { ...query, street: "Teststraße 2" }, lat: null, lon: null }
+    const fixture = addressFixture("geocache-miss-retry", { old: hit, missing: miss })
+    let dataUpdated = "2026-10-02T19:38:48+00:00", found = false, searches = 0
+    const fetch = t.mock.method(globalThis, "fetch", async (url) => {
+        assert.equal(new URL(url).hostname, "localhost", "a valid empty result must not trigger public fallback")
+        if (new URL(url).pathname === "/status") return { ok: true, json: async () => ({ status: 0, data_updated: dataUpdated }) }
+        searches++
+        assert.equal(new URL(url).searchParams.get("street"), "Teststraße 2", "successful cache hits remain untouched")
+        return { ok: true, json: async () => found ? [{ lat: "52.6", lon: "13.5" }] : [] }
+    })
+    const addresses = postalAddress(1) + postalAddress(2) + postalAddress(3, "Teststraße 2")
+    const cachedMiss = () => Object.values(fixture.cache().entries).find((entry) => entry.query.street === "Teststraße 2")
+    await fixture.run(addresses)
+    assert.equal(searches, 1, "legacy public miss is retried on local provider")
+    assert.equal(cachedMiss().dataset, "berlin")
+    await fixture.run(addresses)
+    assert.equal(searches, 1, "same provider and dataset reuse the miss")
+    process.env.GEOCODE_DATASET = "germany"
+    await fixture.run(addresses)
+    assert.equal(searches, 2, "a different region at the same endpoint retries the miss")
+    dataUpdated = "2026-10-03T19:38:48+00:00"
+    await fixture.run(addresses)
+    assert.equal(searches, 3, "a refreshed OSM snapshot retries the miss")
+    assert.equal(cachedMiss().dataUpdated, dataUpdated)
+    process.env.GEOCODE_ENDPOINT = "http://localhost:8089/search"
+    await fixture.run(addresses)
+    assert.equal(searches, 4, "changing the endpoint retries the miss")
+    process.env.GEOCODE_RETRY_MISSES = "true"
+    found = true
+    await fixture.run(addresses)
+    assert.equal(searches, 5, "explicit retries still deduplicate addresses")
+    assert.equal(geoOf(fixture.root).subjects.length, 3)
+    assert.deepEqual(Object.values(fixture.cache().entries).find((entry) => entry.query.street === "Teststraße 1"),
+        { ...hit, endpoint: PUBLIC_ENDPOINT })
+    const calls = fetch.mock.callCount()
+    await fixture.run(addresses)
+    assert.equal(fetch.mock.callCount(), calls, "retry-misses does not invalidate successful cached coordinates")
+})
+
+test("geocoding checkpoints a long cache fill before its last request completes", async (t) => {
+    geocodeEnvironment(t, { GEOCODE_ENDPOINT: "http://localhost:8088/search", GEOCODE_DELAY_MS: "0" })
+    const fixture = addressFixture("geocache-checkpoints")
+    let requests = 0
+    t.mock.method(globalThis, "fetch", async (url) => {
+        if (new URL(url).pathname === "/status") return { ok: true, json: async () => ({ status: 0 }) }
+        if (++requests === 101)
+            assert.equal(Object.keys(fixture.cache().entries).length, 100, "completed batch already on disk")
+        return { ok: true, json: async () => [{ lat: "52.5", lon: "13.4" }] }
+    })
+    await fixture.run(Array.from({ length: 101 }, (_, id) => postalAddress(id)).join("\n"))
+    assert.equal(requests, 101)
+    assert.equal(Object.keys(fixture.cache().entries).length, 101)
+})
+
+test("zero delay cannot remove throttling from the public Nominatim endpoint", async (t) => {
+    geocodeEnvironment(t, { GEOCODE_ENDPOINT: "https://NOMINATIM.openstreetmap.org./search", GEOCODE_DELAY_MS: "0" })
+    t.mock.timers.enable({ apis: ["setTimeout"] })
+    const fixture = addressFixture("geocache-public-delay")
+    const fetch = t.mock.method(globalThis, "fetch", async (_url, options) => {
+        assert.equal(options.redirect, "error", "local requests must not follow redirects to a public service")
+        assert.ok(options.signal instanceof AbortSignal)
+        return { ok: true, json: async () => [{ lat: "52.5", lon: "13.4" }] }
+    })
+    const pending = fixture.run(postalAddress(1) + postalAddress(2))
+    await new Promise(setImmediate)
+    assert.equal(fetch.mock.callCount(), 1)
+    t.mock.timers.tick(1099)
+    await new Promise(setImmediate)
+    assert.equal(fetch.mock.callCount(), 1)
+    t.mock.timers.tick(1)
+    await pending
+    assert.equal(fetch.mock.callCount(), 2)
+})
+
+test("invalid geocoding settings fail before any lookup or cache write", async (t) => {
+    geocodeEnvironment(t, { GEOCODE_ENDPOINT: undefined, GEOCODE_DELAY_MS: undefined, GEOCODE_CACHE_ONLY: undefined })
+    const fixture = addressFixture("geocache-invalid-settings")
+    const original = fixture.cache()
+    t.mock.method(globalThis, "fetch", async () => { throw new Error("invalid config must not fetch") })
+    for (const [key, value] of [
+        ["GEOCODE_ENDPOINT", "not a URL"], ["GEOCODE_ENDPOINT", "file:///tmp/search"],
+        ["GEOCODE_ENDPOINT", "http://user:password@localhost/search"],
+        ["GEOCODE_ENDPOINT", "http://localhost/search?country=DE"],
+        ["GEOCODE_DELAY_MS", "-1"], ["GEOCODE_DELAY_MS", "NaN"],
+        ["GEOCODE_DELAY_MS", "0.5"], ["GEOCODE_DELAY_MS", "2147483648"],
+        ["GEOCODE_CACHE_ONLY", "yes"], ["GEOCODE_RETRY_MISSES", "yes"],
+    ]) {
+        process.env[key] = value
+        await assert.rejects(fixture.run(postalAddress(1)))
+        assert.deepEqual(fixture.cache(), original)
+        delete process.env[key]
+    }
 })
 
 const inheritanceFederation = `
@@ -290,4 +508,63 @@ test("enrich inherits fallback values and records their provider provenance", as
     assert.equal(provenance.filter((quad) =>
         quad.predicate.value === "http://www.w3.org/1999/02/22-rdf-syntax-ns#reifies"
         && quad.object.termType === "Quad").length, 3)
+})
+
+// Keep real HTTP after timer mocks: undici owns background keep-alive timers.
+test("local Nominatim fills the cache, retains partial results on failure, and permits cache-only reruns", async (t) => {
+    const requests = []
+    let unavailable = true
+    const server = createServer((req, res) => {
+        const url = new URL(req.url, "http://localhost")
+        if (url.pathname === "/status") {
+            res.setHeader("Content-Type", "application/json")
+            res.end(JSON.stringify({ status: 0, data_updated: "2026-10-02T19:38:48+00:00" }))
+            return
+        }
+        requests.push(url)
+        assert.match(req.headers["user-agent"], /directory-builder/)
+        if (unavailable && url.searchParams.get("street") === "Teststraße 2") {
+            res.writeHead(503).end("unavailable")
+            return
+        }
+        res.setHeader("Content-Type", "application/json")
+        res.end(JSON.stringify([{ lat: "52.5", lon: "13.4" }]))
+    })
+    await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve))
+    t.after(() => new Promise((resolve, reject) => server.close((err) => err ? reject(err) : resolve())))
+    const endpoint = `http://127.0.0.1:${server.address().port}/search`
+    geocodeEnvironment(t, { GEOCODE_ENDPOINT: endpoint, GEOCODE_DELAY_MS: "0", GEOCODE_CACHE_ONLY: "false" })
+    const realFetch = globalThis.fetch
+    let fallbacks = 0
+    const fetch = t.mock.method(globalThis, "fetch", async (url, options) => {
+        if (new URL(url).origin === new URL(endpoint).origin) return realFetch(url, options)
+        assert.equal(new URL(url).origin, new URL(PUBLIC_ENDPOINT).origin)
+        fallbacks++
+        return { ok: false, status: 503 }
+    })
+    const fixture = addressFixture("geocache-local")
+    const addresses = postalAddress(1) + postalAddress(2) + postalAddress(3, "Teststraße 1")
+    await assert.rejects(fixture.run(addresses), /Nominatim answered 503/)
+    const partial = Object.values(fixture.cache().entries)
+    assert.equal(partial.length, 1, "the completed address survives a later failure")
+    assert.equal(partial[0].endpoint, endpoint)
+    assert.equal(partial[0].dataUpdated, "2026-10-02T19:38:48+00:00")
+    assert.equal(fallbacks, 1)
+    assert.equal(fs.existsSync(path.join(fixture.root, PATHS.final)), false, "failed enrichment does not publish partial output")
+
+    unavailable = false
+    await fixture.run(addresses)
+    assert.deepEqual(requests.map((url) => url.searchParams.get("street")), ["Teststraße 1", "Teststraße 2", "Teststraße 2"])
+    assert.ok(requests.every((url) => url.pathname === "/search" && url.searchParams.get("format") === "jsonv2"
+        && url.searchParams.get("country") === "DE" && url.searchParams.get("limit") === "1"))
+    assert.equal(geoOf(fixture.root).subjects.length, 3)
+
+    const cached = fixture.cache()
+    process.env.GEOCODE_CACHE_ONLY = "true"
+    fetch.mock.mockImplementation(async () => { throw new Error("cache-only mode must not fetch") })
+    await fixture.run(addresses)
+    assert.deepEqual(fixture.cache(), cached)
+    await assert.rejects(fixture.run(addresses + postalAddress(4)), /absent from geocache.*CACHE_ONLY/)
+    assert.deepEqual(fixture.cache(), cached, "an uncached address is not recorded as a miss")
+    assert.deepEqual(fs.readdirSync(path.join(fixture.root, "registry")), ["geocache.json"], "atomic writes leave no temporary files")
 })

@@ -1,0 +1,8 @@
+.env
+.env.*
+data/
+logs/
+*.log
+*.osm.pbf
+*.dump
+*.sql

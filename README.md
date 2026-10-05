@@ -192,8 +192,8 @@ registry persistence and `:harvestingModeActive`. Entries are keyed by a SHA-256
 hash of the address query's street, postcode, city and country. Keys normalise
 case, Unicode composition and whitespace; the original query, coordinates and
 any adjusted street remain stored. Entities sharing a query reuse one result,
-including a cached miss, even if their IRIs change. A changed address uses a
-different entry.
+even if their IRIs change. Cached misses are retried when their geocoder or
+dataset changes. A changed address uses a different entry.
 
 Entity-keyed caches are converted automatically during enrichment using their
 saved queries. Duplicate entries collapse; conflicting results are discarded
@@ -202,6 +202,10 @@ Uncached addresses still trigger individual Nominatim requests; this cache does
 not enable batch geocoding. Follow the public service's
 [usage policy](https://operations.osmfoundation.org/policies/nominatim/), which
 discourages large bulk jobs and limits recurring jobs to four requests per minute.
+
+Geocoding checks the address cache, then a local Nominatim service, with public
+fallback. See the [optional local setup and runtime settings](tools/nominatim/README.md)
+for large address collections, dataset provenance and strict cache-only runs.
 
 ## Run the webapp
 
