@@ -1,7 +1,7 @@
 # Local geocoding for large instances
 
-Optional Nominatim setup for **instances with thousands of addresses**.
-It imports a Germany OpenStreetMap extract and serves
+Nominatim setup for **instances with thousands of addresses**. By default it
+imports the Germany OpenStreetMap extract and serves
 address searches at `http://127.0.0.1:8088`. After the initial download and
 import, geocoding works offline. Several instances can share the service;
 each keeps its own `registry/geocache.json`. Harvesting mode is not required.
@@ -9,7 +9,7 @@ each keeps its own `registry/geocache.json`. Harvesting mode is not required.
 ## Storage and prerequisites
 
 - Docker with Compose v2 or newer; the pinned image supports ARM64 and AMD64.
-- Enough host memory for Docker's `NOMINATIM_MEMORY` limit (default 10 GB),
+- Enough host memory for Docker's `NOMINATIM_MEMORY` limit (default 8 GB),
   alongside other services.
 - Storage for the downloaded extract, imported database and temporary import
   files. Germany's peak disk and memory requirements have not been measured
@@ -19,6 +19,24 @@ The Compose file reduces the image's server-sized PostgreSQL memory defaults.
 The `osm2pgsql.sh` wrapper caps the node cache at `OSM2PGSQL_CACHE_MB` (default
 2048 MB), since automatic sizing can exceed the container limit. The defaults
 use two import threads, four CPUs and one API worker.
+
+For a 16 GB laptop, allocate about 10 GB to Docker Desktop and keep the
+container's 8 GB limit. Stop other heavy containers during import. The
+[Germany extract](https://download.geofabrik.de/europe/germany.html) is about
+5 GB, but downloading it is only the first step: osm2pgsql reads its nodes,
+ways and relations into PostgreSQL, then Nominatim computes addresses and
+builds search indexes. This is disk- and memory-intensive work, not simply
+unpacking the file. The API becomes available only after indexing finishes.
+
+Allow **roughly 12–24 hours for the first Germany import** on a 16 GB laptop
+with external SSD storage; it may take longer. Historical Germany imports
+reported a final database around **100 GB**, but the size of this address-style
+import has not yet been measured. Reserve **at least 200 GB free** in Docker's
+data location, including room under Docker's disk-image limit, because the
+download and temporary import files coexist with the growing database. Check
+free space periodically. These are planning estimates, not guarantees; see
+the [Nominatim import notes](https://nominatim.org/release-docs/5.3/admin/Import/)
+and [reported Germany imports](https://github.com/mediagis/nominatim-docker/discussions/265).
 
 An external hard drive is supported through Docker's storage configuration;
 this setup uses standard Docker volumes and needs no code changes.
@@ -88,6 +106,7 @@ existing ingest artifacts, and `:EnrichRule` / `:geocode` configured:
 ```sh
 GEOCODE_ENDPOINT=http://127.0.0.1:8088/search \
 GEOCODE_DATASET=germany \
+GEOCODE_REQUIRE_LOCAL=true \
 npx directory-builder federate
 ```
 

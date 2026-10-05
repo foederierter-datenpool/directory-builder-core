@@ -1,4 +1,4 @@
-# Optional shared geocoder for instances with thousands of addresses.
+# Germany address geocoder for instances with thousands of addresses.
 name: ${COMPOSE_PROJECT_NAME:-directory-geocoder-germany}
 
 services:
@@ -7,7 +7,7 @@ services:
     image: mediagis/nominatim:5.3@sha256:7923a8e67197fc6d4f4ecb7c0e8bbedffeddcfdf4519596fe946e46a28f5a9f8
     stop_grace_period: 2m
     cpus: ${NOMINATIM_CPUS:-4}
-    mem_limit: ${NOMINATIM_MEMORY:-10g}
+    mem_limit: ${NOMINATIM_MEMORY:-8g}
     shm_size: 1g
     ports:
       - "127.0.0.1:${NOMINATIM_PORT:-8088}:8080"
