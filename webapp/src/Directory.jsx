@@ -1,16 +1,18 @@
 // Consumer-facing directory: one compact card per resolved entity, with a type filter.
-// Reads:  finalEntities from mergeEntities.js (← data/directory.ttl), federation.ttl
+// Reads:  directory.ttl, a compact source index, and federation.ttl
 // Does:   renders the Directory page (filtered list of compact <EntityCard>)
 
 import EntityCard from "./EntityCard.jsx"
 import CheckboxDropdown from "./CheckboxDropdown.jsx"
 import HelpTip from "./HelpTip.jsx"
-import { finalEntities } from "./mergeEntities.js"
+import { finalEntities } from "./finalEntities.js"
 import { federationTtl } from "./instanceData.js"
 import { schemaOptions } from "./filters.js"
 import { loadSourceMeta } from "./sourceMeta.js"
 import { useSourceParam } from "./useSourceParam.js"
-import React, { useMemo, useState } from "react"
+import React, { useEffect, useMemo, useState } from "react"
+
+const PAGE_SIZE = 100
 
 const SCHEMA_OPTS = schemaOptions(federationTtl).map((s) => ({ key: s.type, label: s.label }))
 const SOURCES = [...loadSourceMeta(federationTtl).values()]
@@ -19,6 +21,7 @@ const SOURCE_OPTS = SOURCES.map((s) => ({ key: s.iri, label: s.label }))
 export default function Directory() {
     const [selected, setSelected] = useState(new Set(SCHEMA_OPTS.map((s) => s.key)))
     const [visibleSources, setVisibleSources, sourceMode, setSourceMode] = useSourceParam(SOURCES)  // mode: any = union, all = overlap
+    const [visibleCount, setVisibleCount] = useState(PAGE_SIZE)
     const list = useMemo(() => {
         const sel = visibleSources
         // any: entity any selected source fed into. all: only entities every
@@ -28,6 +31,7 @@ export default function Directory() {
             : (e) => e.sources.some((s) => sel.has(s))
         return finalEntities.filter((e) => selected.has(e.type) && bySource(e))
     }, [selected, visibleSources, sourceMode])
+    useEffect(() => setVisibleCount(PAGE_SIZE), [selected, visibleSources, sourceMode])
 
     return (
         <div className="page" style={{ overflowY: "auto", height: "100%" }}>
@@ -48,7 +52,9 @@ export default function Directory() {
                 <CheckboxDropdown options={SOURCE_OPTS} selected={visibleSources} onChange={setVisibleSources} noun="source"
                     matchMode={sourceMode} onMatchMode={setSourceMode} />
             </div>
-            {list.map((entity) => <EntityCard key={entity.iri} entity={entity} compact={true} highlight={false} />)}
+            <p style={{ fontSize: 13, color: "#666" }}>Showing {Math.min(visibleCount, list.length)} of {list.length} matching entities.</p>
+            {list.slice(0, visibleCount).map((entity) => <EntityCard key={entity.iri} entity={entity} compact={true} highlight={false} />)}
+            {visibleCount < list.length && <button onClick={() => setVisibleCount(n => n + PAGE_SIZE)}>Show next {Math.min(PAGE_SIZE, list.length - visibleCount)}</button>}
         </div>
     )
 }

@@ -1,22 +1,22 @@
-// All config + pipeline data the webapp reads, fetched at runtime relative to
-// BASE_URL — in dev the vite middleware serves config/ and data/ from the
-// repo root; on gh-pages the deploy publishes them next to the bundle.
-// federation.ttl is the only bootstrap: the extracted-file list derives from
-// its :hasSource, everything else from the PATHS conventions. A missing
-// artifact resolves to "" (pages render empty). Top-level await — importing
-// modules stay synchronous.
+// Small bootstrap shared by every route. Large pipeline artifacts are fetched
+// by the route that displays them, after its lazy module is opened.
 
-import { CDP, enabledSources, NAMESPACES, objectsOf, parseTtl, PATHS, prefixes, prefixesOf, sourceName } from "@directory-builder/core/utils"
+import { CDP, NAMESPACES, objectsOf, parseTtl, PATHS, prefixes, prefixesOf } from "@directory-builder/core/utils"
 
-const fetchText = async (path) => {
-    const res = await fetch(`${import.meta.env.BASE_URL}${path}`).catch(() => null)
-    return res?.ok ? res.text() : ""
+const pending = new Map()
+export const fetchText = (path) => {
+    if (!pending.has(path)) pending.set(path, fetch(`${import.meta.env.BASE_URL}${path}`)
+        .then(res => res.ok ? res.text() : "")
+        .catch(() => ""))
+    return pending.get(path)
 }
+export const fetchTexts = (paths) => Promise.all(paths.map(fetchText))
+export const artifactExists = (path) => fetch(`${import.meta.env.BASE_URL}${path}`, { method: "HEAD" })
+    .then(res => res.ok).catch(() => false)
 
 export const federationTtl = await fetchText(PATHS.federation)
 
 const fedQuads = parseTtl(federationTtl)
-const extractedPaths = enabledSources(fedQuads).map((iri) => PATHS.extracted(sourceName(iri)))
 // The instance's repo URL (:federation :repository …) — undefined when not
 // declared; pages hide their GitHub links then.
 export const repositoryUrl = objectsOf(fedQuads, `${CDP}repository`)[0]
@@ -28,16 +28,8 @@ export const displayPrefixes = { ...prefixes("cdp"), ...prefixesOf(federationTtl
 export const federationLabel = fedQuads.find((q) =>
     q.subject.value === `${CDP}federation` && q.predicate.value === `${NAMESPACES.rdfs}label`)?.object.value
 
-// catalog.ttl only exists when the instance opted into publishing (a
-// config/publication.ttl turns the publish step on), so "" here is what the
-// DCAT-AP page keys off: no catalog, no page and no nav entry.
-const FIXED = [PATHS.curation, PATHS.ingestLog, PATHS.federateLog, PATHS.mapped,
-               PATHS.matches, PATHS.merged, PATHS.provenance, PATHS.final, PATHS.about, PATHS.query,
-               PATHS.queryExamples, PATHS.catalog, PATHS.apis]
-const [fixedTexts, extractedTexts] = await Promise.all([
-    Promise.all(FIXED.map(fetchText)),
-    Promise.all(extractedPaths.map(fetchText)),
-])
-
-export const [curationTtl, ingestLogTtl, federateLogTtl, mappedTtl, matchesTtl, mergedTtl, provenanceTtl, finalTtl, aboutMd, querySparql, queryExamplesTtl, catalogTtl, apisMd] = fixedTexts
-export const extractedByPath = Object.fromEntries(extractedPaths.map((p, i) => [p, extractedTexts[i]]))
+// Navigation uses small metadata and never opens directory.ttl.
+export const catalogTtl = await fetchText(PATHS.catalog)
+export const mapAvailable = fedQuads.some(q =>
+    q.predicate.value === `${CDP}geocode`
+    || (q.predicate.value === `${CDP}targetPredicate` && q.object.value === `${NAMESPACES.schema}latitude`))

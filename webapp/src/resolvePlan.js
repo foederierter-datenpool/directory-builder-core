@@ -5,8 +5,10 @@
 // Reads:  config/{federation,curation}.ttl, data/pipeline/{matches,final}.ttl
 // Does:   exports resolutionOf(entityIri, field) → { strategy, finals, corrections }
 
-import { CDP, NAMESPACES, parseTtl, shrink } from "@directory-builder/core/utils"
-import { federationTtl, curationTtl, matchesTtl, finalTtl, displayPrefixes } from "./instanceData.js"
+import { CDP, NAMESPACES, parseTtl, PATHS, shrink } from "@directory-builder/core/utils"
+import { federationTtl, fetchTexts, displayPrefixes } from "./instanceData.js"
+
+const [curationTtl, matchesTtl, finalTtl] = await fetchTexts([PATHS.curation, PATHS.matches, PATHS.final])
 
 const RDF_TYPE = `${NAMESPACES.rdf}type`
 const local = (iri) => iri.split("#").pop()

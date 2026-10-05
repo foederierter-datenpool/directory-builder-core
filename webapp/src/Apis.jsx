@@ -2,8 +2,11 @@
 import React from "react"
 import { marked } from "marked"
 import HelpTip from "./HelpTip.jsx"
-import { apisMd } from "./instanceData.js"
+import { fetchText } from "./instanceData.js"
+import { PATHS } from "@directory-builder/core/utils"
 import guide from "./api-guide.md?raw"
+
+const apisMd = await fetchText(PATHS.apis)
 
 export default function Apis() {
     return (

@@ -2,7 +2,8 @@
 // (fetched at runtime like config and data); without one, a generic default
 // renders. Markdown, single newlines = line breaks.
 
-import { aboutMd } from "./instanceData.js"
+import { fetchText } from "./instanceData.js"
+import { PATHS } from "@directory-builder/core/utils"
 import { marked } from "marked"
 import React from "react"
 
@@ -15,6 +16,8 @@ Toggle "Show federation process" in the top bar to inspect the steps.
 
 *The data shown here is example data: two fictional library directories exercising the pipeline and this webapp.
 A real use case replaces it with its own sources and this text with its own about page.*`
+
+const aboutMd = await fetchText(PATHS.about)
 
 export default function About() {
     return (

@@ -7,13 +7,16 @@
 //         lane-header per Fetch, payload labels on the edges, and links to every
 //         published pipeline artifact
 
-import { federationTtl, ingestLogTtl, federateLogTtl, repositoryUrl } from "./instanceData.js"
+import { federationTtl, fetchTexts, repositoryUrl } from "./instanceData.js"
+import { PATHS } from "@directory-builder/core/utils"
 import { loadPipeline } from "./loadPipeline.js"
 import ColumnGraph from "./ColumnGraph.jsx"
 import dataFiles from "virtual:instance-data-files"
 import DataFileTree from "./DataFileTree.jsx"
 import HelpTip from "./HelpTip.jsx"
 import React from "react"
+
+const [ingestLogTtl, federateLogTtl] = await fetchTexts([PATHS.ingestLog, PATHS.federateLog])
 
 const COLUMNS = ["Source", "Fetch", "Lift", "Extract", "Map", "Input", "Match", "Merge", "Resolve", "Enrich", "Validate", "Publish", "End"]
 const CENTER_COLUMNS = ["Extract", "Map", "Input", "Match", "Merge", "Resolve", "Enrich", "Validate", "Publish", "End"]

@@ -6,7 +6,8 @@
 
 import { storeFromTurtles } from "@foerderfunke/sem-ops-utils/core"
 import { queryEngine } from "@foerderfunke/sem-ops-utils/sparql"
-import { displayPrefixes, federationTtl, finalTtl, queryExamplesTtl, querySparql } from "./instanceData.js"
+import { displayPrefixes, federationTtl, fetchTexts } from "./instanceData.js"
+import { PATHS } from "@directory-builder/core/utils"
 import { readQueryExamples } from "./queryExamples.js"
 import { bindingsToJson } from "./queryResults.js"
 import { buildSparnaturalConfig, buildSparnaturalQuery } from "./sparnaturalConfig.js"
@@ -22,6 +23,7 @@ import { Writer } from "n3"
 // install a fetch interceptor that routes those requests through Comunica.
 const ENDPOINT = "http://local/sparql"
 const EDITOR_HEIGHT = "300px"
+const [finalTtl, queryExamplesTtl, querySparql] = await fetchTexts([PATHS.final, PATHS.queryExamples, PATHS.query])
 
 const store = storeFromTurtles([finalTtl])
 

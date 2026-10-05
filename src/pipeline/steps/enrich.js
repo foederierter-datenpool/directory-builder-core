@@ -73,13 +73,17 @@ const geocodingOptions = () => {
         dataset: process.env.GEOCODE_DATASET?.trim() || undefined,
         cacheOnly: booleanSetting("GEOCODE_CACHE_ONLY"),
         retryMisses: booleanSetting("GEOCODE_RETRY_MISSES"),
+        requireLocal: booleanSetting("GEOCODE_REQUIRE_LOCAL"),
     }
 }
 
 // Resolve lazily: a run containing only cached coordinates needs no service.
 // Availability and dataset metadata are checked once per run, not per address.
-const selectGeocoder = async ({ endpoint, dataset }) => {
-    if (isPublicNominatim(endpoint)) return { endpoint }
+const selectGeocoder = async ({ endpoint, dataset, requireLocal }) => {
+    if (isPublicNominatim(endpoint)) {
+        if (requireLocal) throw new Error("enrich: GEOCODE_REQUIRE_LOCAL forbids public Nominatim")
+        return { endpoint }
+    }
     try {
         const statusUrl = new URL("status?format=json", endpoint)
         const response = await fetch(statusUrl, {
@@ -92,6 +96,7 @@ const selectGeocoder = async ({ endpoint, dataset }) => {
         console.log(`enrich: using ${endpoint}${dataset ? ` (${dataset})` : ""}`)
         return { endpoint, ...(dataset && { dataset }), ...(dataUpdated && { dataUpdated }) }
     } catch (error) {
+        if (requireLocal) throw new Error(`enrich: ${endpoint} unavailable (${error.message}); GEOCODE_REQUIRE_LOCAL forbids public fallback`)
         console.warn(`enrich: ${endpoint} unavailable (${error.message}); using public Nominatim with throttling`)
         return { endpoint: NOMINATIM }
     }
@@ -333,6 +338,7 @@ const geocode = async ({ abs }, quads, targetClasses, cachePath) => {
                 result = await lookupAddress(query, provider)
             } catch (error) {
                 if (isPublicNominatim(provider.endpoint)) throw error
+                if (options.requireLocal) throw new Error(`enrich: ${provider.endpoint} lookup failed (${error.message}); GEOCODE_REQUIRE_LOCAL forbids public fallback`)
                 console.warn(`enrich: ${provider.endpoint} lookup failed (${error.message}); using public Nominatim with throttling`)
                 provider = { endpoint: NOMINATIM }
                 if (entry && !options.retryMisses && sameGeocoder(entry, provider)) continue

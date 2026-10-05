@@ -14,7 +14,7 @@ const geocodeEnvironment = (t, values = {}) => {
     for (const [key, value] of Object.entries({
         GEOCODE_ENDPOINT: PUBLIC_ENDPOINT, GEOCODE_DELAY_MS: undefined,
         GEOCODE_CACHE_ONLY: undefined, GEOCODE_DATASET: undefined,
-        GEOCODE_RETRY_MISSES: undefined, ...values,
+        GEOCODE_RETRY_MISSES: undefined, GEOCODE_REQUIRE_LOCAL: undefined, ...values,
     })) {
         const previous = process.env[key]
         if (value === undefined) delete process.env[key]
@@ -360,6 +360,29 @@ for (const failure of ["unavailable", "not-ready", "lookup-failure", "malformed-
     })
 }
 
+test("required local geocoding fails before public fallback", async (t) => {
+    geocodeEnvironment(t, { GEOCODE_ENDPOINT: "http://localhost:8088/search", GEOCODE_REQUIRE_LOCAL: "true" })
+    const fixture = addressFixture("geocache-require-local")
+    let localSearches = 0
+    const fetch = t.mock.method(globalThis, "fetch", async (url) => {
+        assert.equal(new URL(url).hostname, "localhost")
+        if (new URL(url).pathname === "/status") return { ok: true, json: async () => ({ status: 0 }) }
+        localSearches++
+        throw new Error("connection reset")
+    })
+    await assert.rejects(fixture.run(postalAddress(1)), /GEOCODE_REQUIRE_LOCAL forbids public fallback/)
+    assert.equal(localSearches, 1)
+    assert.equal(fetch.mock.callCount(), 2)
+
+    fetch.mock.mockImplementation(async () => { throw new Error("connection refused") })
+    await assert.rejects(fixture.run(postalAddress(1)), /GEOCODE_REQUIRE_LOCAL forbids public fallback/)
+    assert.equal(fetch.mock.callCount(), 3)
+
+    process.env.GEOCODE_ENDPOINT = PUBLIC_ENDPOINT
+    await assert.rejects(fixture.run(postalAddress(1)), /GEOCODE_REQUIRE_LOCAL forbids public Nominatim/)
+    assert.equal(fetch.mock.callCount(), 3)
+})
+
 test("cached misses retry after endpoint or dataset changes, while successful coordinates remain reusable", async (t) => {
     geocodeEnvironment(t, { GEOCODE_ENDPOINT: "http://localhost:8088/search", GEOCODE_DATASET: "berlin" })
     const query = { street: "Teststraße 1", postalcode: "10115", city: "Berlin", country: "DE" }
@@ -450,6 +473,7 @@ test("invalid geocoding settings fail before any lookup or cache write", async (
         ["GEOCODE_DELAY_MS", "-1"], ["GEOCODE_DELAY_MS", "NaN"],
         ["GEOCODE_DELAY_MS", "0.5"], ["GEOCODE_DELAY_MS", "2147483648"],
         ["GEOCODE_CACHE_ONLY", "yes"], ["GEOCODE_RETRY_MISSES", "yes"],
+        ["GEOCODE_REQUIRE_LOCAL", "yes"],
     ]) {
         process.env[key] = value
         await assert.rejects(fixture.run(postalAddress(1)))

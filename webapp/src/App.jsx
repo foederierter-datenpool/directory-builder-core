@@ -1,7 +1,6 @@
 import { HashRouter, Routes, Route, NavLink } from "react-router-dom"
 import "./styles.css"
-import { catalogTtl, federationLabel, repositoryUrl } from "./instanceData.js"
-import { hasLocations } from "./locationData.js"
+import { catalogTtl, federationLabel, mapAvailable, repositoryUrl } from "./instanceData.js"
 import About from "./About.jsx"
 import React, { lazy, Suspense, useState } from "react"
 
@@ -55,7 +54,7 @@ function Nav() {
                 <NavLink to="/download">Download</NavLink>
                 <NavLink to="/vocabulary">Vocabulary</NavLink>
                 {catalogTtl && <NavLink to="/dcat-ap">DCAT-AP</NavLink>}
-                {hasLocations && <NavLink to="/map">Map</NavLink>}
+                {mapAvailable && <NavLink to="/map">Map</NavLink>}
                 <NavLink to="/apis">APIs</NavLink>
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
@@ -89,7 +88,7 @@ export default function App() {
                             <Route path="/download" element={<Download />} />
                             <Route path="/vocabulary" element={<Vocabulary />} />
                             {catalogTtl && <Route path="/dcat-ap" element={<DcatAp />} />}
-                            {hasLocations && <Route path="/map" element={<LocationMap />} />}
+                            {mapAvailable && <Route path="/map" element={<LocationMap />} />}
                             <Route path="/apis" element={<Apis />} />
                         </Routes>
                     </Suspense>

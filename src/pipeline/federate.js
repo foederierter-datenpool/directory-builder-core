@@ -78,7 +78,7 @@ export async function federate(root = process.cwd()) {
         console.log(`map: wrote ${mappedQuads.length} triples → ${PATHS.mapped}`)
     })
     const matchStep   = await journal.step("match",   { after: [mapStep] },   () => runMatch(ctx, PATHS.matches, PATHS.registry, PATHS.registryHistory))
-    const mergeStep   = await journal.step("merge",   { after: [matchStep] }, () => runMerge(ctx, PATHS.merged, PATHS.provenance))
+    const mergeStep   = await journal.step("merge",   { after: [matchStep] }, () => runMerge(ctx, PATHS.merged, PATHS.provenance, PATHS.entitySources))
     // Enrichment is opt-in: without geocoding or inheritance rules, resolve
     // writes directory.ttl directly. Otherwise its output is the intermediate that
     // enrich reads.

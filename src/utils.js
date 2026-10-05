@@ -130,6 +130,7 @@ export const PATHS = {
     mapped:      "data/pipeline/mapped.ttl",
     matches:     "data/pipeline/matches.ttl",
     merged:      "data/pipeline/merged.ttl",
+    entitySources: "data/pipeline/entity-sources.json",
     provenance:  "data/provenance.ttl",
     resolved:    "data/pipeline/resolved.ttl",
     final:       "data/directory.ttl",

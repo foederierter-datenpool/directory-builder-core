@@ -3,12 +3,14 @@
 //         data/ingest/ingest-log.ttl (via loadSources.js)
 // Does:   renders the Sources page (list of <Card>)
 
-import { federationTtl, mappedTtl, ingestLogTtl, repositoryUrl } from "./instanceData.js"
+import { federationTtl, fetchTexts, repositoryUrl } from "./instanceData.js"
+import { PATHS } from "@directory-builder/core/utils"
 import Card, { KeyValueTable } from "./Card.jsx"
 import HelpTip from "./HelpTip.jsx"
 import { loadSources } from "./loadSources.js"
 import React from "react"
 
+const [mappedTtl, ingestLogTtl] = await fetchTexts([PATHS.mapped, PATHS.ingestLog])
 const sources = loadSources(federationTtl, mappedTtl, ingestLogTtl)
 
 // Static-file sources have no live URL; link to their committed folder in the

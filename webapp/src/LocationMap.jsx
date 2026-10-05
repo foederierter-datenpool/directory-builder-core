@@ -1,11 +1,12 @@
 // Public map of resolved PostalAddress entities that carry coordinates.
 
 import { locations } from "./locationData.js"
+import { selectMapLocations } from "./loadLocations.js"
 import { highlightTurtle } from "./highlightTurtle.js"
 import Modal from "./Modal.jsx"
 import L from "leaflet"
 import "leaflet/dist/leaflet.css"
-import React, { useEffect, useRef, useState } from "react"
+import React, { useEffect, useMemo, useRef, useState } from "react"
 import "prismjs/themes/prism-okaidia.css"
 
 const markerOptions = {
@@ -15,6 +16,7 @@ const markerOptions = {
     fillColor: "#3b82f6",
     fillOpacity: 0.8,
 }
+const MAX_MARKERS = 1000
 
 function tooltipFor(entities) {
     const tooltip = document.createElement("div")
@@ -66,18 +68,22 @@ export default function LocationMap() {
     const container = useRef(null)
     const [selected, setSelected] = useState(null)
     const [selectedEntity, setSelectedEntity] = useState(null)
+    const [postalPrefix, setPostalPrefix] = useState("")
+    const needsFilter = locations.length > MAX_MARKERS
+    const { matching, shown } = useMemo(() => selectMapLocations(locations, postalPrefix, MAX_MARKERS), [postalPrefix])
 
     useEffect(() => {
-        if (!container.current || !locations.length) return
+        if (!container.current || !shown.length) return
         const map = L.map(container.current)
+        const renderer = L.canvas()
         L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
             maxZoom: 19,
             attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
         }).addTo(map)
         const bounds = []
-        for (const location of locations) {
+        for (const location of shown) {
             const point = [location.latitude, location.longitude]
-            const marker = L.circleMarker(point, markerOptions)
+            const marker = L.circleMarker(point, { ...markerOptions, renderer })
             marker.addTo(map)
             marker.bindTooltip(tooltipFor(location.entities))
             marker.on("click", () => {
@@ -88,13 +94,23 @@ export default function LocationMap() {
         }
         map.fitBounds(bounds, { padding: [30, 30], maxZoom: 15 })
         return () => map.remove()
-    }, [])
+    }, [shown])
 
     return (
         <div className="location-map-page">
-            {locations.length
-                ? <div ref={container} className="location-map" aria-label={`Map of ${locations.length} geocoded addresses`} />
-                : <p>No geocoded addresses are available.</p>}
+            {locations.length > 0 && <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginBottom: "0.75rem", fontSize: 13 }}>
+                <label>Postal code prefix:{" "}
+                    <input value={postalPrefix} maxLength={5} inputMode="numeric" placeholder="e.g. 10"
+                        onChange={e => { setPostalPrefix(e.target.value.replace(/\D/g, "")); setSelected(null); setSelectedEntity(null) }} />
+                </label>
+                <span>{shown.length} shown of {locations.length} geocoded addresses{postalPrefix ? ` (${matching.length} match)` : ""}.</span>
+            </div>}
+            {shown.length > 0
+                ? <div ref={container} className="location-map" aria-label={`Map of ${shown.length} geocoded addresses`} />
+                : <p>{locations.length === 0 ? "No geocoded addresses are available."
+                    : needsFilter && !postalPrefix ? "Enter a postal code prefix to show addresses on the map."
+                    : "No addresses match this postal code prefix."}</p>}
+            {matching.length > MAX_MARKERS && <p>Showing the first {MAX_MARKERS} matches. Enter more postal code digits to narrow the map.</p>}
             {selected && !selectedEntity && (
                 <AddressModal location={selected} onClose={() => setSelected(null)} onSelectEntity={setSelectedEntity} />
             )}

@@ -9,16 +9,14 @@ import { storeFromTurtles } from "@foerderfunke/sem-ops-utils/core"
 import { turtleToJsonLdObj } from "@foerderfunke/sem-ops-utils/jsonld"
 import { sparqlSelect } from "@foerderfunke/sem-ops-utils/sparql"
 import { CDP, groupBySubject, localName, NAMESPACES, objectsOf, parseTtl, PATHS, shrink, subjectsOfType } from "@directory-builder/core/utils"
-import { displayPrefixes, federationTtl, finalTtl, provenanceTtl } from "./instanceData.js"
+import { artifactExists, displayPrefixes, federationTtl, fetchText } from "./instanceData.js"
 import { strToU8, zipSync } from "fflate"
 import HelpTip from "./HelpTip.jsx"
 import React, { useState } from "react"
 
 const RDF_TYPE = `${NAMESPACES.rdf}type`
 const RDFS_LABEL = `${NAMESPACES.rdfs}label`
-
-const FINAL_QUADS = parseTtl(finalTtl)
-const BY_SUBJECT = groupBySubject(FINAL_QUADS)
+const provenanceAvailable = await artifactExists(PATHS.provenance)
 
 // The federation's target schemas in declaration order, each with its declared
 // fields — the schema definitions only, no instance data.
@@ -80,9 +78,9 @@ const TARGET_SCHEMAS = readTargetSchemas()
 // A schema's slice of directory.ttl: its entities (by rdf:type) and the columns
 // they actually carry — declared target fields first, in declaration order,
 // then whatever else the pipeline added (e.g. enrich's schema:latitude).
-function schemaRows(schema) {
-    const subjects = subjectsOfType(FINAL_QUADS, schema.classIri)
-    const rows = [...BY_SUBJECT].filter(([s]) => subjects.has(s))
+function schemaRows(schema, finalQuads, bySubject) {
+    const subjects = subjectsOfType(finalQuads, schema.classIri)
+    const rows = [...bySubject].filter(([s]) => subjects.has(s))
     const present = new Set(rows.flatMap(([, row]) => [...row.keys()]))
     present.delete(RDF_TYPE)
     const declared = schema.fields.map((f) => f.predicate).filter((p) => present.has(p))
@@ -162,7 +160,7 @@ const EXTERNAL_TARGETS = (await Promise.all(
             label:    mod.label ?? name,
             filename: mod.filename ?? `${name}.json`,
             mime:     mod.mime ?? "application/json",
-            build:    () => mod.build(finalTtl, TOOLKIT),
+            build:    (ttl) => mod.build(ttl, TOOLKIT),
         }
     }),
 )).filter(Boolean)
@@ -173,18 +171,21 @@ export default function Download() {
     const [schemaFormat, setSchemaFormat] = useState("csv")
 
     const onDownload = async () => {
+        const finalTtl = await fetchText(PATHS.final)
         if (format === "ttl")    return triggerDownload(finalTtl, "text/turtle", "directory.ttl")
         if (format === "jsonld") return triggerDownload(
             JSON.stringify(await turtleToJsonLdObj(finalTtl), null, 2), "application/ld+json", "final.jsonld")
+        const finalQuads = parseTtl(finalTtl)
+        const bySubject = groupBySubject(finalQuads)
         const build = format === "csv" ? buildDataCsv : buildDataJson
         const files = Object.fromEntries(
-            TARGET_SCHEMAS.map((s) => [`${s.name}.${format}`, strToU8(build(schemaRows(s)))]))
+            TARGET_SCHEMAS.map((s) => [`${s.name}.${format}`, strToU8(build(schemaRows(s, finalQuads, bySubject)))]))
         triggerDownload(zipSync(files), "application/zip", `final-${format}.zip`)
     }
 
     const onDownloadExternal = async () => {
         const target = EXTERNAL_TARGETS.find((t) => t.value === externalTarget)
-        triggerDownload(await target.build(), target.mime, target.filename)
+        triggerDownload(await target.build(await fetchText(PATHS.final)), target.mime, target.filename)
     }
 
     // One zip: overview.csv (classes + inter-schema links) + one CSV per schema.
@@ -226,13 +227,10 @@ export default function Download() {
                 </label>
                 <button onClick={onDownload}>Download</button>
             </div>
-            {provenanceTtl && (
+            {provenanceAvailable && (
                 <div style={{ marginTop: "0.75rem", fontSize: 13, color: "#888" }}>
                     Also available:{" "}
-                    <a href="" style={{ color: "inherit" }} onClick={(e) => {
-                        e.preventDefault()
-                        triggerDownload(provenanceTtl, "text/turtle", "provenance.ttl")
-                    }}>provenance.ttl</a>, tracing each triple back to its source.
+                    <a href={`${import.meta.env.BASE_URL}${PATHS.provenance}`} download="provenance.ttl" style={{ color: "inherit" }}>provenance.ttl</a>, tracing each triple back to its source.
                 </div>
             )}
 

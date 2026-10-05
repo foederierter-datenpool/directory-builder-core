@@ -4,7 +4,8 @@
 //         data/pipeline/extracted/*.ttl (via loadMap.js + sourceMeta.js)
 // Does:   renders the Map page (horizontal <ColumnGraph>)
 
-import { federationTtl as ttl, mappedTtl, extractedByPath } from "./instanceData.js"
+import { federationTtl as ttl, fetchTexts } from "./instanceData.js"
+import { PATHS, sourceName } from "@directory-builder/core/utils"
 import { loadMap, loadSources, loadEntitiesBySource, loadFieldValuesByEntity } from "./loadMap.js"
 import React, { useEffect, useMemo, useRef, useState } from "react"
 import { useSourceParam } from "./useSourceParam.js"
@@ -45,11 +46,6 @@ const SOURCES = loadSources(ttl)
 // Whether any mapping routes through a :via transform — decides if the help
 // text mentions the yellow nodes at all.
 const HAS_TRANSFORMS = loadMap(ttl, {}).nodes.some((n) => n.type === "TransformNode")
-const ENTITIES_BY_SOURCE = loadEntitiesBySource(ttl, mappedTtl)
-// Source-to-file mapping is resolved from config: instanceData enumerates the
-// extracted TTLs from :hasSource, so a new source needs no edit here.
-const FIELD_VALUES = loadFieldValuesByEntity(ttl, mappedTtl, loadExtractedBySource(ttl, extractedByPath))
-
 const SOURCE_OPTS = SOURCES.map((s) => ({ key: s.iri, label: s.label }))
 function SourcesDropdown({ visible, onChange }) {
     return <CheckboxDropdown options={SOURCE_OPTS} selected={visible} onChange={onChange} noun="source" />
@@ -157,6 +153,7 @@ export default function MapGraph() {
     const [showAllTargets, setShowAllTargets] = useState(false)
     const [showDirectFlows, setShowDirectFlows] = useState(false)
     const [direction, setDirection] = useState("left-right")
+    const [flowData, setFlowData] = useState(new Map())
     const verticalMode = direction === "top-down" || direction === "down-top"
     const layout = { direction, ...(verticalMode ? VERTICAL_SPACING : {}) }
 
@@ -175,8 +172,24 @@ export default function MapGraph() {
     }, [nodes, rawEdges, direction])
 
     const oneActive = visible.size === 1
-    const enabled = dataFlow && oneActive
-    const valueByField = enabled && selectedEntity ? FIELD_VALUES.get(selectedEntity) : null
+    const activeSource = oneActive ? [...visible][0] : null
+    const sourceData = flowData.get(activeSource)
+    const enabled = dataFlow && oneActive && !!sourceData
+    const valueByField = enabled && selectedEntity ? sourceData.values.get(selectedEntity) : null
+
+    useEffect(() => {
+        if (!dataFlow || !activeSource || sourceData) return
+        let cancelled = false
+        const extractedPath = PATHS.extracted(sourceName(activeSource))
+        fetchTexts([PATHS.mapped, extractedPath]).then(([mappedTtl, extractedTtl]) => {
+            if (cancelled) return
+            const entities = loadEntitiesBySource(ttl, mappedTtl).get(activeSource) ?? []
+            const extracted = loadExtractedBySource(ttl, { [extractedPath]: extractedTtl })
+            const values = loadFieldValuesByEntity(ttl, mappedTtl, extracted)
+            setFlowData(prev => new Map(prev).set(activeSource, { entities, values }))
+        })
+        return () => { cancelled = true }
+    }, [dataFlow, activeSource, sourceData])
     const edges = useMemo(() => {
         if (!valueByField) return rawEdges
         const typeOf = new Map(nodes.map(n => [n.id, n.type]))
@@ -200,8 +213,7 @@ export default function MapGraph() {
     // toggle). Entity / data-flow changes only update edge labels in place.
     const graphKey = useMemo(() => `${[...visible].sort().join("|")}::${showUnmapped ? "all" : "mapped"}::${showAllTargets ? "allT" : "mappedT"}::${direction}`, [visible, showUnmapped, showAllTargets, direction])
 
-    const activeSource = oneActive ? [...visible][0] : null
-    const entities = activeSource ? (ENTITIES_BY_SOURCE.get(activeSource) ?? []) : []
+    const entities = sourceData?.entities ?? []
 
     useEffect(() => {
         if (entities.length > 0) {
@@ -222,9 +234,9 @@ export default function MapGraph() {
         setSelectedEntity(entities[next].iri)
     }
 
-    const disabledHint = !dataFlow
-        ? "Enable Show data flow to use these controls"
-        : "Active only when exactly one source is selected"
+    const disabledHint = !dataFlow ? "Enable Show data flow to use these controls"
+        : !oneActive ? "Active only when exactly one source is selected"
+        : "Loading source values…"
     const iconBtnStyle = {
         display: "inline-flex",
         alignItems: "center",

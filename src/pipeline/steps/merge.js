@@ -4,6 +4,8 @@ import { HAS_MEMBER, MATCH_GRAPH } from "./match.js"
 import { MAPPED_GRAPH } from "./map.js"
 import { CDP, NAMESPACES, prefixes } from "../../utils.js"
 import { DataFactory } from "n3"
+import fs from "node:fs"
+import path from "node:path"
 
 const df = DataFactory
 
@@ -15,7 +17,7 @@ const RDF_REIFIES = df.namedNode(`${NAMESPACES.rdf}reifies`)
 // origin hangs off its reifier via prov:wasDerivedFrom.
 const PROV_DERIVED_FROM = df.namedNode(`${NAMESPACES.prov}wasDerivedFrom`)
 
-export const runMerge = async ({ store, defStore, abs }, outPath, provOutPath) => {
+export const runMerge = async ({ store, defStore, abs }, outPath, provOutPath, sourceOutPath) => {
     const [cfg] = await sparqlSelect(`
         PREFIX : <${CDP}>
         SELECT ?ns WHERE { ?match a :MatchRule ; :targetNamespace ?ns . }`, [defStore])
@@ -25,6 +27,23 @@ export const runMerge = async ({ store, defStore, abs }, outPath, provOutPath) =
     const memberQuads = store.getQuads(null, HAS_MEMBER, null, MATCH_GRAPH)
     const mintedFor = new Map()
     for (const mq of memberQuads) mintedFor.set(mq.object.value, mq.subject)
+
+    // Compact entity-level source index for consumer views. The per-triple
+    // provenance remains separate; Directory needs only these source labels.
+    if (sourceOutPath) {
+        const fromSource = df.namedNode(`${CDP}fromSource`)
+        const sourceIndex = new Map()
+        for (const { subject: minted, object: member } of memberQuads) {
+            const sources = store.getQuads(member, fromSource, null, MAPPED_GRAPH)
+            if (!sourceIndex.has(minted.value)) sourceIndex.set(minted.value, new Set())
+            for (const source of sources) sourceIndex.get(minted.value).add(source.object.value)
+        }
+        const entries = [...sourceIndex].sort(([a], [b]) => a.localeCompare(b))
+            .map(([entity, sources]) => [entity, [...sources].sort()])
+        fs.mkdirSync(path.dirname(abs(sourceOutPath)), { recursive: true })
+        fs.writeFileSync(abs(sourceOutPath), `${JSON.stringify(Object.fromEntries(entries))}\n`)
+        console.log(`merge: wrote source index for ${entries.length} entities → ${sourceOutPath}`)
+    }
 
     const fedQuads = store.getQuads(null, null, null, MAPPED_GRAPH)
     const provQuads = []

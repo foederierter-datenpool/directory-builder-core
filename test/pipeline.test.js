@@ -91,6 +91,10 @@ test("the tiny fixture validates and runs the whole pipeline on defaults", async
     assert.deepEqual(names.toSorted(), ["Entry One", "Entry Three", "Entry Two"])
     // and the consumer-facing artifact as a whole
     assert.equal(finalTtl, expectedFinal)
+    const sourceIndex = JSON.parse(fs.readFileSync(path.join(root, PATHS.entitySources), "utf8"))
+    assert.deepEqual(sourceIndex["urn:test:thing-e427416d02ac"], [
+        `${CDP}alphaSource`, `${CDP}betaSource`,
+    ])
 })
 
 // ---- Test 2: periodic harvesting & the identity registry -------------------

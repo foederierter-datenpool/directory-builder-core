@@ -6,15 +6,15 @@
 // Reads:  data/pipeline/{matches,merged,mapped}.ttl, config/{federation,curation}.ttl
 // Does:   renders the Match page (<ColumnGraph> + per-cluster details modal)
 
-import { displayPrefixes, federationTtl, curationTtl, mappedTtl, matchesTtl, mergedTtl } from "./instanceData.js"
+import { displayPrefixes, federationTtl, fetchTexts } from "./instanceData.js"
 import { loadSourceMeta, loadSourceOfRecord } from "./sourceMeta.js"
-import { CDP, groupBySubject, NAMESPACES, parseTtl, shrink } from "@directory-builder/core/utils"
-import React, { useMemo, useState } from "react"
+import { CDP, groupBySubject, NAMESPACES, parseTtl, PATHS, shrink } from "@directory-builder/core/utils"
+import React, { useEffect, useMemo, useState } from "react"
 import ColumnGraph from "./ColumnGraph.jsx"
 import CheckboxDropdown from "./CheckboxDropdown.jsx"
 import HelpTip from "./HelpTip.jsx"
 import Modal from "./Modal.jsx"
-import { loadMatch, readSchemas } from "./loadMatch.js"
+import { loadMatch, matchPages, readSchemas, sliceMatch } from "./loadMatch.js"
 
 const SCHEMA_IDENTIFIER = `${NAMESPACES.schema}identifier`
 const SCHEMA_NAME = `${NAMESPACES.schema}name`
@@ -26,6 +26,12 @@ const ON = `${CDP}on`
 const FOR_TARGET = `${CDP}forTarget`
 const OWL_SAME_AS = `${NAMESPACES.owl}sameAs`
 const OWL_DIFFERENT_FROM = `${NAMESPACES.owl}differentFrom`
+const PAGE_SIZE = 80
+const FULL_VIEW_LIMIT = 500
+
+const [curationTtl, mappedTtl, matchesTtl, mergedTtl] = await fetchTexts([
+    PATHS.curation, PATHS.mapped, PATHS.matches, PATHS.merged,
+])
 
 const prefixed = (iri) => shrink(iri, displayPrefixes)
 
@@ -150,13 +156,20 @@ export default function MatchGraph() {
     // Which lanes are shown, seeded from config (:hiddenByDefault lanes start off).
     const [activeLanes, setActiveLanes] = useState(() => new Set(allLanes.filter((l) => !l.hidden).map((l) => l.key)))
     const [openCluster, setOpenCluster] = useState(null)
+    const [page, setPage] = useState(0)
+    useEffect(() => setPage(0), [showDuplications, show1to1, activeLanes])
 
-    const { nodes, edges, members, clusterOf, clusterType, columns, colors, columnTitles, columnBands, columnHeaderStyle, nodeY } = useMemo(() => {
-        const r = loadMatch(federationTtl, matchesTtl, mergedTtl, { showDuplications, show1to1, activeLanes })
+    const full = useMemo(() => loadMatch(federationTtl, matchesTtl, mergedTtl,
+        { showDuplications, show1to1, activeLanes }), [showDuplications, show1to1, activeLanes])
+    const pages = useMemo(() => {
+        const count = full.nodes.filter((node) => node.isCluster).length
+        return count > FULL_VIEW_LIMIT ? matchPages(full.nodes, full.edges, PAGE_SIZE) : null
+    }, [full])
+    const { nodes, edges, members, clusterOf, clusterType, columns, colors, columnTitles, columnBands, columnHeaderStyle, nodeY, totalClusters } = useMemo(() => {
+        const r = pages ? sliceMatch(full, new Set(pages[page] ?? pages[0])) : full
         const clusterOf = new Map()
         for (const [c, ms] of r.members) for (const m of ms) clusterOf.set(m, c)
         const clusterType = new Map(r.nodes.filter((n) => n.isCluster).map((n) => [n.id, n.type]))
-
         for (const n of r.nodes) {
             if (n.isCluster) n.subtitle = n.id.startsWith(CDF_NS) ? `cdf:${n.id.slice(CDF_NS.length)}` : prefixed(n.id)
             else {                                     // a source (dedup) node
@@ -167,8 +180,9 @@ export default function MatchGraph() {
         // Drop columns that ended up empty (schemas with no source duplication when
         // collapsed) so they don't leave a blank tinted band.
         const columns = r.columns.filter((c) => r.nodes.some((n) => n.type === c))
-        return { ...r, clusterOf, clusterType, columns }
-    }, [showDuplications, show1to1, activeLanes])
+        return { ...r, clusterOf, clusterType, columns,
+            totalClusters: full.nodes.filter((node) => node.isCluster).length }
+    }, [full, pages, page])
 
     const handleNodeClick = (_, node) => {
         if (node.id.startsWith("__")) return            // header / band decoration
@@ -205,9 +219,14 @@ export default function MatchGraph() {
                     <input type="checkbox" checked={show1to1} disabled={!showDuplications} onChange={(e) => setShow1to1(e.target.checked)} />
                     Show 1:1 clusters
                 </label>
+                <span style={{ color: "#666" }}>{pages
+                    ? `${nodes.filter((node) => node.isCluster).length} of ${totalClusters} clusters (page ${page + 1} of ${pages.length})`
+                    : `${totalClusters} clusters`}</span>
+                {pages && page > 0 && <button onClick={() => setPage(n => n - 1)}>Previous</button>}
+                {pages && page + 1 < pages.length && <button onClick={() => setPage(n => n + 1)}>Next</button>}
             </div>
             <div style={{ flex: 1, minHeight: 0 }}>
-                <ColumnGraph key={`${showDuplications}-${show1to1}-${[...activeLanes].join()}`} nodes={nodes} edges={edges}
+                <ColumnGraph key={`${showDuplications}-${show1to1}-${[...activeLanes].join()}-${page}`} nodes={nodes} edges={edges}
                     columns={columns} colors={colors} nodeY={nodeY}
                     columnTitles={columnTitles} columnBands={columnBands} columnHeaderStyle={columnHeaderStyle}
                     nodeWidth={150} colSpacing={236} onNodeClick={handleNodeClick} />

@@ -12,6 +12,13 @@ const TO_TARGET_FIELD = `${CDP}toTargetField`
 const TO_TARGET_SCHEMA = `${CDP}toTargetSchema`
 const POSTAL_ADDRESS = `${SCHEMA}PostalAddress`
 
+export function selectMapLocations(locations, postalPrefix, maxMarkers) {
+    const matching = postalPrefix
+        ? locations.filter(location => location.postalCode?.startsWith(postalPrefix))
+        : locations.length > maxMarkers ? [] : locations
+    return { matching, shown: matching.slice(0, maxMarkers) }
+}
+
 const objectValue = (quads, subject, predicate) => quads
     .find((quad) => quad.subject.value === subject && quad.predicate.value === predicate)
     ?.object.value
@@ -88,7 +95,7 @@ export function loadLocations(finalTtl, federationTtl) {
             .map(loadEntity)
             .sort((a, b) => a.type.localeCompare(b.type) || a.label.localeCompare(b.label))
         if (!entities.length) return null
-        return { iri, latitude, longitude, lines, label: lines.join(", ") || localName(iri), entities }
+        return { iri, latitude, longitude, postalCode, lines, label: lines.join(", ") || localName(iri), entities }
     }
 
     return [...addressIris]

@@ -1,9 +1,9 @@
-// The shared location list decides whether this instance has a Map view and
-// supplies that view when opened. Module evaluation caches the result, so the
-// finished directory is parsed only once for both uses.
+// Load map locations when the Map view opens. Module evaluation caches the
+// parsed result while that view remains loaded.
 
-import { federationTtl, finalTtl } from "./instanceData.js"
+import { federationTtl, fetchText } from "./instanceData.js"
 import { loadLocations } from "./loadLocations.js"
+import { PATHS } from "@directory-builder/core/utils"
 
+const finalTtl = await fetchText(PATHS.final)
 export const locations = loadLocations(finalTtl, federationTtl)
-export const hasLocations = locations.length > 0

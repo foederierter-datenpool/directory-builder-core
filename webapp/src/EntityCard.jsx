@@ -4,15 +4,15 @@
 //         entity objects from loadMerge.js
 // Does:   renders <EntityCard>; exports EXPECTED_MULTI, isConflict (used by mergeEntities, MergeTables)
 
-import { federationTtl, ingestLogTtl as logTtl } from "./instanceData.js"
+import { federationTtl, fetchText } from "./instanceData.js"
 import Card, { KeyValueTable } from "./Card.jsx"
 import { loadHarvestBySource, loadSourceMeta } from "./sourceMeta.js"
-import { resolutionOf } from "./resolvePlan.js"
-import { CDP, parseTtl } from "@directory-builder/core/utils"
+import { CDP, parseTtl, PATHS } from "@directory-builder/core/utils"
 import React, { useState } from "react"
 
 // entity.columns are one entry per contributing record (resolved in loadMerge); look
 // up source display data in config (notation, label) and the harvest log (time).
+const logTtl = await fetchText(PATHS.ingestLog)
 const sourceMeta = loadSourceMeta(federationTtl)
 const harvestBySource = loadHarvestBySource(logTtl)
 const sourceCode = (iri) => sourceMeta.get(iri).notation
@@ -101,18 +101,18 @@ function ResolveTip({ resolution }) {
         </span>
     )
 }
-const resolveTip = (entity, f) => {
-    if (!isConflict(f) || !(entity.columns?.length)) return null
+const resolveTip = (entity, f, resolutionOf) => {
+    if (!isConflict(f) || !(entity.columns?.length) || !resolutionOf) return null
     const r = resolutionOf(entity.iri, f)
     return r.finals.length ? r : null
 }
 
-function EntityCardNarrow({ entity, highlight }) {
+function EntityCardNarrow({ entity, highlight, resolutionOf }) {
     return <KeyValueTable rows={entity.fields.map((f) => ({ key: f.predicate, label: f.predLabel,
-        value: <ValueCell values={f.values} highlight={highlight && isConflict(f)} resolution={resolveTip(entity, f)} /> }))} />
+        value: <ValueCell values={f.values} highlight={highlight && isConflict(f)} resolution={resolveTip(entity, f, resolutionOf)} /> }))} />
 }
 
-function EntityCardWide({ entity, highlight }) {
+function EntityCardWide({ entity, highlight, resolutionOf }) {
     const columns = entity.columns
     return (
         <table>
@@ -129,7 +129,7 @@ function EntityCardWide({ entity, highlight }) {
             <tbody>
                 {entity.fields.map((f) => {
                     const conflict = highlight && isConflict(f) ? conflictStyle(f.values.length) : undefined
-                    const resolution = resolveTip(entity, f)
+                    const resolution = resolveTip(entity, f, resolutionOf)
                     return (
                         <tr key={f.predicate}>
                             <td>{f.predLabel}</td>
@@ -154,14 +154,14 @@ function EntityCardWide({ entity, highlight }) {
     )
 }
 
-export default function EntityCard({ entity, compact, highlight }) {
+export default function EntityCard({ entity, compact, highlight, resolutionOf }) {
     // On Merge, entity.columns lists the contributing records; show how many distinct
     // sources this entity was merged from. (Empty on the Directory → no badge.)
     const sourceCount = new Set((entity.columns ?? []).map((c) => c.source).filter(Boolean)).size
     const meta = sourceCount > 0 ? `${sourceCount} source${sourceCount > 1 ? "s" : ""}` : null
     return (
         <Card title={entity.label} tag={entity.type} meta={meta}>
-            {compact ? <EntityCardNarrow entity={entity} highlight={highlight} /> : <EntityCardWide entity={entity} highlight={highlight} />}
+            {compact ? <EntityCardNarrow entity={entity} highlight={highlight} resolutionOf={resolutionOf} /> : <EntityCardWide entity={entity} highlight={highlight} resolutionOf={resolutionOf} />}
         </Card>
     )
 }

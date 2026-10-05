@@ -211,12 +211,22 @@ discourages large bulk jobs and limits recurring jobs to four requests per minut
 Geocoding checks the address cache, then a local Nominatim service, with public
 fallback. See the [optional local setup and runtime settings](tools/nominatim/README.md)
 for large address collections, dataset provenance and strict cache-only runs.
+Set `GEOCODE_REQUIRE_LOCAL=true` for runs that must stop if the configured
+service is unavailable; this also rejects an explicitly configured public endpoint.
 
 ## Run the webapp
 
 The webapp ships with the package; it fetches an instance's `config/` +
 `data/` at runtime, so one app serves every use case and instances hold no
-webapp code. From an instance directory:
+webapp code. Only the small federation config, catalog and About content load
+at startup; each page fetches its own artifacts when opened. The pipeline writes
+`data/pipeline/entity-sources.json` so Directory can filter by source without
+downloading per-triple provenance. Directory and Merge show 100 cards at a time.
+Match keeps its full graph for up to 500 clusters and pages larger graphs in
+related groups. Maps with more than 1,000 geocoded
+addresses ask for a postal code prefix before drawing markers.
+
+From an instance directory:
 
 ```sh
 npx directory-builder webapp                         # dev server

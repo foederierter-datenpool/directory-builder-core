@@ -16,9 +16,12 @@ import { useSourceParam } from "./useSourceParam.js"
 import CheckboxDropdown from "./CheckboxDropdown.jsx"
 import Dropdown from "./Dropdown.jsx"
 import EntityCard, { isConflict } from "./EntityCard.jsx"
+import { resolutionOf } from "./resolvePlan.js"
 import HelpTip from "./HelpTip.jsx"
 import Modal from "./Modal.jsx"
-import React, { useMemo, useState } from "react"
+import React, { useEffect, useMemo, useState } from "react"
+
+const PAGE_SIZE = 100
 
 const fedQuads = parseTtl(federationTtl)
 const relFields = new Set(fedQuads.filter((q) => q.predicate.value === `${CDP}toTargetField`).map((q) => q.object.value))
@@ -90,6 +93,7 @@ export default function MergeTables() {
     const [compact, setCompact] = useState(true)
     const [highlight, setHighlight] = useState(true)
     const [showStats, setShowStats] = useState(false)
+    const [visibleCount, setVisibleCount] = useState(PAGE_SIZE)
 
     const rows = useMemo(() => {
         const sel = visibleSources
@@ -127,6 +131,7 @@ export default function MergeTables() {
         visible.forEach((e) => walk(e, 0))   // catch reference cycles
         return out
     }, [selected, visibleSources, sourceMode, group])
+    useEffect(() => setVisibleCount(PAGE_SIZE), [selected, visibleSources, sourceMode, group])
 
     return (
         <div className="page" style={{ overflowY: "auto", height: "100%" }}>
@@ -168,11 +173,13 @@ export default function MergeTables() {
                     <span style={{ color: "#06c" }}> · see details</span>
                 </button>
             </div>
-            {rows.map(({ e, depth }) => (
+            <p style={{ fontSize: 13, color: "#666" }}>Showing {Math.min(visibleCount, rows.length)} of {rows.length} matching entities.</p>
+            {rows.slice(0, visibleCount).map(({ e, depth }) => (
                 <div key={e.iri} style={depth ? { marginLeft: `${depth * 1.5}rem`, borderLeft: "2px solid #e0e0e0", paddingLeft: "0.75rem" } : undefined}>
-                    <EntityCard entity={e} compact={compact} highlight={highlight} />
+                    <EntityCard entity={e} compact={compact} highlight={highlight} resolutionOf={resolutionOf} />
                 </div>
             ))}
+            {visibleCount < rows.length && <button onClick={() => setVisibleCount(n => n + PAGE_SIZE)}>Show next {Math.min(PAGE_SIZE, rows.length - visibleCount)}</button>}
         </div>
     )
 }

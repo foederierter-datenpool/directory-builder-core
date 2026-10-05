@@ -107,12 +107,14 @@ only. Without a `:geocode` rule, the instance makes no geocoding requests.
 | `GEOCODE_DATASET` | unset | Label for the preferred service's region or dataset, e.g. `germany`. Change it when replacing an extract with different coverage at the same URL. |
 | `GEOCODE_RETRY_MISSES` | `false` | `true` retries cached misses once per address during this run. Successful cached coordinates remain reusable. |
 | `GEOCODE_CACHE_ONLY` | `false` | `true` prevents all geocoding requests and fails if a complete address is missing from the cache. |
+| `GEOCODE_REQUIRE_LOCAL` | `false` | `true` stops the run when the configured non-public service is unavailable or a lookup fails, and rejects a public endpoint. |
 
 Each address first checks the cache. On the first address needing a lookup or
 a cached miss needing a dataset check, the pipeline probes the preferred
 service once (three-second timeout). If ready, it handles this run's lookups;
 otherwise the pipeline logs a warning and uses public Nominatim. A local
-request failure also switches the remainder of the run to public Nominatim.
+request failure also switches the remainder of the run to public Nominatim,
+unless `GEOCODE_REQUIRE_LOCAL=true` makes either failure stop the run.
 An empty search result is a valid miss and does not trigger public fallback.
 A run with only cached coordinates makes no network requests or health probes.
 

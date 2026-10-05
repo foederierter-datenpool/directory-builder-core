@@ -187,6 +187,62 @@ export function loadMatch(federationTtl, matchesTtl, mergedTtl, { showDuplicatio
              nodeY: layout(nodes, edges, members, nodeIds, laneIdx) }
 }
 
+// Keep connected clusters together where possible. Large connected components
+// are traversed depth-first so adjacent pages still follow the same branch.
+export function matchPages(nodes, edges, pageSize) {
+    const ids = nodes.filter((node) => node.isCluster).map((node) => node.id)
+    const neighbors = new Map(ids.map((id) => [id, []]))
+    const children = new Set()
+    for (const edge of edges) {
+        if (!edge.rel || !neighbors.has(edge.from) || !neighbors.has(edge.to)) continue
+        neighbors.get(edge.from).push(edge.to)
+        neighbors.get(edge.to).push(edge.from)
+        children.add(edge.to)
+    }
+    const seen = new Set()
+    const components = []
+    for (const root of [...ids.filter((id) => !children.has(id)), ...ids]) {
+        if (seen.has(root)) continue
+        const component = []
+        const stack = [root]
+        while (stack.length) {
+            const id = stack.pop()
+            if (seen.has(id)) continue
+            seen.add(id)
+            component.push(id)
+            stack.push(...neighbors.get(id).filter((next) => !seen.has(next)).reverse())
+        }
+        components.push(component)
+    }
+    components.sort((a, b) => b.length - a.length)
+    const pages = []
+    let page = []
+    for (const component of components) {
+        if (page.length && page.length + component.length > pageSize) {
+            pages.push(page)
+            page = []
+        }
+        for (const id of component) {
+            if (page.length === pageSize) {
+                pages.push(page)
+                page = []
+            }
+            page.push(id)
+        }
+    }
+    if (page.length) pages.push(page)
+    return pages
+}
+
+export function sliceMatch(result, visibleClusters) {
+    const visibleMembers = new Set([...visibleClusters].flatMap((id) => result.members.get(id) ?? []))
+    const nodes = result.nodes.filter((node) => visibleClusters.has(node.id) || visibleMembers.has(node.id))
+    const nodeIds = new Set(nodes.map((node) => node.id))
+    const edges = result.edges.filter((edge) => nodeIds.has(edge.from) && nodeIds.has(edge.to))
+    const laneIdx = new Map(result.lanes.map((lane, index) => [lane.key, index]))
+    return { ...result, nodes, edges, nodeY: layout(nodes, edges, result.members, nodeIds, laneIdx) }
+}
+
 // Tidy-tree vertical layout: place leaves on a running cursor, centre each parent
 // on its children. Roots (entities with no parent) are ordered by lane, so the
 // upper lanes' subtrees group at the top. Graceful on non-tree graphs: a node is
