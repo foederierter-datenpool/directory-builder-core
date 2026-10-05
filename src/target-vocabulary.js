@@ -91,8 +91,8 @@ export async function buildTargetVocabulary(federationTtl) {
     for (const cls of vocabulary.getObjects(null, `${SH}class`, null))
         termDescription(cls, `${NS.rdfs}Class`)
 
-    // Geocoding adds these predicates outside the target field lists. Include
-    // them in the inventory, without guessing datatype constraints from data.
+    // Include coordinates added by geocoding even when no source mapping
+    // declares them as target fields.
     for (const rule of typed(`${CDP}EnrichRule`)) {
         if (objects(rule, `${CDP}geocode`).length) {
             for (const name of ["latitude", "longitude"])

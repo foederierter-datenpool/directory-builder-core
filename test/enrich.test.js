@@ -101,6 +101,9 @@ test("enrich geocodes via Nominatim with a tail-stripped retry, cached for offli
     assert.equal(cold.subjects.length, 2)
     for (const s of cold.subjects) assert.match(s, /^urn:test:addr-/, "coordinates sit directly on the entity")
     assert.deepEqual(cold.values, ["13.3877", "13.3877", "52.5490", "52.5490"])
+    const coordinateQuads = parseTtl(fs.readFileSync(path.join(root, PATHS.final), "utf8"))
+        .filter((q) => [SCHEMA + "latitude", SCHEMA + "longitude"].includes(q.predicate.value))
+    assert.ok(coordinateQuads.every((q) => q.object.datatype.value === "http://www.w3.org/2001/XMLSchema#double"))
 
     // each entry names its endpoint, and `adjusted` appears only on the entry
     // whose lookup needed the stripped street
@@ -245,6 +248,37 @@ test("geocoding settings have no effect without an instance geocode rule", async
         PATHS.resolved, PATHS.final, PATHS.provenance, PATHS.geocache)
     assert.deepEqual(geoOf(fixture.root).subjects, [])
     assert.deepEqual(fixture.cache(), original)
+})
+
+test("source coordinate pairs bypass Nominatim and the geocache", async (t) => {
+    geocodeEnvironment(t, { GEOCODE_CACHE_ONLY: "true" })
+    const root = makeInstance("source-coordinates", { federation, sources: { alpha } })
+    const abs = (file) => path.join(root, file)
+    fs.mkdirSync(path.dirname(abs(PATHS.resolved)), { recursive: true })
+    fs.writeFileSync(abs(PATHS.resolved), `
+@prefix schema: <http://schema.org/> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+<urn:address> a schema:PostalAddress ;
+    schema:streetAddress "Badstraße 10" ;
+    schema:postalCode "13357" ;
+    schema:addressLocality "Berlin" ;
+    schema:latitude "52.55"^^xsd:double ;
+    schema:longitude "13.38"^^xsd:double .
+`)
+    fs.writeFileSync(abs(PATHS.provenance), "")
+    const fetch = t.mock.method(globalThis, "fetch", async () => { throw new Error("no lookup expected") })
+    const config = { geocodeClasses: [SCHEMA + "PostalAddress"], inheritance: [] }
+    await runEnrich({ abs }, config, PATHS.resolved, PATHS.final, PATHS.provenance, PATHS.geocache)
+    assert.equal(fetch.mock.callCount(), 0)
+    assert.equal(fs.existsSync(abs(PATHS.geocache)), false)
+    assert.deepEqual(geoOf(root), { subjects: ["urn:address"], values: ["13.38", "52.55"] })
+
+    fs.writeFileSync(abs(PATHS.resolved), fs.readFileSync(abs(PATHS.resolved), "utf8")
+        .replace('    schema:longitude "13.38"^^xsd:double .', "."))
+    await assert.rejects(
+        runEnrich({ abs }, config, PATHS.resolved, PATHS.final, PATHS.provenance, PATHS.geocache),
+        /invalid source coordinate pair/,
+    )
 })
 
 test("cache-only mode accepts cached misses and legacy hits without changing their origin", async (t) => {

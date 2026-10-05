@@ -8,6 +8,7 @@ import fs from "fs"
 
 const df = DataFactory
 const SCHEMA = NAMESPACES.schema
+const XSD_DOUBLE = df.namedNode(`${NAMESPACES.xsd}double`)
 const RDF_TYPE = `${NAMESPACES.rdf}type`
 const RDF_REIFIES = df.namedNode(`${NAMESPACES.rdf}reifies`)
 const PROV_DERIVED_FROM = df.namedNode(`${NAMESPACES.prov}wasDerivedFrom`)
@@ -31,9 +32,10 @@ const ENRICH_STEP = df.namedNode(`${CDP}enrichStep`)
 // :ValueCorrection has rewritten known-wrong literals, so each canonical
 // address is looked up exactly once, with corrected values. Lookups go through
 // a committed cache keyed by address query (registry/geocache.json) — a warm
-// cache hit needs no network, even when entity IRIs change. Misses can be
-// retried when the provider or dataset changes. Results are ODbL:
-// "© OpenStreetMap contributors".
+// cache hit needs no network, even when entity IRIs change. A valid coordinate
+// pair already supplied on an address is kept without a cache or Nominatim
+// lookup. Misses can be retried when the provider or dataset changes.
+// Nominatim results are ODbL: "© OpenStreetMap contributors".
 //
 // A street that misses is retried once with any sub-address tail ("Haus H",
 // "4.OG") stripped — from the query only, never from the data. Coordinates
@@ -273,6 +275,7 @@ const geocode = async ({ abs }, quads, targetClasses, cachePath) => {
         .filter(([, row]) => row.get(RDF_TYPE)?.some((t) => wanted.has(t)))
 
     let lookups = 0, skipped = 0, completed = 0
+    const supplied = new Set()
     const keys = new Map()
     const processed = new Set()
     const requestedEndpoints = new Set()
@@ -296,6 +299,18 @@ const geocode = async ({ abs }, quads, targetClasses, cachePath) => {
     }
     try {
         for (const [iri, row] of entities) {
+            const latitudes = row.get(`${SCHEMA}latitude`) ?? []
+            const longitudes = row.get(`${SCHEMA}longitude`) ?? []
+            if (latitudes.length || longitudes.length) {
+                const lat = Number(latitudes[0]), lon = Number(longitudes[0])
+                if (latitudes.length !== 1 || longitudes.length !== 1
+                    || !latitudes[0].trim() || !longitudes[0].trim()
+                    || !Number.isFinite(lat) || !Number.isFinite(lon)
+                    || lat < -90 || lat > 90 || lon < -180 || lon > 180)
+                    throw new Error(`enrich: invalid source coordinate pair on <${iri}>`)
+                supplied.add(iri)
+                continue
+            }
             const query = {}
             for (const [slot, pred] of Object.entries(QUERY_FIELDS)) {
                 const value = row.get(pred)?.[0]
@@ -333,24 +348,25 @@ const geocode = async ({ abs }, quads, targetClasses, cachePath) => {
     } finally {
         // Preserve completed results even if a later request fails. Periodic
         // checkpoints also bound lost work on a forced process interruption.
-        saveCache()
+        if (fs.existsSync(abs(cachePath)) || completed) saveCache()
     }
 
     const provenance = []
     const coordinates = entities.flatMap(([iri]) => {
+        if (supplied.has(iri)) return []
         const { query, adjusted, lat, lon } = entries[keys.get(iri)] ?? {}
         if (lat == null || lon == null) return []
         if (adjusted)
             provenance.push(df.quad(df.namedNode(iri), df.namedNode(`${CDP}geocodedAs`),
                 df.literal(queryString({ ...query, street: adjusted }))))
         return [
-            df.quad(df.namedNode(iri), df.namedNode(`${SCHEMA}latitude`), df.literal(lat)),
-            df.quad(df.namedNode(iri), df.namedNode(`${SCHEMA}longitude`), df.literal(lon)),
+            df.quad(df.namedNode(iri), df.namedNode(`${SCHEMA}latitude`), df.literal(lat, XSD_DOUBLE)),
+            df.quad(df.namedNode(iri), df.namedNode(`${SCHEMA}longitude`), df.literal(lon, XSD_DOUBLE)),
         ]
     })
 
-    console.log(`enrich: geocoded ${coordinates.length / 2}/${entities.length} entities`
-        + ` (${lookups} lookup(s), ${skipped} lacking address fields)`)
+    console.log(`enrich: coordinates for ${supplied.size + coordinates.length / 2}/${entities.length} entities`
+        + ` (${supplied.size} supplied, ${lookups} lookup(s), ${skipped} lacking address fields)`)
     return { coordinates, provenance }
 }
 
