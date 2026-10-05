@@ -188,7 +188,10 @@ Unlike `data/`, the registry is accumulated state, not derived output — commit
 it, and review its diff after each harvest.
 
 An address with one valid source-provided latitude/longitude pair keeps that
-pair without a geocoder lookup. Other addresses use the geocoding cache in
+pair without a geocoder lookup. When matched addresses have different pairs,
+resolve selects one complete source pair. If a source address carries conflicting
+coordinate values that cannot be paired, resolve leaves it for geocoding rather
+than combining unrelated values. Other addresses use the geocoding cache in
 `registry/geocache.json`, independent of identity registry persistence and
 `:harvestingModeActive`. Entries are keyed by a SHA-256
 hash of the address query's street, postcode, city and country. Keys normalise
