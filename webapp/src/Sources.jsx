@@ -43,7 +43,7 @@ export default function Sources() {
                 <HelpTip title="Sources" label="About sources">
                     <div>
                         One card per source the federation declares: where its data comes from
-                        (a live URL or committed static files), its format, when it was last
+                        (a live URL or committed static files), its coverage and format, when it was last
                         harvested or added, how many records it contributes, and how many of its
                         fields are mapped into the directory (<em>mapped</em> / <em>total</em>).
                         All read from the configuration and the ingest log.
@@ -54,6 +54,7 @@ export default function Sources() {
                 <Card key={s.iri} title={s.label ?? s.iri}>
                     <KeyValueTable rows={[
                         { key: "url",       label: "URL",            value: sourceUrl(s) },
+                        ...(s.coverage ? [{ key: "coverage", label: "Coverage", value: s.coverage }] : []),
                         { key: "format",    label: "Format",         value: s.format },
                         freshnessRow(s),
                         { key: "records",   label: "Records",        value: s.records },

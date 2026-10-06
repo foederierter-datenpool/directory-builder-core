@@ -37,6 +37,8 @@ export function loadSources(federationTtl, mappedTtl, ingestLogTtl) {
     for (const q of fedQuads) {
         const p = q.predicate.value
         if (p === RDFS_LABEL && sourceIris.has(q.subject.value))   get(q.subject.value).label = q.object.value
+        else if (p === `${NS}coverageLabel` && sourceIris.has(q.subject.value))
+                                               get(q.subject.value).coverage = q.object.value
         else if (p === `${NS}fetchUrl` && sourceIris.has(q.subject.value))
                                                get(q.subject.value).fetchUrl = q.object.value
         else if (p === `${NS}format` && sourceIris.has(q.subject.value))
