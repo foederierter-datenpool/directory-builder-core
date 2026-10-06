@@ -12,7 +12,8 @@ services:
     ports:
       - "127.0.0.1:${NOMINATIM_PORT:-8088}:8080"
     environment:
-      PBF_URL: ${PBF_URL:-https://download.geofabrik.de/europe/germany-latest.osm.pbf}
+      PBF_URL: ${PBF_URL-https://download.geofabrik.de/europe/germany-latest.osm.pbf}
+      PBF_PATH: ${PBF_PATH:-}
       IMPORT_STYLE: address
       FREEZE: "true"
       THREADS: ${NOMINATIM_THREADS:-2}

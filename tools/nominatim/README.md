@@ -64,7 +64,13 @@ No environment file is required: defaults live in `compose.yaml`. An optional
 
 The first start downloads Germany and imports it. Allow a long uninterrupted
 run; the API starts only after import and indexing finish. `Ctrl+C` exits the
-log viewer without stopping the service. Check readiness separately:
+log viewer without stopping the service.
+
+After an interrupted import, a verified complete extract in the project volume
+can be reused with `PBF_URL=` and `PBF_PATH=/nominatim/data.osm.pbf` in `.env`.
+The database import itself restarts from the beginning.
+
+Check readiness separately:
 
 ```sh
 docker compose ps
