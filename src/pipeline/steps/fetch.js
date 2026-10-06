@@ -2,22 +2,36 @@ import { PATHS } from "../../utils.js"
 import { execSync } from "child_process"
 import { run } from "../run.js"
 import fs from "fs"
+import path from "path"
+import { randomUUID } from "node:crypto"
 
 // Fetch step: run the source's fetch.js. Live sources pass their :fetchUrl;
 // static-file sources pass the absolute static dir instead — the script gets
-// whichever applies, plus the federation's run params as one JSON argument.
+// whichever applies, plus the effective run params as one JSON argument.
 // fetch.js is optional for static sources: without it, the default fetch
 // copies static/ verbatim. Returns the harvest record for the ingest log.
 export const runFetch = async ({ abs, root }, { name, fetchUrl, paramsJson }) => {
     const outDir = PATHS.raw(name)
     const origin = fetchUrl ?? abs(PATHS.staticDir(name))
     console.log(`fetch  ${fetchUrl ?? PATHS.staticDir(name)} (params ${paramsJson}) → ${outDir}`)
-    // Clear any prior output first, so changed run params (or changed records) can't leave stale files behind
-    fs.rmSync(abs(outDir), { recursive: true, force: true })
-    fs.mkdirSync(abs(outDir), { recursive: true })
+    const target = path.resolve(abs(outDir))
+    fs.mkdirSync(path.dirname(target), { recursive: true })
+    const staged = fs.mkdtempSync(path.join(path.dirname(target), `.${name}-fetch-`))
     const script = abs(PATHS.fetchScript(name))
-    if (fs.existsSync(script)) await run("node", [script, abs(outDir), origin, paramsJson], { label: name })
-    else localCopyFallback({ name, fetchUrl, origin, outDir: abs(outDir) })
+    try {
+        if (fs.existsSync(script)) await run("node", [script, staged, origin, paramsJson], { label: name })
+        else localCopyFallback({ name, fetchUrl, origin, outDir: staged })
+        const backup = `${target}.previous-${randomUUID()}`
+        if (fs.existsSync(target)) fs.renameSync(target, backup)
+        try { fs.renameSync(staged, target) }
+        catch (error) {
+            if (fs.existsSync(backup)) fs.renameSync(backup, target)
+            throw error
+        }
+        fs.rmSync(backup, { recursive: true, force: true })
+    } finally {
+        fs.rmSync(staged, { recursive: true, force: true })
+    }
     const harvest = { time: new Date().toISOString() }
     // Static sources have no live harvest — record the files' git commit
     // time instead (the freshness the Sources page shows for them).
