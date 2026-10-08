@@ -46,23 +46,20 @@ export const runMerge = async ({ store, defStore, abs }, outPath, provOutPath, s
     }
 
     const fedQuads = store.getQuads(null, null, null, MAPPED_GRAPH)
-    const provQuads = []
-    for (const qu of fedQuads) {
+    const mergedQuadOf = (qu) => {
         const minted = mintedFor.get(qu.subject.value)
-        if (!minted) continue
+        if (!minted) return null
         // Rewrite IRI objects that are themselves matched subjects to their minted
         // cluster IRI, so inter-entity links (e.g. schema:provider) point at the
         // merged entity rather than the pre-merge source IRI.
         const object = qu.object.termType === "NamedNode" && mintedFor.has(qu.object.value)
             ? mintedFor.get(qu.object.value)
             : qu.object
-        store.addQuad(df.quad(minted, qu.predicate, object, MERGED_GRAPH))
-        // One reifier per derivation occurrence (RDF 1.2: triple terms are only
-        // legal as objects, via rdf:reifies) — the provenance hangs off it, and
-        // per-derivation metadata (time, confidence) has a home when needed.
-        const reifier = df.blankNode()
-        provQuads.push(df.quad(reifier, RDF_REIFIES, df.quad(minted, qu.predicate, object)))
-        provQuads.push(df.quad(reifier, PROV_DERIVED_FROM, qu.subject))
+        return df.quad(minted, qu.predicate, object)
+    }
+    for (const qu of fedQuads) {
+        const merged = mergedQuadOf(qu)
+        if (merged) store.addQuad(df.quad(merged.subject, merged.predicate, merged.object, MERGED_GRAPH))
     }
 
     const mergedQuads = store.getQuads(null, null, null, MERGED_GRAPH)
@@ -70,7 +67,19 @@ export const runMerge = async ({ store, defStore, abs }, outPath, provOutPath, s
     await writeTurtleFile(abs(outPath), mergedQuads, { ...COMMON_PREFIXES, cdp: CDP, cdf: namespace })
     console.log(`merge: wrote ${mergedQuads.length} triples → ${outPath}`)
 
-    await writeTurtleFile(abs(provOutPath), provQuads,
-        { ...COMMON_PREFIXES, cdp: CDP, cdf: namespace, ...prefixes("prov", "rdf") })
-    console.log(`merge: wrote ${provQuads.length / 2} provenance annotations → ${provOutPath}`)
+    let annotations = 0
+    function* provenanceQuads() {
+        for (const qu of fedQuads) {
+            const merged = mergedQuadOf(qu)
+            if (!merged) continue
+            // RDF 1.2 provenance links each source record to a reified triple.
+            const reifier = df.blankNode()
+            annotations++
+            yield df.quad(reifier, RDF_REIFIES, merged)
+            yield df.quad(reifier, PROV_DERIVED_FROM, qu.subject)
+        }
+    }
+    await writeTurtleFile(abs(provOutPath), provenanceQuads(),
+        { ...COMMON_PREFIXES, cdp: CDP, cdf: namespace, ...prefixes("prov", "rdf") }, { dedupe: false })
+    console.log(`merge: wrote ${annotations} provenance annotations → ${provOutPath}`)
 }

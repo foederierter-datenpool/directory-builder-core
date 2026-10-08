@@ -486,7 +486,7 @@ export const runMatch = async ({ store, defStore, abs }, outPath, registryPath, 
         // output's cadence: at 1.24e8 pairs that would be 120 lines.
         const ruleName = rule.match.split("#").pop()
         let lastReport = 0
-        const scored = await scorePairs({
+        const scored = !hard.length && !weighted.length ? [] : await scorePairs({
             units, pairCount, subjects, hard, weighted, minScore, algoName,
             hardVals, weightedVals, sourceOf, dedupsWithin, workers,
             score: matches,

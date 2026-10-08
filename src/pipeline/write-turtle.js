@@ -1,6 +1,7 @@
 import { newStore } from "@foerderfunke/sem-ops-utils"
 import { prefixes } from "../utils.js"
 import { DataFactory, Writer } from "n3"
+import { randomUUID } from "node:crypto"
 import path from "path"
 import fs from "fs"
 
@@ -31,30 +32,43 @@ export const tripleStore = () => {
     }
 }
 
-// Dedupe via a Store and sort by subject so the Writer can emit grouped
-// "subject p1 o1; p2 o2." blocks instead of repeating subjects. Strips
-// graph names (writes triples, not quads).
-//
-// Takes either quads or a tripleStore already holding them. A step that
-// produces its output in pieces should hand over the store it filled, rather
-// than an array this would copy into a second one: the dedupe store has to hold
-// everything regardless, so an array beside it is a whole redundant copy of the
-// output at peak.
-export const writeTurtleFile = (filePath, quads, prefixes = {}) => new Promise((resolve, reject) => {
-    let store
-    if (typeof quads?.quads === "function") store = quads
-    else {
-        store = tripleStore()
-        for (const q of quads) store.add(q)
+// Accepts an iterable of quads or a tripleStore. By default, deduplicates triples,
+// drops graph names and sorts by subject. With dedupe: false, streams input as-is.
+// Replaces the destination only after the complete output is written.
+export const writeTurtleFile = async (filePath, quads, prefixes = {}, { dedupe = true } = {}) => {
+    if (dedupe) {
+        let store
+        if (typeof quads?.quads === "function") store = quads
+        else {
+            store = tripleStore()
+            for (const q of quads) store.add(q)
+        }
+        quads = store.quads().sort((a, b) => a.subject.value.localeCompare(b.subject.value))
     }
-    const dedup = store.quads()
-        .sort((a, b) => a.subject.value.localeCompare(b.subject.value))
-    const writer = new Writer({ prefixes })
-    for (const q of dedup) writer.addQuad(q)
-    writer.end((err, result) => {
-        if (err) return reject(err)
-        fs.mkdirSync(path.dirname(filePath), { recursive: true })
-        fs.writeFileSync(filePath, result)
-        resolve()
-    })
-})
+    fs.mkdirSync(path.dirname(filePath), { recursive: true })
+    const temporary = `${filePath}.tmp-${randomUUID()}`
+    let fd
+    try {
+        fd = fs.openSync(temporary, "w")
+        let buffer = ""
+        const flush = () => { if (buffer) { fs.writeFileSync(fd, buffer); buffer = "" } }
+        const writer = new Writer({
+            write(chunk, _encoding, done) {
+                buffer += chunk
+                if (buffer.length >= 65536) flush()
+                done?.()
+            },
+        }, { prefixes, end: false })
+        const checkError = (error) => { if (error) throw error }
+        for (const q of quads) writer.addQuad(q, checkError)
+        writer.end()
+        flush()
+        fs.closeSync(fd)
+        fd = undefined
+        fs.renameSync(temporary, filePath)
+    } catch (error) {
+        if (fd !== undefined) fs.closeSync(fd)
+        fs.rmSync(temporary, { force: true })
+        throw error
+    }
+}

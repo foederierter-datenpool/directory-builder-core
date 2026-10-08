@@ -91,16 +91,28 @@ export async function runPreparation({ abs, quads }, sources) {
         // are those sharing the most identical field values; a field whose raw
         // value they agree on but differs from the cleaned value is a diff.
         const lifted = liftedNodes(abs(PATHS.lifted(name)))
+        const relevant = new Set()
+        for (const fields of fieldsOf.values()) for (const path of fields.keys()) relevant.add(path)
+        const byField = new Map()
+        for (const [index, fields] of lifted.entries()) for (const [path, value] of fields) {
+            if (!relevant.has(path)) continue
+            if (!byField.has(path)) byField.set(path, new Map())
+            const values = byField.get(path)
+            if (!values.has(value)) values.set(value, [])
+            values.get(value).push(index)
+        }
         for (const entity of entities) {
             const ef = fieldsOf.get(entity)
             if (!ef) continue
-            let best = 0, progs = []
-            for (const lf of lifted) {
-                let ov = 0
-                for (const [p, v] of ef) if (lf.get(p) === v) ov++
-                if (ov > best) { best = ov; progs = [lf] } else if (ov === best && ov > 0) progs.push(lf)
+            const overlaps = new Map()
+            for (const [path, value] of ef) {
+                for (const index of byField.get(path)?.get(value) ?? [])
+                    overlaps.set(index, (overlaps.get(index) ?? 0) + 1)
             }
-            if (!best) continue
+            if (!overlaps.size) continue
+            let best = 0
+            for (const count of overlaps.values()) best = Math.max(best, count)
+            const progs = [...overlaps].filter(([, count]) => count === best).map(([index]) => lifted[index])
             for (const [p, clean] of ef) {
                 const raws = new Set(progs.map((lf) => lf.get(p)).filter((v) => v !== undefined))
                 if (raws.size !== 1) continue
