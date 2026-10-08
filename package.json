@@ -19,7 +19,9 @@
   "exports": {
     ".": "./src/index.js",
     "./utils": "./src/utils.js",
-    "./fetch": "./src/fetch/index.js"
+    "./fetch": "./src/fetch/index.js",
+    "./merge-view": "./src/merge-view.js",
+    "./webapp-data": "./src/webapp-data.js"
   },
   "publishConfig": {
     "access": "public"

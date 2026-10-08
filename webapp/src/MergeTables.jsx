@@ -1,31 +1,19 @@
 // Merge view: merged entities with their source values and conflicts. Hierarchical
 // relationships group children beneath parents; address links do not.
 
-import { CDP, NAMESPACES, parseTtl } from "@directory-builder/core/utils"
-import { mergedEntities } from "./mergeEntities.js"
+import { mergeEntities, mergePageSize, loadMergePage, resolutionOf } from "./mergeEntities.js"
+import { groupMergeEntities, mergeStatistics } from "@directory-builder/core/merge-view"
 import { federationTtl } from "./instanceData.js"
 import { schemaOptions } from "./filters.js"
 import { loadSourceMeta } from "./sourceMeta.js"
 import { useSourceParam } from "./useSourceParam.js"
 import CheckboxDropdown from "./CheckboxDropdown.jsx"
 import Dropdown from "./Dropdown.jsx"
-import EntityCard, { isConflict } from "./EntityCard.jsx"
-import { resolutionOf } from "./resolvePlan.js"
+import EntityCard from "./EntityCard.jsx"
 import HelpTip from "./HelpTip.jsx"
 import Modal from "./Modal.jsx"
 import React, { useEffect, useMemo, useRef, useState } from "react"
 
-const PAGE_SIZE = 100
-
-const fedQuads = parseTtl(federationTtl)
-const targetClass = new Map(fedQuads.filter((q) => q.predicate.value === `${CDP}targetClass`).map((q) => [q.subject.value, q.object.value]))
-const relTarget = new Map(fedQuads.filter((q) => q.predicate.value === `${CDP}toTargetSchema`).map((q) => [q.subject.value, q.object.value]))
-const fieldPredicate = new Map(fedQuads.filter((q) => q.predicate.value === `${CDP}targetPredicate`).map((q) => [q.subject.value, q.object.value]))
-// An address can be shared by several entities; its link is not a hierarchy.
-const REL_PREDS = new Set(fedQuads
-    .filter((q) => q.predicate.value === `${CDP}toTargetField`
-        && targetClass.get(relTarget.get(q.subject.value)) !== `${NAMESPACES.schema}PostalAddress`)
-    .map((q) => fieldPredicate.get(q.object.value)).filter(Boolean))
 const SCHEMAS = schemaOptions(federationTtl)
 const SCHEMA_OPTS = SCHEMAS.map((s) => ({ key: s.type, label: s.label }))
 const tierLabel = new Map(SCHEMAS.map((s) => [s.type, s.label]))
@@ -34,25 +22,7 @@ const SOURCE_OPTS = SOURCES.map((s) => ({ key: s.iri, label: s.label }))
 
 const menuItem = { display: "flex", alignItems: "center", gap: 6, padding: "2px 0", whiteSpace: "nowrap" }
 
-// One-pass overview of all entities, including those outside the current filter.
-const STATS = (() => {
-    let multiRecord = 0, withConflicts = 0, records = 0
-    const sources = new Set()
-    const byTier = new Map()
-    for (const e of mergedEntities) {
-        const cols = e.columns ?? []
-        records += cols.length
-        cols.forEach((c) => c.source && sources.add(c.source))
-        const hasMultipleRecords = cols.length > 1
-        const hasConflict = e.fields.some((f) => isConflict(f))
-        if (hasMultipleRecords) multiRecord++
-        if (hasConflict) withConflicts++
-        const t = byTier.get(e.type) ?? { total: 0, multiRecord: 0, conflicts: 0 }
-        t.total++; if (hasMultipleRecords) t.multiRecord++; if (hasConflict) t.conflicts++
-        byTier.set(e.type, t)
-    }
-    return { total: mergedEntities.length, multiRecord, withConflicts, records, sources: sources.size, byTier }
-})()
+const STATS = mergeStatistics(mergeEntities)
 
 const cell = { padding: "4px 8px" }
 const cellR = { ...cell, textAlign: "right" }
@@ -93,6 +63,8 @@ export default function MergeTables() {
     const [highlight, setHighlight] = useState(true)
     const [showStats, setShowStats] = useState(false)
     const [page, setPage] = useState(0)
+    const [loaded, setLoaded] = useState(null)
+    const [retry, setRetry] = useState(0)
     const listRef = useRef(null)
 
     const rows = useMemo(() => {
@@ -102,40 +74,25 @@ export default function MergeTables() {
         const bySource = sourceMode === "all"
             ? (e) => sel.size > 0 && [...sel].every((s) => e.sources.includes(s))
             : (e) => e.sources.some((s) => sel.has(s))
-        const visible = mergedEntities.filter((e) => selected.has(e.type) && bySource(e))
+        const visible = mergeEntities.filter((e) => selected.has(e.type) && bySource(e))
         if (!group) return visible.map((e) => ({ e, depth: 0 }))
 
-        // Hierarchy over the surviving set only: a child whose parent was filtered
-        // out becomes a root, so it stays visible. Order follows mergedEntities.
-        const vset = new Set(visible.map((e) => e.iri))
-        const parentOf = (e) => {
-            const f = e.fields.find((f) => REL_PREDS.has(f.predicate) && f.values[0]?.raw && vset.has(f.values[0].raw) && f.values[0].raw !== e.iri)
-            return f ? f.values[0].raw : null
-        }
-        const childrenOf = new Map(), hasParent = new Set()
-        for (const e of visible) {
-            const p = parentOf(e)
-            if (!p) continue
-            if (!childrenOf.has(p)) childrenOf.set(p, [])
-            childrenOf.get(p).push(e)
-            hasParent.add(e.iri)
-        }
-        const out = [], seen = new Set()
-        const walk = (e, depth) => {
-            if (seen.has(e.iri)) return
-            seen.add(e.iri)
-            out.push({ e, depth })
-            for (const c of childrenOf.get(e.iri) ?? []) walk(c, depth + 1)
-        }
-        visible.filter((e) => !hasParent.has(e.iri)).forEach((e) => walk(e, 0))
-        visible.forEach((e) => walk(e, 0))   // catch reference cycles
-        return out
+        return groupMergeEntities(visible)
     }, [selected, visibleSources, sourceMode, group])
     useEffect(() => setPage(0), [selected, visibleSources, sourceMode, group])
-    const pageCount = Math.max(1, Math.ceil(rows.length / PAGE_SIZE))
+    const pageCount = Math.max(1, Math.ceil(rows.length / mergePageSize))
     const currentPage = Math.min(page, pageCount - 1)
-    const start = currentPage * PAGE_SIZE
-    const end = Math.min(start + PAGE_SIZE, rows.length)
+    const start = currentPage * mergePageSize
+    const end = Math.min(start + mergePageSize, rows.length)
+    const visibleRows = useMemo(() => rows.slice(start, end), [rows, start, end])
+    useEffect(() => {
+        let cancelled = false
+        loadMergePage(visibleRows.map(row => row.e)).then(
+            entities => { if (!cancelled) setLoaded({ rows: visibleRows, entities }) },
+            error => { if (!cancelled) setLoaded({ rows: visibleRows, error }) })
+        return () => { cancelled = true }
+    }, [visibleRows, retry])
+    const current = loaded?.rows === visibleRows ? loaded : null
     const goToPage = (next) => {
         setPage(next)
         if (listRef.current) listRef.current.scrollTop = 0
@@ -187,11 +144,14 @@ export default function MergeTables() {
                 {currentPage + 1 < pageCount && <button onClick={() => goToPage(currentPage + 1)}>Next</button>}
             </div>
             <div ref={listRef} style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
-                {rows.slice(start, end).map(({ e, depth }) => (
-                    <div key={e.iri} style={depth ? { marginLeft: `${depth * 1.5}rem`, borderLeft: "2px solid #e0e0e0", paddingLeft: "0.75rem" } : undefined}>
-                        <EntityCard entity={e} compact={compact} highlight={highlight} resolutionOf={resolutionOf} />
+                {!current && <p>Loading…</p>}
+                {current?.error && <p>{current.error.message}{" "}<button onClick={() => setRetry(n => n + 1)}>Retry</button></p>}
+                {current?.entities?.map((entity, position) => {
+                    const { depth } = visibleRows[position]
+                    return <div key={entity.iri} style={depth ? { marginLeft: `${depth * 1.5}rem`, borderLeft: "2px solid #e0e0e0", paddingLeft: "0.75rem" } : undefined}>
+                        <EntityCard entity={entity} compact={compact} highlight={highlight} resolutionOf={resolutionOf} />
                     </div>
-                ))}
+                })}
             </div>
         </div>
     )

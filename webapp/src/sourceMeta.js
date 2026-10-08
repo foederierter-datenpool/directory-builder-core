@@ -1,45 +1,10 @@
-// Source identity lives in config: federation.ttl declares each :Source (label,
-// skos:notation, order); its extracted-data file follows from the source name by
-// the PATHS conventions. JS never hardcodes a source name — it resolves records
-// to a :Source via cdp:fromSource.
-// Reads:  TTL strings passed in (federation, mapped, ingest-log)
-// Does:   returns lookup maps + helpers (used by loadMerge, EntityCard, MapGraph, MatchGraph)
-
+// Source metadata and links to harvested and extracted data.
+export { loadSourceMeta, compareSources } from "@directory-builder/core/merge-view"
 import { CDP as NS, NAMESPACES, parseTtl, PATHS, sourceName } from "@directory-builder/core/utils"
 
-const RDFS_LABEL    = `${NAMESPACES.rdfs}label`
-const SKOS_NOTATION = `${NAMESPACES.skos}notation`
 const PROV_AT_TIME  = `${NAMESPACES.prov}atTime`
-const HAS_SOURCE    = `${NS}hasSource`
 const FROM_SOURCE   = `${NS}fromSource`
 const OF_SOURCE     = `${NS}ofSource`
-
-// Map<SourceIRI, {iri, label, notation, order}> from federation.ttl; order
-// follows the :hasSource list. Assumes each :Source has a label and notation.
-export function loadSourceMeta(federationTtl) {
-    const order = new Map()
-    const labelOf = new Map()
-    const notationOf = new Map()
-    let n = 0
-    for (const q of parseTtl(federationTtl)) {
-        const p = q.predicate.value
-        if      (p === HAS_SOURCE && !order.has(q.object.value)) order.set(q.object.value, n++)
-        else if (p === RDFS_LABEL)    labelOf.set(q.subject.value, q.object.value)
-        else if (p === SKOS_NOTATION) notationOf.set(q.subject.value, q.object.value)
-    }
-    const meta = new Map()
-    for (const iri of order.keys()) {
-        meta.set(iri, { iri, label: labelOf.get(iri), notation: notationOf.get(iri), order: order.get(iri) })
-    }
-    return meta
-}
-
-// Order two Source IRIs by their federation declaration order, then IRI.
-export function compareSources(a, b, meta) {
-    const oa = meta.get(a).order
-    const ob = meta.get(b).order
-    return oa !== ob ? oa - ob : a.localeCompare(b)
-}
 
 // Map<recordIri, SourceIRI> from plain cdp:fromSource triples (mapped.ttl).
 export function loadSourceOfRecord(ttl) {

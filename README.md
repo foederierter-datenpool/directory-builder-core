@@ -226,6 +226,15 @@ Match keeps its full graph for up to 500 clusters and pages larger graphs in
 related groups. Maps with more than 1,000 geocoded
 addresses ask for a postal code prefix before drawing markers.
 
+For large instances, add `:federation :webappChunking true .` to
+`config/federation.ttl` and rerun federation. After validation, the pipeline
+adds a compact index and Merge detail chunks under `data/webapp/`. Merge loads
+only the chunks needed for its current page and reuses them when revisited.
+Existing pipeline artifacts remain complete and unchanged for downloads and APIs.
+Omit the setting or use `false` to load the full RDF files; the next federation
+run removes the generated chunks. Snapshots without a compatible index also
+use the full RDF files. Match continues to use its complete RDF inputs.
+
 From an instance directory:
 
 ```sh

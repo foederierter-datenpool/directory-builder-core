@@ -1,4 +1,5 @@
 import { buildDataFileTree, encodedPath, githubDataUrl } from "./dataFiles.js"
+import { PATHS } from "@directory-builder/core/utils"
 import React from "react"
 
 const fileUrl = (filePath) =>
@@ -23,6 +24,9 @@ function DirectoryContents({ directory }) {
 }
 
 function Directory({ directory }) {
+    if (directory.path === PATHS.webappData) return <a href={fileUrl(`${directory.path}/`)} target="_blank" rel="noreferrer">
+        <code>{directory.name}/</code> ({directory.files.length} generated files)
+    </a>
     return (
         <details className="data-tree-directory">
             <summary><code>{directory.name}/</code></summary>

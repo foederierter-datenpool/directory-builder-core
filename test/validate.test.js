@@ -28,3 +28,12 @@ test("typeDerivation is optional and accepts exactly one recognized IRI when pre
         assert.equal(report.results.length === 0, valid, value || "omitted")
     }
 })
+
+test("webappChunking is optional and accepts a single boolean", async () => {
+    const validator = buildValidator(fs.readFileSync(new URL("../src/validate/federation.shacl.ttl", import.meta.url), "utf8"))
+    const ttl = fs.readFileSync(path.join(INSTANCE_ROOT, "config/federation.ttl"), "utf8")
+    for (const [value, valid] of [["", true], ["true", true], ["false", true], ['"true"', false], ["true, false", false]]) {
+        const report = await validator.validate({ dataset: turtleToDataset(ttl + (value ? `\n:federation :webappChunking ${value} .` : "")) })
+        assert.equal(report.results.length === 0, valid, value || "omitted")
+    }
+})

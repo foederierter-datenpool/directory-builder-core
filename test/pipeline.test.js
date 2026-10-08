@@ -1,6 +1,7 @@
 import { CDP, parseTtl, PATHS } from "@directory-builder/core/utils"
 import { Pipeline, validate } from "@directory-builder/core"
 import { scaffoldPublication } from "../src/publication.js"
+import { federate } from "../src/pipeline/federate.js"
 import { makeInstance } from "./helpers/instance.js"
 import assert from "node:assert/strict"
 import { test } from "node:test"
@@ -95,6 +96,19 @@ test("the tiny fixture validates and runs the whole pipeline on defaults", async
     assert.deepEqual(sourceIndex["urn:test:thing-e427416d02ac"], [
         `${CDP}alphaSource`, `${CDP}betaSource`,
     ])
+})
+
+test("federation adds optional Merge chunks and removes them when disabled", async () => {
+    const chunked = federation + "\n:federation :webappChunking true ."
+    const root = makeInstance("chunked", { federation: chunked, sources: { alpha, beta } })
+    await new Pipeline({ root }).run()
+    const index = JSON.parse(fs.readFileSync(path.join(root, PATHS.webappIndex), "utf8"))
+    assert.equal(index.entities.length, 3)
+    assert.equal(fs.readFileSync(path.join(root, PATHS.final), "utf8"), expectedFinal)
+    fs.writeFileSync(path.join(root, PATHS.federation), federation + "\n:federation :webappChunking false .")
+    await federate(root)
+    assert.equal(fs.existsSync(path.join(root, PATHS.webappData)), false)
+    assert.equal(fs.readFileSync(path.join(root, PATHS.final), "utf8"), expectedFinal)
 })
 
 // ---- Test 2: periodic harvesting & the identity registry -------------------

@@ -1,13 +1,9 @@
-// Renders one entity as a card (narrow key/value, or wide per-source table)
-// with source tags and conflict highlighting. Also exports the conflict helpers.
-// Reads:  config/federation.ttl, data/ingest/ingest-log.ttl (via sourceMeta.js);
-//         entity objects from loadMerge.js
-// Does:   renders <EntityCard>; exports EXPECTED_MULTI, isConflict (used by mergeEntities, MergeTables)
-
+// Merge card values, source columns and conflict explanations.
 import { federationTtl, fetchText } from "./instanceData.js"
 import Card, { KeyValueTable } from "./Card.jsx"
 import { loadHarvestBySource, loadSourceMeta } from "./sourceMeta.js"
-import { CDP, parseTtl, PATHS } from "@directory-builder/core/utils"
+import { parseTtl, PATHS } from "@directory-builder/core/utils"
+import { mergeConflict, mergeViewSettings } from "@directory-builder/core/merge-view"
 import React, { useState } from "react"
 
 // entity.columns are one entry per contributing record (resolved in loadMerge); look
@@ -25,11 +21,8 @@ const tagTitle = (iri) => {
 // Predicates where one value per contributing source is expected, not a merge
 // conflict: target fields the federation declares :multiValued, plus the
 // engine's own cdp:fromSource.
-const fedQuads = parseTtl(federationTtl)
-const multiFields = new Set(fedQuads.filter((q) => q.predicate.value === `${CDP}multiValued` && q.object.value === "true").map((q) => q.subject.value))
-export const EXPECTED_MULTI = new Set([`${CDP}fromSource`,
-    ...fedQuads.filter((q) => multiFields.has(q.subject.value) && q.predicate.value === `${CDP}targetPredicate`).map((q) => q.object.value)])
-export const isConflict = (f) => !EXPECTED_MULTI.has(f.predicate) && f.values.length > 1
+export const EXPECTED_MULTI = mergeViewSettings(parseTtl(federationTtl)).expectedMulti
+export const isConflict = (field) => mergeConflict(field, EXPECTED_MULTI)
 
 const CONFLICT_LEVELS = [
     { color: "#fca5a5", width: 2, bg: "rgba(220, 38, 38, 0.08)" },

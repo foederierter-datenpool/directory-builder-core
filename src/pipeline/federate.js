@@ -11,6 +11,7 @@ import { runResolve } from "./steps/resolve.js"
 import { loadEnrichConfig, runEnrich } from "./steps/enrich.js"
 import { runPublish } from "./steps/publish.js"
 import { runValidateDirectory } from "./steps/validate-directory.js"
+import { writeWebappData } from "./webapp-data.js"
 import { DataFactory } from "n3"
 import path from "path"
 import fs from "fs"
@@ -91,6 +92,7 @@ export async function federate(root = process.cwd()) {
         lastStep = await journal.step("enrich", { after: [lastStep] },
             () => runEnrich(ctx, enrichConfig, PATHS.resolved, PATHS.final, PATHS.provenance, PATHS.geocache))
     lastStep = await journal.step("validate", { after: [lastStep] }, () => runValidateDirectory(ctx))
+    writeWebappData(ctx)
     // Publishing is opt-in the same way: no publication.ttl → no publish step.
     if (fs.existsSync(abs(PATHS.publication)))
         await journal.step("publish", { after: [lastStep] }, () => runPublish(ctx, abs(PATHS.catalog)))
