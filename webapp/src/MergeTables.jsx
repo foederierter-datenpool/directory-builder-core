@@ -1,13 +1,7 @@
-// Merge view: every entity with its per-source field values and conflict
-// highlighting. An entity referencing another via a relationship the federation
-// declares (mapping :hasRelationship → :toTargetField → :targetPredicate) renders
-// nested beneath it when grouped.
-// Reads:  mergedEntities from mergeEntities.js (← merged.ttl + provenance.ttl),
-//         config/federation.ttl (relationship predicates + schemas)
-// Does:   renders the Merge page — a Types filter, a View options dropdown, an
-//         info-bar (click for stats), and the entity cards.
+// Merge view: merged entities with their source values and conflicts. Hierarchical
+// relationships group children beneath parents; address links do not.
 
-import { CDP, parseTtl } from "@directory-builder/core/utils"
+import { CDP, NAMESPACES, parseTtl } from "@directory-builder/core/utils"
 import { mergedEntities } from "./mergeEntities.js"
 import { federationTtl } from "./instanceData.js"
 import { schemaOptions } from "./filters.js"
@@ -19,13 +13,19 @@ import EntityCard, { isConflict } from "./EntityCard.jsx"
 import { resolutionOf } from "./resolvePlan.js"
 import HelpTip from "./HelpTip.jsx"
 import Modal from "./Modal.jsx"
-import React, { useEffect, useMemo, useState } from "react"
+import React, { useEffect, useMemo, useRef, useState } from "react"
 
 const PAGE_SIZE = 100
 
 const fedQuads = parseTtl(federationTtl)
-const relFields = new Set(fedQuads.filter((q) => q.predicate.value === `${CDP}toTargetField`).map((q) => q.object.value))
-const REL_PREDS = new Set(fedQuads.filter((q) => relFields.has(q.subject.value) && q.predicate.value === `${CDP}targetPredicate`).map((q) => q.object.value))
+const targetClass = new Map(fedQuads.filter((q) => q.predicate.value === `${CDP}targetClass`).map((q) => [q.subject.value, q.object.value]))
+const relTarget = new Map(fedQuads.filter((q) => q.predicate.value === `${CDP}toTargetSchema`).map((q) => [q.subject.value, q.object.value]))
+const fieldPredicate = new Map(fedQuads.filter((q) => q.predicate.value === `${CDP}targetPredicate`).map((q) => [q.subject.value, q.object.value]))
+// An address can be shared by several entities; its link is not a hierarchy.
+const REL_PREDS = new Set(fedQuads
+    .filter((q) => q.predicate.value === `${CDP}toTargetField`
+        && targetClass.get(relTarget.get(q.subject.value)) !== `${NAMESPACES.schema}PostalAddress`)
+    .map((q) => fieldPredicate.get(q.object.value)).filter(Boolean))
 const SCHEMAS = schemaOptions(federationTtl)
 const SCHEMA_OPTS = SCHEMAS.map((s) => ({ key: s.type, label: s.label }))
 const tierLabel = new Map(SCHEMAS.map((s) => [s.type, s.label]))
@@ -34,26 +34,24 @@ const SOURCE_OPTS = SOURCES.map((s) => ({ key: s.iri, label: s.label }))
 
 const menuItem = { display: "flex", alignItems: "center", gap: 6, padding: "2px 0", whiteSpace: "nowrap" }
 
-// One-pass overview of the whole merge result (not the filtered view): how many
-// entities, how many were deduplicated (>1 contributing record), across how many
-// sources, and how many carry field conflicts — with a per-tier breakdown.
+// One-pass overview of all entities, including those outside the current filter.
 const STATS = (() => {
-    let merged = 0, withConflicts = 0, records = 0
+    let multiRecord = 0, withConflicts = 0, records = 0
     const sources = new Set()
-    const byTier = new Map()                       // entity.type → { total, merged, conflicts }
+    const byTier = new Map()
     for (const e of mergedEntities) {
         const cols = e.columns ?? []
         records += cols.length
         cols.forEach((c) => c.source && sources.add(c.source))
-        const isMrg = cols.length > 1
+        const hasMultipleRecords = cols.length > 1
         const hasConflict = e.fields.some((f) => isConflict(f))
-        if (isMrg) merged++
+        if (hasMultipleRecords) multiRecord++
         if (hasConflict) withConflicts++
-        const t = byTier.get(e.type) ?? { total: 0, merged: 0, conflicts: 0 }
-        t.total++; if (isMrg) t.merged++; if (hasConflict) t.conflicts++
+        const t = byTier.get(e.type) ?? { total: 0, multiRecord: 0, conflicts: 0 }
+        t.total++; if (hasMultipleRecords) t.multiRecord++; if (hasConflict) t.conflicts++
         byTier.set(e.type, t)
     }
-    return { total: mergedEntities.length, merged, withConflicts, records, sources: sources.size, byTier }
+    return { total: mergedEntities.length, multiRecord, withConflicts, records, sources: sources.size, byTier }
 })()
 
 const cell = { padding: "4px 8px" }
@@ -63,22 +61,23 @@ function StatsModal({ onClose }) {
     return (
         <Modal title="Merge statistics" onClose={onClose}>
             <p style={{ fontSize: 13, margin: "0 0 12px" }}>
-                {STATS.records} source records merged into <b>{STATS.total}</b> entities, across <b>{STATS.sources}</b> sources.
+                {STATS.records} mapped records contribute to <b>{STATS.total}</b> entities from <b>{STATS.sources}</b> sources.
+                Of those entities, <b>{STATS.multiRecord}</b> combine two or more records.
             </p>
             <table style={{ borderCollapse: "collapse", fontSize: 12, width: "100%" }}>
                 <thead>
                     <tr style={{ textAlign: "left", color: "#666", borderBottom: "1px solid #ddd" }}>
-                        <th style={cell}>Type</th><th style={cellR}>Entities</th><th style={cellR}>Deduplicated</th><th style={cellR}>With conflicts</th>
+                        <th style={cell}>Type</th><th style={cellR}>Entities</th><th style={cellR}>With multiple records</th><th style={cellR}>With conflicts</th>
                     </tr>
                 </thead>
                 <tbody>
                     {[...STATS.byTier].map(([type, t]) => (
                         <tr key={type} style={{ borderBottom: "1px solid #f0f0f0" }}>
-                            <td style={cell}>{tierLabel.get(type) ?? type}</td><td style={cellR}>{t.total}</td><td style={cellR}>{t.merged}</td><td style={cellR}>{t.conflicts}</td>
+                            <td style={cell}>{tierLabel.get(type) ?? type}</td><td style={cellR}>{t.total}</td><td style={cellR}>{t.multiRecord}</td><td style={cellR}>{t.conflicts}</td>
                         </tr>
                     ))}
                     <tr style={{ fontWeight: 600 }}>
-                        <td style={cell}>Total</td><td style={cellR}>{STATS.total}</td><td style={cellR}>{STATS.merged}</td><td style={cellR}>{STATS.withConflicts}</td>
+                        <td style={cell}>Total</td><td style={cellR}>{STATS.total}</td><td style={cellR}>{STATS.multiRecord}</td><td style={cellR}>{STATS.withConflicts}</td>
                     </tr>
                 </tbody>
             </table>
@@ -93,7 +92,8 @@ export default function MergeTables() {
     const [compact, setCompact] = useState(true)
     const [highlight, setHighlight] = useState(true)
     const [showStats, setShowStats] = useState(false)
-    const [visibleCount, setVisibleCount] = useState(PAGE_SIZE)
+    const [page, setPage] = useState(0)
+    const listRef = useRef(null)
 
     const rows = useMemo(() => {
         const sel = visibleSources
@@ -131,25 +131,33 @@ export default function MergeTables() {
         visible.forEach((e) => walk(e, 0))   // catch reference cycles
         return out
     }, [selected, visibleSources, sourceMode, group])
-    useEffect(() => setVisibleCount(PAGE_SIZE), [selected, visibleSources, sourceMode, group])
+    useEffect(() => setPage(0), [selected, visibleSources, sourceMode, group])
+    const pageCount = Math.max(1, Math.ceil(rows.length / PAGE_SIZE))
+    const currentPage = Math.min(page, pageCount - 1)
+    const start = currentPage * PAGE_SIZE
+    const end = Math.min(start + PAGE_SIZE, rows.length)
+    const goToPage = (next) => {
+        setPage(next)
+        if (listRef.current) listRef.current.scrollTop = 0
+    }
 
     return (
-        <div className="page" style={{ overflowY: "auto", height: "100%" }}>
+        <div className="page" style={{ boxSizing: "border-box", display: "flex", flexDirection: "column", height: "100%" }}>
             {showStats && <StatsModal onClose={() => setShowStats(false)} />}
             <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "0.75rem", marginBottom: "0.75rem" }}>
                 <HelpTip title="The Merge view" label="About the Merge view">
                     <div>
-                        Every merged entity with its field values laid out
-                        {" "}<strong>per contributing source</strong>, so you can see where the
-                        sources agreed and where they conflicted (highlighted). A conflict means
-                        sources supplied different values for a field that expects one. Hovering a
+                        Each entity shows its field values and their contributing sources.
+                        A conflict means a field that expects one value has several, even when
+                        all values came from one source. Hovering a
                         conflicted value shows how it settles: a curated correction (teal ✎), the
                         resolve strategy that picks which value reaches the directory, or both
                         when sources still disagree after the correction.
-                        {" "}<em>Group by hierarchy</em> nests an entity under the one it links to.
+                        {" "}<em>Group by hierarchy</em> nests services under providers and
+                        organisations under parent organisations. Address links do not imply a hierarchy.
                     </div>
                     <div>
-                        The summary in the toolbar counts how many entities were deduplicated and
+                        The summary in the toolbar counts how many entities combine multiple records and
                         how many carry conflicts; click it for a per-type breakdown.
                     </div>
                 </HelpTip>
@@ -169,17 +177,22 @@ export default function MergeTables() {
                 </Dropdown>
                 <button onClick={() => setShowStats(true)} title="Click for more statistics"
                     style={{ marginLeft: "0.5rem", border: 0, background: "transparent", padding: 0, fontSize: 12, color: "#666", cursor: "pointer" }}>
-                    {STATS.merged} deduplications across {STATS.sources} sources · {STATS.withConflicts} with conflicts
+                    {STATS.multiRecord} entities with multiple records · {STATS.withConflicts} with conflicts
                     <span style={{ color: "#06c" }}> · see details</span>
                 </button>
             </div>
-            <p style={{ fontSize: 13, color: "#666" }}>Showing {Math.min(visibleCount, rows.length)} of {rows.length} matching entities.</p>
-            {rows.slice(0, visibleCount).map(({ e, depth }) => (
-                <div key={e.iri} style={depth ? { marginLeft: `${depth * 1.5}rem`, borderLeft: "2px solid #e0e0e0", paddingLeft: "0.75rem" } : undefined}>
-                    <EntityCard entity={e} compact={compact} highlight={highlight} resolutionOf={resolutionOf} />
-                </div>
-            ))}
-            {visibleCount < rows.length && <button onClick={() => setVisibleCount(n => n + PAGE_SIZE)}>Show next {Math.min(PAGE_SIZE, rows.length - visibleCount)}</button>}
+            <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", margin: "0.5rem 0", fontSize: 13, color: "#666" }}>
+                <span>Showing {rows.length ? `${start + 1}–${end}` : "0"} of {rows.length} matching entities (page {currentPage + 1} of {pageCount}).</span>
+                {currentPage > 0 && <button onClick={() => goToPage(currentPage - 1)}>Previous</button>}
+                {currentPage + 1 < pageCount && <button onClick={() => goToPage(currentPage + 1)}>Next</button>}
+            </div>
+            <div ref={listRef} style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
+                {rows.slice(start, end).map(({ e, depth }) => (
+                    <div key={e.iri} style={depth ? { marginLeft: `${depth * 1.5}rem`, borderLeft: "2px solid #e0e0e0", paddingLeft: "0.75rem" } : undefined}>
+                        <EntityCard entity={e} compact={compact} highlight={highlight} resolutionOf={resolutionOf} />
+                    </div>
+                ))}
+            </div>
         </div>
     )
 }

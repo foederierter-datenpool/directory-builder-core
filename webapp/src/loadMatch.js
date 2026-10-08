@@ -120,7 +120,7 @@ export function readSchemas(federationTtl) {
 
 // ---- main ---------------------------------------------------------------
 
-export function loadMatch(federationTtl, matchesTtl, mergedTtl, { showDuplications = false, show1to1 = false, activeLanes = null } = {}) {
+export function loadMatch(federationTtl, matchesTtl, mergedTtl, { showDuplications = false, show1to1 = false, activeLanes = null, layoutLimit = Infinity } = {}) {
     const all = readSchemas(federationTtl)
     // activeLanes (Set of lane keys) narrows the view: deselected lanes lose their
     // columns and entities, and cross-lane edges to them drop with the entities.
@@ -165,7 +165,7 @@ export function loadMatch(federationTtl, matchesTtl, mergedTtl, { showDuplicatio
         nodes.push({ id: c, type: tier, label: nameOf.get(c) ?? catOf.get(c) ?? streetOf.get(c) ?? localName(c), isCluster: true })
         nodeIds.add(c)
         const ms = members.get(c) ?? []
-        if (!showDuplications || (!show1to1 && ms.length <= 1)) continue   // master off → no source cols; hide 1:1 unless "show 1:1"
+        if (!showDuplications || (!show1to1 && ms.length <= 1)) continue
         for (const src of ms) {
             nodes.push({ id: src, type: `${tier}Src`, label: localName(src) })
             nodeIds.add(src)
@@ -183,8 +183,10 @@ export function loadMatch(federationTtl, matchesTtl, mergedTtl, { showDuplicatio
         }
     }
 
+    const clusterCount = nodes.filter((node) => node.isCluster).length
+    // Large views lay out only the visible page in sliceMatch.
     return { nodes, edges, members, lanes, columns, colors, columnTitles, columnBands, columnHeaderStyle,
-             nodeY: layout(nodes, edges, members, nodeIds, laneIdx) }
+             nodeY: clusterCount > layoutLimit ? undefined : layout(nodes, edges, members, nodeIds, laneIdx) }
 }
 
 // Keep connected clusters together where possible. Large connected components

@@ -27,7 +27,7 @@ const subjectsWith = (quads, predicate, object) => quads
     .filter((quad) => quad.predicate.value === predicate && quad.object.value === object)
     .map((quad) => quad.subject.value)
 
-const turtleEntry = (turtle, iri) => {
+export const turtleEntry = (turtle, iri) => {
     const compact = shrink(iri, prefixesOf(turtle))
     const subject = compact === iri ? `<${iri}>` : compact
     const lines = turtle.split("\n")
@@ -78,7 +78,7 @@ export function loadLocations(finalTtl, federationTtl) {
         const typeIri = firstValue(iri, RDF_TYPE)
         const label = firstValue(iri, `${SCHEMA}name`) ?? firstValue(iri, `${RDFS}label`) ?? localName(iri)
         const type = labelByClass.get(typeIri) ?? (typeIri ? localName(typeIri) : "Entity")
-        return { iri, label, type, turtle: turtleEntry(finalTtl, iri) }
+        return { iri, label, type }
     }
     const loadAddress = (iri) => {
         const latitude = Number(firstValue(iri, `${SCHEMA}latitude`))

@@ -1,6 +1,6 @@
 import { strict as assert } from "node:assert"
 import { test } from "node:test"
-import { loadLocations, selectMapLocations } from "../webapp/src/loadLocations.js"
+import { loadLocations, selectMapLocations, turtleEntry } from "../webapp/src/loadLocations.js"
 
 test("map groups entities under their geocoded address", () => {
     const federation = `
@@ -22,9 +22,10 @@ test("map groups entities under their geocoded address", () => {
     assert.deepEqual(loadLocations(final, federation), [{
         iri: "https://example.com/address", latitude: 52.5, longitude: 13.4, postalCode: "10115",
         lines: ["Main Street 1", "10115 Berlin"], label: "Main Street 1, 10115 Berlin",
-        entities: [{ iri: "https://example.com/place", label: "Example Place", type: "Place",
-            turtle: ':place a schema:Organization ; schema:name "Example Place" ; schema:address :address .' }],
+        entities: [{ iri: "https://example.com/place", label: "Example Place", type: "Place" }],
     }])
+    assert.equal(turtleEntry(final, "https://example.com/place"),
+        ':place a schema:Organization ; schema:name "Example Place" ; schema:address :address .')
 })
 
 test("large maps require a postal code filter and never render more than the marker limit", () => {

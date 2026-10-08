@@ -160,7 +160,7 @@ export default function MatchGraph() {
     useEffect(() => setPage(0), [showDuplications, show1to1, activeLanes])
 
     const full = useMemo(() => loadMatch(federationTtl, matchesTtl, mergedTtl,
-        { showDuplications, show1to1, activeLanes }), [showDuplications, show1to1, activeLanes])
+        { showDuplications, show1to1, activeLanes, layoutLimit: FULL_VIEW_LIMIT }), [showDuplications, show1to1, activeLanes])
     const pages = useMemo(() => {
         const count = full.nodes.filter((node) => node.isCluster).length
         return count > FULL_VIEW_LIMIT ? matchPages(full.nodes, full.edges, PAGE_SIZE) : null
@@ -200,8 +200,8 @@ export default function MatchGraph() {
                         entity the match step formed, each a <em>cluster</em> of the source records
                         that matched. The tinted column to the left of a lane shows the
                         {" "}<em>source duplications</em>: which source records collapsed onto that
-                        entity. By default only real collapses show; <em>Show 1:1 clusters</em> adds
-                        the entities a single record formed.
+                        entity. Source records appear for clusters with multiple members;
+                        {" "}<em>Show 1:1 clusters</em> also shows single-member source records.
                     </div>
                     <div>
                         Arrows across lanes are the declared <em>relationships</em> between

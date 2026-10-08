@@ -1,6 +1,6 @@
 // Public map of resolved PostalAddress entities that carry coordinates.
 
-import { locations } from "./locationData.js"
+import { locations, turtleForIri } from "./locationData.js"
 import { selectMapLocations } from "./loadLocations.js"
 import { highlightTurtle } from "./highlightTurtle.js"
 import Modal from "./Modal.jsx"
@@ -54,7 +54,7 @@ function AddressModal({ location, onClose, onSelectEntity }) {
 }
 
 function TurtleModal({ entity, onClose }) {
-    const highlighted = highlightTurtle(entity.turtle)
+    const highlighted = highlightTurtle(turtleForIri(entity.iri))
     return (
         <Modal title={entity.label} onClose={onClose}>
             <pre className="language-turtle location-turtle">
