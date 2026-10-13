@@ -7,6 +7,7 @@ import { federationTtl } from "./instanceData.js"
 import { schemaOptions } from "./filters.js"
 import { loadSourceMeta } from "./sourceMeta.js"
 import { useSourceParam } from "./useSourceParam.js"
+import { usePageData } from "./usePageData.js"
 import CheckboxDropdown from "./CheckboxDropdown.jsx"
 import Dropdown from "./Dropdown.jsx"
 import EntityCard from "./EntityCard.jsx"
@@ -23,6 +24,7 @@ const SOURCE_OPTS = SOURCES.map((s) => ({ key: s.iri, label: s.label }))
 const menuItem = { display: "flex", alignItems: "center", gap: 6, padding: "2px 0", whiteSpace: "nowrap" }
 
 const STATS = mergeStatistics(mergeEntities)
+const loadRows = rows => loadMergePage(rows.map(row => row.e))
 
 const cell = { padding: "4px 8px" }
 const cellR = { ...cell, textAlign: "right" }
@@ -63,8 +65,6 @@ export default function MergeTables() {
     const [highlight, setHighlight] = useState(true)
     const [showStats, setShowStats] = useState(false)
     const [page, setPage] = useState(0)
-    const [loaded, setLoaded] = useState(null)
-    const [retry, setRetry] = useState(0)
     const listRef = useRef(null)
 
     const rows = useMemo(() => {
@@ -85,18 +85,16 @@ export default function MergeTables() {
     const start = currentPage * mergePageSize
     const end = Math.min(start + mergePageSize, rows.length)
     const visibleRows = useMemo(() => rows.slice(start, end), [rows, start, end])
-    useEffect(() => {
-        let cancelled = false
-        loadMergePage(visibleRows.map(row => row.e)).then(
-            entities => { if (!cancelled) setLoaded({ rows: visibleRows, entities }) },
-            error => { if (!cancelled) setLoaded({ rows: visibleRows, error }) })
-        return () => { cancelled = true }
-    }, [visibleRows, retry])
-    const current = loaded?.rows === visibleRows ? loaded : null
+    const { data, error, retry } = usePageData(loadRows, visibleRows)
     const goToPage = (next) => {
         setPage(next)
         if (listRef.current) listRef.current.scrollTop = 0
     }
+    const pagination = <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", margin: "0.5rem 0", fontSize: 13, color: "#666" }}>
+        <span>Showing {rows.length ? `${start + 1}–${end}` : "0"} of {rows.length} matching entities (page {currentPage + 1} of {pageCount}).</span>
+        {currentPage > 0 && <button onClick={() => goToPage(currentPage - 1)}>Previous</button>}
+        {currentPage + 1 < pageCount && <button onClick={() => goToPage(currentPage + 1)}>Next</button>}
+    </div>
 
     return (
         <div className="page" style={{ boxSizing: "border-box", display: "flex", flexDirection: "column", height: "100%" }}>
@@ -138,20 +136,17 @@ export default function MergeTables() {
                     <span style={{ color: "#06c" }}> · see details</span>
                 </button>
             </div>
-            <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", margin: "0.5rem 0", fontSize: 13, color: "#666" }}>
-                <span>Showing {rows.length ? `${start + 1}–${end}` : "0"} of {rows.length} matching entities (page {currentPage + 1} of {pageCount}).</span>
-                {currentPage > 0 && <button onClick={() => goToPage(currentPage - 1)}>Previous</button>}
-                {currentPage + 1 < pageCount && <button onClick={() => goToPage(currentPage + 1)}>Next</button>}
-            </div>
+            {pagination}
             <div ref={listRef} style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
-                {!current && <p>Loading…</p>}
-                {current?.error && <p>{current.error.message}{" "}<button onClick={() => setRetry(n => n + 1)}>Retry</button></p>}
-                {current?.entities?.map((entity, position) => {
+                {!data && !error && <p>Loading…</p>}
+                {error && <p>{error.message}{" "}<button onClick={retry}>Retry</button></p>}
+                {data?.map((entity, position) => {
                     const { depth } = visibleRows[position]
                     return <div key={entity.iri} style={depth ? { marginLeft: `${depth * 1.5}rem`, borderLeft: "2px solid #e0e0e0", paddingLeft: "0.75rem" } : undefined}>
                         <EntityCard entity={entity} compact={compact} highlight={highlight} resolutionOf={resolutionOf} />
                     </div>
                 })}
+                {data && pagination}
             </div>
         </div>
     )

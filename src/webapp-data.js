@@ -1,7 +1,7 @@
 // Compact browser indexes, detail chunks and request caching.
 import { CDP, shrink } from "./utils.js"
 
-export const WEBAPP_DATA_VERSION = 2
+export const WEBAPP_DATA_VERSION = 3
 
 export const webappChunkingEnabled = (quads) => quads.some(q =>
     q.subject.value === `${CDP}federation` && q.predicate.value === `${CDP}webappChunking`
@@ -19,6 +19,18 @@ const expandIri = (iri, prefixes) => {
     return namespace ? namespace + iri.slice(colon + 1) : iri
 }
 
+// Directory groups follow :hasTargetSchema order; undeclared types come last.
+export function directoryComparator(config, prefixes) {
+    const classes = new Map(config.filter(q => q.predicate.value === `${CDP}targetClass`)
+        .map(q => [q.subject.value, shrink(q.object.value, prefixes)]))
+    const schemas = config.filter(q => q.subject.value === `${CDP}federation`
+        && q.predicate.value === `${CDP}hasTargetSchema`).map(q => q.object.value)
+    const order = new Map(schemas.map((schema, position) => [classes.get(schema), position])
+        .filter(([type]) => type !== undefined))
+    return (a, b) => (order.get(a.type) ?? schemas.length) - (order.get(b.type) ?? schemas.length)
+        || a.iri.localeCompare(b.iri)
+}
+
 // Index rows: IRI, type, sources, record count, conflict count, parents, chunk.
 export function decodeMergeIndex(index) {
     const expand = iri => expandIri(iri, index.prefixes)
@@ -31,9 +43,40 @@ export function decodeMergeIndex(index) {
     }))
 }
 
+// Directory entries reference the shared entity table, with their resolved type.
+export function decodeDirectoryIndex(index) {
+    const sources = index.sources.map(source => expandIri(source, index.prefixes))
+    return index.directory.map(([position, type], offset) => {
+        const row = index.entities[position]
+        return { iri: expandIri(row[0], index.prefixes), type: index.types[type],
+            sources: row[2].map(source => sources[source]), chunk: Math.floor(offset / index.chunkSize) }
+    })
+}
+
+// Match metadata includes every cluster and relationship; details stay in chunks.
+export function decodeMatchIndex(index) {
+    const nodes = index.entities.map(([iri, type, memberCount, chunk]) => ({
+        id: expandIri(iri, index.prefixes), iri: expandIri(iri, index.prefixes),
+        type: index.types[type], memberCount, chunk, isCluster: true,
+    }))
+    return { nodes, edges: index.edges.map(([from, to]) => ({ from: nodes[from].id, to: nodes[to].id, rel: true })) }
+}
+
+export function decodeMatchChunk(rows, index) {
+    const expand = iri => expandIri(iri, index.prefixes)
+    return rows.map(([position, label, records]) => ({
+        iri: expand(index.entities[position][0]), label,
+        type: index.types[index.entities[position][1]],
+        records: records.map(([iri, source, identifier, values]) => ({
+            iri: expand(iri), source: index.sources[source] ? expand(index.sources[source]) : undefined,
+            identifier, values,
+        })),
+    }))
+}
+
 // Card rows: IRI, type, columns, fields. Values reference their record columns;
 // a one-item array marks an abbreviated IRI, while strings remain literal text.
-export function encodeMergeChunk(entities, index) {
+export function encodeEntityChunk(entities, index) {
     const compact = iri => compactIri(iri, index.prefixes)
     const sources = new Map(index.sources.map((source, position) => [expandIri(source, index.prefixes), position]))
     const types = new Map(index.types.map((type, position) => [type, position]))
@@ -58,7 +101,7 @@ export function encodeMergeChunk(entities, index) {
     })
 }
 
-export function decodeMergeChunk(rows, index) {
+export function decodeEntityChunk(rows, index) {
     const expand = iri => expandIri(iri, index.prefixes)
     const display = iri => shrink(iri, index.prefixes)
     const sources = index.sources.map(expand)
@@ -90,7 +133,7 @@ export function decodeMergeChunk(rows, index) {
     })
 }
 
-export function createMergeChunkLoader(readChunk) {
+export function createChunkLoader(readChunk) {
     const pending = new Map()
     const load = (chunk) => {
         if (!pending.has(chunk)) pending.set(chunk, Promise.resolve().then(() => readChunk(chunk))
@@ -103,7 +146,7 @@ export function createMergeChunkLoader(readChunk) {
         const loaded = new Map(await Promise.all(chunks.map(async chunk => [chunk, await load(chunk)])))
         return summaries.map(summary => {
             const entity = loaded.get(summary.chunk).get(summary.iri)
-            if (!entity) throw new Error(`Merge chunk is missing ${summary.iri}`)
+            if (!entity) throw new Error(`Page chunk is missing ${summary.iri}`)
             return entity
         })
     }

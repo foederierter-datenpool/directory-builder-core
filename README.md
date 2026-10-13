@@ -221,19 +221,21 @@ The webapp ships with the package; it fetches an instance's `config/` +
 webapp code. Only the small federation config, catalog and About content load
 at startup; each page fetches its own artifacts when opened. The pipeline writes
 `data/pipeline/entity-sources.json` so Directory can filter by source without
-downloading per-triple provenance. Directory and Merge show 100 cards at a time.
+downloading per-triple provenance. Directory and Merge page by 100. Directory
+groups entities in `:hasTargetSchema` order, then by entity IRI within each type.
 Match keeps its full graph for up to 500 clusters and pages larger graphs in
 related groups. Maps with more than 1,000 geocoded
 addresses ask for a postal code prefix before drawing markers.
 
 For large instances, add `:federation :webappChunking true .` to
 `config/federation.ttl` and rerun federation. After validation, the pipeline
-adds a compact index and Merge detail chunks under `data/webapp/`. Merge loads
-only the chunks needed for its current page and reuses them when revisited.
+adds compact indexes and detail chunks for Directory, Match and Merge under
+`data/webapp/`. Each view loads only the details it displays and reuses visited
+chunks. Match keeps the complete relationship index for connected-group paging.
 Existing pipeline artifacts remain complete and unchanged for downloads and APIs.
 Omit the setting or use `false` to load the full RDF files; the next federation
 run removes the generated chunks. Snapshots without a compatible index also
-use the full RDF files. Match continues to use its complete RDF inputs.
+use the full RDF files.
 
 From an instance directory:
 

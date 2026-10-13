@@ -1,103 +1,26 @@
-// Match view: one lane per target schema, each preceded by a tinted "source
-// duplications" column (which source records merged onto the entity), plus the
-// cross-lane :hasRelationship edges between merged entities. All structure — lanes,
-// order, colours, titles, relationships — is derived from federation.ttl inside
-// loadMatch.js; this file only adds node text labels, the stats line and the modal.
-// Reads:  data/pipeline/{matches,merged,mapped}.ttl, config/{federation,curation}.ttl
-// Does:   renders the Match page (<ColumnGraph> + per-cluster details modal)
+// Match draws and lays out the visible connected groups; cluster details include their match criteria.
 
-import { displayPrefixes, federationTtl, fetchTexts } from "./instanceData.js"
-import { loadSourceMeta, loadSourceOfRecord } from "./sourceMeta.js"
-import { CDP, groupBySubject, NAMESPACES, parseTtl, PATHS, shrink } from "@directory-builder/core/utils"
+import { displayPrefixes, federationTtl } from "./instanceData.js"
+import { loadSourceMeta } from "./sourceMeta.js"
+import { NAMESPACES, shrink } from "@directory-builder/core/utils"
 import React, { useEffect, useMemo, useState } from "react"
 import ColumnGraph from "./ColumnGraph.jsx"
 import CheckboxDropdown from "./CheckboxDropdown.jsx"
 import HelpTip from "./HelpTip.jsx"
 import Modal from "./Modal.jsx"
-import { loadMatch, matchPages, readSchemas, sliceMatch } from "./loadMatch.js"
+import { buildMatchGraph, matchPages } from "@directory-builder/core/match-view"
+import { allLanes, criteriaByTarget, distinctPairs, loadMatchPage, manualPairs, matchData, matchPageSize } from "./matchEntities.js"
+import { usePageData } from "./usePageData.js"
 
-const SCHEMA_IDENTIFIER = `${NAMESPACES.schema}identifier`
-const SCHEMA_NAME = `${NAMESPACES.schema}name`
-const SCHEMA_STREET = `${NAMESPACES.schema}streetAddress`   // link-cell fallback for addresses (no name)
 const CDF_NS = NAMESPACES.cdf
-const HARD_CRITERION = `${CDP}hasHardCriterion`
-const WEIGHTED_CRITERION = `${CDP}hasWeightedCriterion`
-const ON = `${CDP}on`
-const FOR_TARGET = `${CDP}forTarget`
-const OWL_SAME_AS = `${NAMESPACES.owl}sameAs`
-const OWL_DIFFERENT_FROM = `${NAMESPACES.owl}differentFrom`
-const PAGE_SIZE = 80
 const FULL_VIEW_LIMIT = 500
-
-const [curationTtl, mappedTtl, matchesTtl, mergedTtl] = await fetchTexts([
-    PATHS.curation, PATHS.mapped, PATHS.matches, PATHS.merged,
-])
-
-const prefixed = (iri) => shrink(iri, displayPrefixes)
-
-// Label each source member with its :Source notation, resolved via cdp:fromSource.
+const prefixed = iri => shrink(iri, displayPrefixes)
 const sourceMeta = loadSourceMeta(federationTtl)
-const sourceOfRecord = loadSourceOfRecord(mappedTtl)
-const sourceCode = (iri) => { const s = sourceOfRecord.get(iri); return (s && sourceMeta.get(s)?.notation) || "?" }
-const sourceLabel = (iri) => { const s = sourceOfRecord.get(iri); return (s && sourceMeta.get(s)?.label) || sourceCode(iri) }
+const schemaOfLane = new Map(allLanes.map(lane => [lane.key, lane.schema]))
 
-// Map<targetSchemaIri, [criterionPredicateIri]> — each match rule's own :on predicates,
-// scoped to the schema it's :forTarget of. Match rules are per-schema (Träger vs.
-// Einrichtung vs. Angebot each have their own), so a cluster's modal must only show
-// its own rule's criteria — pooling every rule's fields together mislabels a Service
-// as missing postalCode/streetAddress it was never supposed to have.
-const criteriaByTarget = (() => {
-    const quads = parseTtl(federationTtl)
-    const targetOfRule = new Map()
-    const ruleOfCriterion = new Map()
-    for (const q of quads) {
-        if (q.predicate.value === FOR_TARGET) targetOfRule.set(q.subject.value, q.object.value)
-        else if (q.predicate.value === HARD_CRITERION || q.predicate.value === WEIGHTED_CRITERION) ruleOfCriterion.set(q.object.value, q.subject.value)
-    }
-    const byTarget = new Map()
-    for (const q of quads) {
-        if (q.predicate.value !== ON) continue
-        const target = targetOfRule.get(ruleOfCriterion.get(q.subject.value))
-        if (!target) continue
-        if (!byTarget.has(target)) byTarget.set(target, [])
-        byTarget.get(target).push(q.object.value)
-    }
-    return byTarget
-})()
-
-const allLanes = readSchemas(federationTtl).lanes
-const schemaOfLane = new Map(allLanes.map((l) => [l.key, l.schema]))
-
-const mappedQuads = parseTtl(mappedTtl)
-// Map<recordIri, Map<predIri, [literalValue]>> for the per-member details modal.
-const entityInfo = groupBySubject(mappedQuads, { literalsOnly: true })
-// Map<recordIri, Map<predIri, targetIri>> — relationship criteria (e.g. schema:provider)
-// point at another record rather than holding a literal; resolve them to that record's
-// name instead of leaving the cell blank.
-const relInfo = new Map()
-for (const q of mappedQuads) {
-    if (q.object.termType !== "NamedNode") continue
-    if (!relInfo.has(q.subject.value)) relInfo.set(q.subject.value, new Map())
-    relInfo.get(q.subject.value).set(q.predicate.value, q.object.value)
-}
-const cellValue = (iri, p) => {
-    const own = entityInfo.get(iri)?.get(p)?.[0]
-    if (own != null) return own
-    const target = relInfo.get(iri)?.get(p)
-    if (!target) return undefined
-    const t = entityInfo.get(target)
-    return t?.get(SCHEMA_NAME)?.[0] ?? t?.get(SCHEMA_STREET)?.[0] ?? prefixed(target)
-}
-
-const manualPairs = parseTtl(curationTtl)
-    .filter(q => q.predicate.value === OWL_SAME_AS)
-    .map(q => [q.subject.value, q.object.value])
-
-const distinctPairs = parseTtl(curationTtl)
-    .filter(q => q.predicate.value === OWL_DIFFERENT_FROM)
-    .map(q => [q.subject.value, q.object.value])
-
-function MemberDetailsModal({ clusterId, memberIris, type, onClose }) {
+function MemberDetailsModal({ cluster, onClose }) {
+    const { iri: clusterId, type, records } = cluster
+    const memberIris = records.map(record => record.iri)
     const memberSet = new Set(memberIris)
     const manualHere = manualPairs.filter(([a, b]) => memberSet.has(a) && memberSet.has(b))
     const distinctHere = distinctPairs.filter(([a, b]) => memberSet.has(a) || memberSet.has(b))
@@ -109,16 +32,16 @@ function MemberDetailsModal({ clusterId, memberIris, type, onClose }) {
                         ? "Showing this schema's match criteria fields only, not the full record."
                         : "This schema's match rule declares no criteria: nothing to show per member."}
                 </div>
-                {memberIris.map((iri) => {
+                {records.map(({ iri, values }) => {
                     return (
                         <div key={iri} style={{ marginBottom: 14 }}>
                             <div style={{ fontSize: 11, color: "#666", marginBottom: 4 }}><code>{prefixed(iri)}</code></div>
                             <table style={{ borderCollapse: "collapse", fontSize: 12, width: "100%" }}>
                                 <tbody>
-                                    {criteria.map((p) => (
+                                    {criteria.map((p, position) => (
                                         <tr key={p}>
                                             <td style={{ padding: "2px 8px", color: "#555", whiteSpace: "nowrap", verticalAlign: "top", width: 1 }}>{prefixed(p)}</td>
-                                            <td style={{ padding: "2px 8px" }}>{cellValue(iri, p) ?? <span style={{ color: "#bbb" }}>—</span>}</td>
+                                            <td style={{ padding: "2px 8px" }}>{values[position] ?? <span style={{ color: "#bbb" }}>—</span>}</td>
                                         </tr>
                                     ))}
                                 </tbody>
@@ -159,35 +82,39 @@ export default function MatchGraph() {
     const [page, setPage] = useState(0)
     useEffect(() => setPage(0), [showDuplications, show1to1, activeLanes])
 
-    const full = useMemo(() => loadMatch(federationTtl, matchesTtl, mergedTtl,
-        { showDuplications, show1to1, activeLanes, layoutLimit: FULL_VIEW_LIMIT }), [showDuplications, show1to1, activeLanes])
-    const pages = useMemo(() => {
-        const count = full.nodes.filter((node) => node.isCluster).length
-        return count > FULL_VIEW_LIMIT ? matchPages(full.nodes, full.edges, PAGE_SIZE) : null
-    }, [full])
-    const { nodes, edges, members, clusterOf, clusterType, columns, colors, columnTitles, columnBands, columnHeaderStyle, nodeY, totalClusters } = useMemo(() => {
-        const r = pages ? sliceMatch(full, new Set(pages[page] ?? pages[0])) : full
-        const clusterOf = new Map()
-        for (const [c, ms] of r.members) for (const m of ms) clusterOf.set(m, c)
-        const clusterType = new Map(r.nodes.filter((n) => n.isCluster).map((n) => [n.id, n.type]))
-        for (const n of r.nodes) {
-            if (n.isCluster) n.subtitle = n.id.startsWith(CDF_NS) ? `cdf:${n.id.slice(CDF_NS.length)}` : prefixed(n.id)
-            else {                                     // a source (dedup) node
-                n.label = sourceLabel(n.id)             // full source name; ColumnGraph clamps to 2 lines
-                n.subtitle = entityInfo.get(n.id)?.get(SCHEMA_IDENTIFIER)?.[0]
+    const full = useMemo(() => buildMatchGraph(matchData,
+        { activeLanes, layoutLimit: 0 }), [activeLanes])
+    const pages = useMemo(() => full.nodes.length > FULL_VIEW_LIMIT
+        ? matchPages(full.nodes, full.edges, matchPageSize) : null, [full])
+    const currentPage = Math.min(page, (pages?.length ?? 1) - 1)
+    const visible = useMemo(() => {
+        if (!pages) return full.nodes
+        const ids = new Set(pages[currentPage])
+        return full.nodes.filter(node => ids.has(node.id))
+    }, [full, pages, currentPage])
+    const { data: details, error, retry } = usePageData(loadMatchPage, visible)
+    const graph = useMemo(() => {
+        if (!details) return null
+        const members = new Map(details.map(cluster => [cluster.iri, cluster.records.map(record => record.iri)]))
+        const records = new Map(details.flatMap(cluster => cluster.records.map(record => [record.iri, record])))
+        const nodes = details.map(cluster => ({ id: cluster.iri, type: cluster.type, label: cluster.label, isCluster: true }))
+        const result = buildMatchGraph({ ...matchData, nodes, members }, { showDuplications, show1to1, activeLanes })
+        for (const node of result.nodes) {
+            if (node.isCluster) node.subtitle = node.id.startsWith(CDF_NS) ? `cdf:${node.id.slice(CDF_NS.length)}` : prefixed(node.id)
+            else {
+                const record = records.get(node.id)
+                node.label = sourceMeta.get(record.source)?.label ?? sourceMeta.get(record.source)?.notation ?? "?"
+                node.subtitle = record.identifier
             }
         }
-        // Drop columns that ended up empty (schemas with no source duplication when
-        // collapsed) so they don't leave a blank tinted band.
-        const columns = r.columns.filter((c) => r.nodes.some((n) => n.type === c))
-        return { ...r, clusterOf, clusterType, columns,
-            totalClusters: full.nodes.filter((node) => node.isCluster).length }
-    }, [full, pages, page])
-
+        // Empty source columns should not leave blank tinted bands.
+        result.columns = result.columns.filter(column => result.nodes.some(node => node.type === column))
+        return result
+    }, [details, showDuplications, show1to1, activeLanes])
     const handleNodeClick = (_, node) => {
-        if (node.id.startsWith("__")) return            // header / band decoration
-        const cid = members.has(node.id) ? node.id : clusterOf.get(node.id)
-        if (cid) setOpenCluster({ clusterId: cid, memberIris: members.get(cid) ?? [], type: clusterType.get(cid) })
+        if (node.id.startsWith("__")) return
+        const cluster = details?.find(cluster => cluster.iri === node.id || cluster.records.some(record => record.iri === node.id))
+        if (cluster) setOpenCluster(cluster)
     }
 
     return (
@@ -220,18 +147,18 @@ export default function MatchGraph() {
                     Show 1:1 clusters
                 </label>
                 <span style={{ color: "#666" }}>{pages
-                    ? `${nodes.filter((node) => node.isCluster).length} of ${totalClusters} clusters (page ${page + 1} of ${pages.length})`
-                    : `${totalClusters} clusters`}</span>
-                {pages && page > 0 && <button onClick={() => setPage(n => n - 1)}>Previous</button>}
-                {pages && page + 1 < pages.length && <button onClick={() => setPage(n => n + 1)}>Next</button>}
+                    ? `${visible.length} of ${full.nodes.length} clusters (page ${currentPage + 1} of ${pages.length})`
+                    : `${full.nodes.length} clusters`}</span>
+                {pages && currentPage > 0 && <button onClick={() => setPage(currentPage - 1)}>Previous</button>}
+                {pages && currentPage + 1 < pages.length && <button onClick={() => setPage(currentPage + 1)}>Next</button>}
             </div>
             <div style={{ flex: 1, minHeight: 0 }}>
-                <ColumnGraph key={`${showDuplications}-${show1to1}-${[...activeLanes].join()}-${page}`} nodes={nodes} edges={edges}
-                    columns={columns} colors={colors} nodeY={nodeY}
-                    columnTitles={columnTitles} columnBands={columnBands} columnHeaderStyle={columnHeaderStyle}
-                    nodeWidth={150} colSpacing={236} onNodeClick={handleNodeClick} />
+                {!graph && !error && <p>Loading…</p>}
+                {error && <p>{error.message}{" "}<button onClick={retry}>Retry</button></p>}
+                {graph && <ColumnGraph key={`${showDuplications}-${show1to1}-${[...activeLanes].join()}-${currentPage}`} {...graph}
+                    nodeWidth={150} colSpacing={236} onNodeClick={handleNodeClick} />}
             </div>
-            {openCluster && <MemberDetailsModal clusterId={openCluster.clusterId} memberIris={openCluster.memberIris} type={openCluster.type} onClose={() => setOpenCluster(null)} />}
+            {openCluster && <MemberDetailsModal cluster={openCluster} onClose={() => setOpenCluster(null)} />}
         </div>
     )
 }

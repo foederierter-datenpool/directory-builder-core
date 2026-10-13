@@ -21,7 +21,8 @@
     "./utils": "./src/utils.js",
     "./fetch": "./src/fetch/index.js",
     "./merge-view": "./src/merge-view.js",
-    "./webapp-data": "./src/webapp-data.js"
+    "./webapp-data": "./src/webapp-data.js",
+    "./match-view": "./src/match-view.js"
   },
   "publishConfig": {
     "access": "public"
