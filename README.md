@@ -224,8 +224,8 @@ at startup; each page fetches its own artifacts when opened. The pipeline writes
 downloading per-triple provenance. Directory and Merge page by 100. Directory
 groups entities in `:hasTargetSchema` order, then by entity IRI within each type.
 Match keeps its full graph for up to 500 clusters and pages larger graphs in
-related groups. Maps with more than 1,000 geocoded
-addresses ask for a postal code prefix before drawing markers.
+related groups. Maps show all geocoded addresses, with an optional postal code
+prefix filter. Markers use a shared canvas and build tooltips when opened.
 
 For large instances, add `:federation :webappChunking true .` to
 `config/federation.ttl` and rerun federation. After validation, the pipeline

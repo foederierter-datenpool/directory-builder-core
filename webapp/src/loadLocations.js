@@ -12,11 +12,10 @@ const TO_TARGET_FIELD = `${CDP}toTargetField`
 const TO_TARGET_SCHEMA = `${CDP}toTargetSchema`
 const POSTAL_ADDRESS = `${SCHEMA}PostalAddress`
 
-export function selectMapLocations(locations, postalPrefix, maxMarkers) {
-    const matching = postalPrefix
+export function selectMapLocations(locations, postalPrefix) {
+    return postalPrefix
         ? locations.filter(location => location.postalCode?.startsWith(postalPrefix))
-        : locations.length > maxMarkers ? [] : locations
-    return { matching, shown: matching.slice(0, maxMarkers) }
+        : locations
 }
 
 const objectValue = (quads, subject, predicate) => quads

@@ -28,10 +28,11 @@ test("map groups entities under their geocoded address", () => {
         ':place a schema:Organization ; schema:name "Example Place" ; schema:address :address .')
 })
 
-test("large maps require a postal code filter and never render more than the marker limit", () => {
-    const locations = Array.from({ length: 1001 }, (_, i) => ({ postalCode: i < 500 ? "10115" : "50667" }))
-    assert.equal(selectMapLocations(locations, "", 1000).shown.length, 0)
-    assert.equal(selectMapLocations(locations, "10", 1000).shown.length, 500)
-    assert.equal(selectMapLocations(locations, "5", 100).shown.length, 100)
-    assert.equal(selectMapLocations(locations.slice(0, 2), "", 1000).shown.length, 2)
+test("maps show every address by default and keep all postcode matches", () => {
+    const locations = Array.from({ length: 30000 }, (_, i) => ({ postalCode: i < 15000 ? "10115" : "50667" }))
+    locations.push({})
+    assert.equal(selectMapLocations(locations, "").length, 30001)
+    assert.equal(selectMapLocations(locations, "10").length, 15000)
+    assert.equal(selectMapLocations(locations, "5").length, 15000)
+    assert.deepEqual(selectMapLocations(locations, "99"), [])
 })

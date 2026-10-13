@@ -16,7 +16,6 @@ const markerOptions = {
     fillColor: "#3b82f6",
     fillOpacity: 0.8,
 }
-const MAX_MARKERS = 1000
 
 function tooltipFor(entities) {
     const tooltip = document.createElement("div")
@@ -69,8 +68,7 @@ export default function LocationMap() {
     const [selected, setSelected] = useState(null)
     const [selectedEntity, setSelectedEntity] = useState(null)
     const [postalPrefix, setPostalPrefix] = useState("")
-    const needsFilter = locations.length > MAX_MARKERS
-    const { matching, shown } = useMemo(() => selectMapLocations(locations, postalPrefix, MAX_MARKERS), [postalPrefix])
+    const shown = useMemo(() => selectMapLocations(locations, postalPrefix), [postalPrefix])
 
     useEffect(() => {
         if (!container.current || !shown.length) return
@@ -85,7 +83,7 @@ export default function LocationMap() {
             const point = [location.latitude, location.longitude]
             const marker = L.circleMarker(point, { ...markerOptions, renderer })
             marker.addTo(map)
-            marker.bindTooltip(tooltipFor(location.entities))
+            marker.bindTooltip(() => tooltipFor(location.entities))
             marker.on("click", () => {
                 setSelected(location)
                 setSelectedEntity(null)
@@ -100,17 +98,15 @@ export default function LocationMap() {
         <div className="location-map-page">
             {locations.length > 0 && <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginBottom: "0.75rem", fontSize: 13 }}>
                 <label>Postal code prefix:{" "}
-                    <input value={postalPrefix} maxLength={5} inputMode="numeric" placeholder="e.g. 10"
+                    <input value={postalPrefix} maxLength={5} inputMode="numeric" placeholder="All postal codes"
                         onChange={e => { setPostalPrefix(e.target.value.replace(/\D/g, "")); setSelected(null); setSelectedEntity(null) }} />
                 </label>
-                <span>{shown.length} shown of {locations.length} geocoded addresses{postalPrefix ? ` (${matching.length} match)` : ""}.</span>
+                <span>{shown.length} shown of {locations.length} geocoded addresses.</span>
             </div>}
             {shown.length > 0
                 ? <div ref={container} className="location-map" aria-label={`Map of ${shown.length} geocoded addresses`} />
                 : <p>{locations.length === 0 ? "No geocoded addresses are available."
-                    : needsFilter && !postalPrefix ? "Enter a postal code prefix to show addresses on the map."
                     : "No addresses match this postal code prefix."}</p>}
-            {matching.length > MAX_MARKERS && <p>Showing the first {MAX_MARKERS} matches. Enter more postal code digits to narrow the map.</p>}
             {selected && !selectedEntity && (
                 <AddressModal location={selected} onClose={() => setSelected(null)} onSelectEntity={setSelectedEntity} />
             )}
