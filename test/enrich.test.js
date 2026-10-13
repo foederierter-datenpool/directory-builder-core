@@ -383,6 +383,29 @@ test("required local geocoding fails before public fallback", async (t) => {
     assert.equal(fetch.mock.callCount(), 3)
 })
 
+test("temporary geocoder errors retry locally without caching a miss or using the public service", async (t) => {
+    geocodeEnvironment(t, { GEOCODE_ENDPOINT: "http://localhost:8088/search", GEOCODE_REQUIRE_LOCAL: "true" })
+    const delays = []
+    t.mock.method(globalThis, "setTimeout", (callback, delay) => {
+        delays.push(delay)
+        return setImmediate(callback)
+    })
+    const fixture = addressFixture("geocache-temporary-error")
+    let searches = 0
+    t.mock.method(globalThis, "fetch", async (url) => {
+        assert.equal(new URL(url).hostname, "localhost")
+        if (new URL(url).pathname === "/status") return { ok: true, json: async () => ({ status: 0 }) }
+        if (++searches === 1) return { ok: false, status: 503 }
+        return { ok: true, json: async () => [{ lat: "52.5", lon: "13.4" }] }
+    })
+    await fixture.run(postalAddress(1))
+    assert.equal(searches, 2)
+    assert.deepEqual(delays, [1100])
+    const entries = Object.values(fixture.cache().entries)
+    assert.equal(entries.length, 1)
+    assert.equal(entries[0].lat, "52.5")
+})
+
 test("cached misses retry after endpoint or dataset changes, while successful coordinates remain reusable", async (t) => {
     geocodeEnvironment(t, { GEOCODE_ENDPOINT: "http://localhost:8088/search", GEOCODE_DATASET: "berlin" })
     const query = { street: "Teststraße 1", postalcode: "10115", city: "Berlin", country: "DE" }
@@ -607,12 +630,13 @@ test("local Nominatim fills the cache, retains partial results on failure, and p
     assert.equal(partial.length, 1, "the completed address survives a later failure")
     assert.equal(partial[0].endpoint, endpoint)
     assert.equal(partial[0].dataUpdated, "2026-10-02T19:38:48+00:00")
-    assert.equal(fallbacks, 1)
+    assert.equal(fallbacks, 3)
     assert.equal(fs.existsSync(path.join(fixture.root, PATHS.final)), false, "failed enrichment does not publish partial output")
 
     unavailable = false
     await fixture.run(addresses)
-    assert.deepEqual(requests.map((url) => url.searchParams.get("street")), ["Teststraße 1", "Teststraße 2", "Teststraße 2"])
+    assert.deepEqual(requests.map((url) => url.searchParams.get("street")),
+        ["Teststraße 1", "Teststraße 2", "Teststraße 2", "Teststraße 2", "Teststraße 2"])
     assert.ok(requests.every((url) => url.pathname === "/search" && url.searchParams.get("format") === "jsonv2"
         && url.searchParams.get("country") === "DE" && url.searchParams.get("limit") === "1"))
     assert.equal(geoOf(fixture.root).subjects.length, 3)

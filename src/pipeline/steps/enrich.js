@@ -164,7 +164,11 @@ const lookup = async (query, endpoint) => {
     const res = await fetch(url, {
         headers: { "User-Agent": USER_AGENT }, signal: AbortSignal.timeout(60_000), redirect: "error",
     })
-    if (!res.ok) throw new Error(`Nominatim answered ${res.status} for ${url}`)
+    if (!res.ok) {
+        const error = new Error(`Nominatim answered ${res.status} for ${url}`)
+        error.status = res.status
+        throw error
+    }
     const results = await res.json()
     if (!Array.isArray(results)) throw new Error(`Invalid Nominatim response from ${endpoint}`)
     const [best] = results
@@ -288,10 +292,18 @@ const geocode = async ({ abs }, quads, targetClasses, cachePath) => {
     const throttled = async (query, { endpoint }) => {
         // Apply the public floor even after switching away from a fast local service.
         const delay = isPublicNominatim(endpoint) ? Math.max(THROTTLE_MS, options.delay) : options.delay
-        if (requestedEndpoints.has(endpoint) && delay) await sleep(delay)
-        requestedEndpoints.add(endpoint)
-        lookups++
-        return lookup(query, endpoint)
+        for (let attempt = 1; ; attempt++) {
+            if (requestedEndpoints.has(endpoint) && delay) await sleep(delay)
+            requestedEndpoints.add(endpoint)
+            lookups++
+            try {
+                return await lookup(query, endpoint)
+            } catch (error) {
+                if (![502, 503, 504].includes(error.status) || attempt === 3) throw error
+                console.warn(`enrich: Nominatim HTTP ${error.status}; retrying (${attempt}/2)`)
+                await sleep(THROTTLE_MS * attempt)
+            }
+        }
     }
     const lookupAddress = async (query, selected) => {
         let { lat, lon } = await throttled(query, selected)
