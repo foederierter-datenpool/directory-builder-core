@@ -28,10 +28,12 @@ services:
       POSTGRES_AUTOVACUUM_WORK_MEM: 128MB
       POSTGRES_WORK_MEM: 16MB
       POSTGRES_EFFECTIVE_CACHE_SIZE: 4GB
+      POSTGRES_MAX_WAL_SIZE: 4GB
     volumes:
       - database:/var/lib/postgresql/16/main
       - project:/nominatim
       - ./osm2pgsql.sh:/app/directory-osm2pgsql.sh:ro
+      - ./postgres-import.conf:/etc/postgresql/16/main/conf.d/postgres-import.conf.disabled:ro
     healthcheck:
       test: ["CMD", "curl", "--fail", "--silent", "http://localhost:8080/status"]
       timeout: 10s

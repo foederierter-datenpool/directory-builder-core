@@ -20,6 +20,10 @@ The `osm2pgsql.sh` wrapper caps the node cache at `OSM2PGSQL_CACHE_MB` (default
 2048 MB), since automatic sizing can exceed the container limit. The defaults
 use two import threads, four CPUs and one API worker.
 
+`postgres-import.conf` keeps PostgreSQL's crash protection enabled during import
+so it can recover after a Docker or host crash. This can slow the import;
+a larger write-ahead log reduces checkpoint overhead.
+
 For a 16 GB laptop, allocate about 10 GB to Docker Desktop and keep the
 container's 8 GB limit. Stop other heavy containers during import. The
 [Germany extract](https://download.geofabrik.de/europe/germany.html) is about
@@ -190,8 +194,11 @@ docker compose up -d
 A completed database survives stop/start, container recreation and ordinary
 `docker compose down`. Startup is manual (no automatic restart policy).
 
-An **interrupted initial import restarts from scratch** on the next start.
-Inspect logs and fix disk or memory pressure before retrying.
+An **interrupted initial import restarts from scratch on normal Docker startup**.
+Nominatim's [`--continue`](https://github.com/osm-search/Nominatim/blob/master/man/nominatim.1)
+can recover later stages manually, bypassing the image's initialization script.
+The initial OSM-reading stage cannot resume midway. Inspect logs and fix disk
+or memory pressure before retrying.
 
 For refreshed OSM data or a different region, use a new Compose project and
 complete its import before replacing the old service. A frozen database cannot
