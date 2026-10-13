@@ -11,8 +11,6 @@ export const fetchText = (path) => {
     return pending.get(path)
 }
 export const fetchTexts = (paths) => Promise.all(paths.map(fetchText))
-export const artifactExists = (path) => fetch(`${import.meta.env.BASE_URL}${path}`, { method: "HEAD" })
-    .then(res => res.ok).catch(() => false)
 
 export const federationTtl = await fetchText(PATHS.federation)
 

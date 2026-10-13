@@ -1,5 +1,5 @@
 // Download view: generated formats and exporters declared via :hasExporter.
-// Reads:  config/federation.ttl, data/pipeline/{final,provenance}.ttl, and
+// Reads:  config/federation.ttl, data/directory.ttl, and
 //         instance-owned modules at webapp/exporters/<name>.js
 // Does:   triggers a browser download — Turtle and JSON-LD as one graph file,
 //         JSON and CSV as a zip with one file per target schema, or an
@@ -9,14 +9,15 @@ import { storeFromTurtles } from "@foerderfunke/sem-ops-utils/core"
 import { turtleToJsonLdObj } from "@foerderfunke/sem-ops-utils/jsonld"
 import { sparqlSelect } from "@foerderfunke/sem-ops-utils/sparql"
 import { CDP, groupBySubject, localName, NAMESPACES, objectsOf, parseTtl, PATHS, shrink, subjectsOfType } from "@directory-builder/core/utils"
-import { artifactExists, displayPrefixes, federationTtl, fetchText } from "./instanceData.js"
+import { displayPrefixes, federationTtl, fetchText } from "./instanceData.js"
+import { fileSizes } from "virtual:instance-data-files"
 import { strToU8, zipSync } from "fflate"
 import HelpTip from "./HelpTip.jsx"
 import React, { useState } from "react"
 
 const RDF_TYPE = `${NAMESPACES.rdf}type`
 const RDFS_LABEL = `${NAMESPACES.rdfs}label`
-const provenanceAvailable = await artifactExists(PATHS.provenance)
+const provenanceAvailable = PATHS.provenance in fileSizes
 
 // The federation's target schemas in declaration order, each with its declared
 // fields — the schema definitions only, no instance data.
@@ -145,6 +146,8 @@ function triggerDownload(content, mime, filename) {
     URL.revokeObjectURL(url)
 }
 
+const formatMB = bytes => `${(bytes / 1e6).toFixed(1)} MB`
+
 // Exporters are instance code, not part of this app: the federation declares
 // them by name (:hasExporter "x" → webapp/exporters/x.js in the instance),
 // and each module exports { label, filename, mime, build }. Bare imports can't
@@ -226,11 +229,15 @@ export default function Download() {
                     </select>
                 </label>
                 <button onClick={onDownload}>Download</button>
+                {format === "ttl" && fileSizes[PATHS.final] != null && <span style={{ fontSize: 13, color: "#666" }}>
+                    {formatMB(fileSizes[PATHS.final])}
+                </span>}
             </div>
             {provenanceAvailable && (
                 <div style={{ marginTop: "0.75rem", fontSize: 13, color: "#888" }}>
                     Also available:{" "}
-                    <a href={`${import.meta.env.BASE_URL}${PATHS.provenance}`} download="provenance.ttl" style={{ color: "inherit" }}>provenance.ttl</a>, tracing each triple back to its source.
+                    <a href={`${import.meta.env.BASE_URL}${PATHS.provenance}`} download="provenance.ttl" style={{ color: "inherit" }}>provenance.ttl</a>
+                    {" "}({formatMB(fileSizes[PATHS.provenance])}), tracing each triple back to its source.
                 </div>
             )}
 

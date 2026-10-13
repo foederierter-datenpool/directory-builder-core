@@ -1,5 +1,6 @@
 import { existsSync, readFileSync, readdirSync, statSync } from "fs"
 import path from "path"
+import { PATHS } from "@directory-builder/core/utils"
 
 const DATA_FILES_MODULE = "virtual:instance-data-files"
 const RESOLVED_DATA_FILES_MODULE = `\0${DATA_FILES_MODULE}`
@@ -46,8 +47,12 @@ export function instanceDataIndex({ root = process.cwd() } = {}) {
             if (id === DATA_FILES_MODULE) return RESOLVED_DATA_FILES_MODULE
         },
         load(id) {
-            if (id === RESOLVED_DATA_FILES_MODULE)
-                return `export default ${JSON.stringify(instanceDataFiles(root))}`
+            if (id === RESOLVED_DATA_FILES_MODULE) {
+                const fileSizes = Object.fromEntries([PATHS.final, PATHS.provenance]
+                    .filter(file => existsSync(path.join(root, file)))
+                    .map(file => [file, statSync(path.join(root, file)).size]))
+                return `export default ${JSON.stringify(instanceDataFiles(root))};\nexport const fileSizes = ${JSON.stringify(fileSizes)};`
+            }
         },
         generateBundle() {
             const visit = (relative) => {
