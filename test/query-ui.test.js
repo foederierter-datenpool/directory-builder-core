@@ -2,6 +2,7 @@ import { buildSparnaturalConfig, buildSparnaturalQuery } from "../webapp/src/spa
 import { formatSparql } from "../webapp/src/formatSparql.js"
 import { readQueryExamples } from "../webapp/src/queryExamples.js"
 import { bindingsToJson } from "../webapp/src/queryResults.js"
+import { createQueryRunner } from "../webapp/src/queryRunner.js"
 import { queryEngine } from "@foerderfunke/sem-ops-utils/sparql"
 import { Store } from "n3"
 import { NAMESPACES, parseTtl } from "../src/utils.js"
@@ -11,6 +12,49 @@ import { test } from "node:test"
 const SH = "http://www.w3.org/ns/shacl#"
 const DASH = "http://datashapes.org/dash#"
 const CORE = "http://data.sparna.fr/ontologies/sparnatural-config-core#"
+
+test("Query loads the complete directory once on demand and keeps all SPARQL result types", async () => {
+    const turtle = `@prefix schema: <${NAMESPACES.schema}> . @prefix xsd: <${NAMESPACES.xsd}> .
+        <urn:service> schema:provider <urn:organisation> .
+        <urn:organisation> schema:name "Advice"@en ; schema:address <urn:address> .
+        <urn:address> schema:latitude "52.5"^^xsd:double .`
+    let reads = 0
+    const runner = createQueryRunner(async () => { reads++; return turtle })
+    const progress = []
+    assert.equal(reads, 0)
+    const [select, ask, hints] = await Promise.all([
+        runner.run(`SELECT ?name WHERE { <urn:service> <${NAMESPACES.schema}provider>/<${NAMESPACES.schema}name> ?name }`, status => progress.push(status)),
+        runner.run("ASK { <urn:address> ?p ?o }"),
+        runner.datatypes(),
+    ])
+    assert.equal(reads, 1)
+    assert.deepEqual(progress, ["Loading directory…", "Running query…"])
+    assert.deepEqual(JSON.parse(select.body).results.bindings, [{ name: { type: "literal", value: "Advice", "xml:lang": "en" } }])
+    assert.equal(JSON.parse(ask.body).boolean, true)
+    assert.equal(hints[`${NAMESPACES.schema}latitude`], `${NAMESPACES.xsd}double`)
+    progress.length = 0
+    const construct = await runner.run("CONSTRUCT { ?s ?p ?o } WHERE { ?s ?p ?o }", status => progress.push(status))
+    assert.deepEqual(progress, ["Running query…"])
+    assert.equal(construct.contentType, "text/turtle")
+    assert.equal(parseTtl(construct.body).length, 4)
+    await assert.rejects(runner.run("not SPARQL"))
+    assert.equal(JSON.parse((await runner.run("ASK {}")).body).boolean, true)
+    assert.equal(reads, 1)
+})
+
+test("Query retries a failed directory load", async () => {
+    let reads = 0
+    const progress = []
+    const report = status => progress.push(status)
+    const runner = createQueryRunner(async () => {
+        if (++reads === 1) throw new Error("fetch failed")
+        return '<urn:a> <urn:b> "c" .'
+    })
+    await assert.rejects(runner.run("ASK {}", report), /fetch failed/)
+    assert.equal(JSON.parse((await runner.run("ASK { ?s ?p ?o }", report)).body).boolean, true)
+    assert.deepEqual(progress, ["Loading directory…", "Loading directory…", "Running query…"])
+    assert.equal(reads, 2)
+})
 
 test("query results retain selected columns for empty and unbound results", async () => {
     const store = new Store(parseTtl('<https://example.org/entry> <http://schema.org/name> "Example" .'))

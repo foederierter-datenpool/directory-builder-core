@@ -1,31 +1,22 @@
-// Query view: Yasgui and Sparnatural wired to an in-browser n3 store.
-// Reads:  data/directory.ttl, config/federation.ttl, and the optional
-//         webapp/content/{query.sparql,query-examples.ttl}
-// Does:   renders prepared, textual and visual SPARQL queries; a fetch
-//         interceptor routes the fake endpoint through Comunica
+// Query opens the editor first; the complete directory loads on demand in a worker.
 
-import { storeFromTurtles } from "@foerderfunke/sem-ops-utils/core"
-import { queryEngine } from "@foerderfunke/sem-ops-utils/sparql"
 import { displayPrefixes, federationTtl, fetchTexts } from "./instanceData.js"
 import { PATHS } from "@directory-builder/core/utils"
 import { readQueryExamples } from "./queryExamples.js"
-import { bindingsToJson } from "./queryResults.js"
+import { queryRequest } from "./queryWorkerClient.js"
 import { buildSparnaturalConfig, buildSparnaturalQuery } from "./sparnaturalConfig.js"
 import HelpTip from "./HelpTip.jsx"
 import SparnaturalBuilder from "./SparnaturalBuilder.jsx"
 import React, { useCallback, useEffect, useRef, useState } from "react"
 import "@zazuko/yasgui/build/yasgui.min.css"
 import Yasgui from "@zazuko/yasgui"
-import { Writer } from "n3"
 
 // Yasgui talks to a SPARQL endpoint over HTTP. We have no endpoint — queries
 // run in-browser against an n3 Store. So we point Yasgui at this fake URL and
 // install a fetch interceptor that routes those requests through Comunica.
 const ENDPOINT = "http://local/sparql"
 const EDITOR_HEIGHT = "300px"
-const [finalTtl, queryExamplesTtl, querySparql] = await fetchTexts([PATHS.final, PATHS.queryExamples, PATHS.query])
-
-const store = storeFromTurtles([finalTtl])
+const [queryExamplesTtl, querySparql] = await fetchTexts([PATHS.queryExamples, PATHS.query])
 
 // Instances own the editor's starting query via webapp/content/query.sparql
 // (fetched at runtime like the About prose); plain select-all without one.
@@ -37,16 +28,9 @@ const QUERY_EXAMPLES = readQueryExamples(queryExamplesTtl)
     .filter((example) => example.query || example.visual)
 const TEXT_EXAMPLES = QUERY_EXAMPLES.filter((example) => example.query)
 const VISUAL_EXAMPLES = QUERY_EXAMPLES.filter((example) => example.visual)
-const SPARNATURAL_CONFIG = buildSparnaturalConfig(federationTtl, finalTtl)
+const HAS_VISUAL_BUILDER = Boolean(buildSparnaturalConfig(federationTtl))
 
 Yasgui.Yasqe.defaults.value = INITIAL_QUERY
-
-const collectQuadsAsTurtle = (stream) => new Promise((resolve, reject) => {
-    const writer = new Writer({ format: "text/turtle" })
-    stream.on("data", (q) => writer.addQuad(q))
-    stream.on("end", () => writer.end((err, ttl) => err ? reject(err) : resolve(ttl)))
-    stream.on("error", reject)
-})
 
 // Yasqe calls `fetch(new Request(url, opts))` rather than `fetch(url, opts)`,
 // so we normalise both forms into one shape.
@@ -70,29 +54,21 @@ const extractQuery = ({ url, method, headers, body }) => {
     return { query: new URL(url).searchParams.get("query"), accept }
 }
 
-const SPARQL_JSON = "application/sparql-results+json"
-const handleSparql = async (parts) => {
+const handleSparql = async (parts, onProgress) => {
     const { query } = extractQuery(parts)
     if (!query) return new Response("missing query", { status: 400 })
     try {
-        const result = await queryEngine.query(query, { sources: [store] })
-        if (result.resultType === "bindings") {
-            return new Response(JSON.stringify(await bindingsToJson(result)), { status: 200, headers: { "Content-Type": SPARQL_JSON } })
-        }
-        if (result.resultType === "boolean") {
-            return new Response(JSON.stringify({ head: {}, boolean: await result.execute() }), { status: 200, headers: { "Content-Type": SPARQL_JSON } })
-        }
-        if (result.resultType === "quads") {
-            const ttl = await collectQuadsAsTurtle(await result.execute())
-            return new Response(ttl, { status: 200, headers: { "Content-Type": "text/turtle" } })
-        }
-        return new Response("", { status: 200 })
-    } catch (e) {
-        return new Response(String(e?.message || e), { status: 400 })
+        const { body, contentType } = await queryRequest(query, onProgress)
+        return new Response(body, { status: 200, headers: { "Content-Type": contentType } })
+    } catch (error) {
+        return new Response(error.message || String(error), { status: 400 })
+    } finally {
+        onProgress("")
     }
 }
 
 let intercepted = false
+let reportProgress = () => {}
 const installInterceptor = () => {
     if (intercepted) return
     intercepted = true
@@ -100,7 +76,7 @@ const installInterceptor = () => {
     window.fetch = async (input, init) => {
         const url = input instanceof Request ? input.url : (typeof input === "string" ? input : input?.url)
         if (!url?.startsWith(ENDPOINT)) return orig(input, init)
-        return handleSparql(await requestParts(input, init))
+        return handleSparql(await requestParts(input, init), status => reportProgress(status))
     }
 }
 
@@ -129,6 +105,27 @@ export default function Query() {
     const yasguiRef = useRef(null)
     const [visualOpen, setVisualOpen] = useState(false)
     const [visualExample, setVisualExample] = useState(null)
+    const [visualConfig, setVisualConfig] = useState(null)
+    const [status, setStatus] = useState("")
+    const [visualError, setVisualError] = useState("")
+    useEffect(() => {
+        reportProgress = setStatus
+        return () => { reportProgress = () => {} }
+    }, [])
+    useEffect(() => {
+        if (!visualOpen || visualConfig) return
+        let cancelled = false
+        setVisualError("")
+        queryRequest(null, status => { if (!cancelled) setStatus(status) }).then(hints => {
+            if (!cancelled) {
+                setVisualConfig(buildSparnaturalConfig(federationTtl, "", hints))
+                setStatus("")
+            }
+        }).catch(error => {
+            if (!cancelled) { setVisualError(error.message); setStatus("") }
+        })
+        return () => { cancelled = true; setStatus("") }
+    }, [visualOpen, visualConfig])
 
     const setEditorQuery = useCallback((query, run = false) => {
         const tab = yasguiRef.current?.getTab()
@@ -210,7 +207,7 @@ export default function Query() {
                         )}
                     </select>
                 )}
-                {SPARNATURAL_CONFIG && (
+                {HAS_VISUAL_BUILDER && (
                     <button className="query-visual-toggle" type="button"
                         aria-expanded={visualOpen} title="Powered by Sparnatural"
                         onClick={() => setVisualOpen((open) => !open)}>
@@ -218,9 +215,11 @@ export default function Query() {
                     </button>
                 )}
             </div>
+            {status && <p role="status" style={{ margin: "0.25rem 0", fontSize: 13 }}>{status}</p>}
+            {visualOpen && visualError && <p>{visualError}</p>}
             <SparnaturalBuilder
-                open={visualOpen}
-                config={SPARNATURAL_CONFIG}
+                open={visualOpen && Boolean(visualConfig)}
+                config={visualConfig}
                 endpoint={ENDPOINT}
                 onQuery={setEditorQuery}
                 onSubmit={runEditorQuery}

@@ -237,6 +237,10 @@ Omit the setting or use `false` to load the full RDF files; the next federation
 run removes the generated chunks. Snapshots without a compatible index also
 use the full RDF files.
 
+Query opens without loading the directory. Its first query or visual-builder
+use loads the complete graph into a worker, which parses and queries it without
+blocking the page. Subsequent queries reuse that store.
+
 From an instance directory:
 
 ```sh

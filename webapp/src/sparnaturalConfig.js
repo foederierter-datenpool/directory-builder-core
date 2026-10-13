@@ -63,7 +63,7 @@ const uniqueVariable = (base, usedVariables) => {
     return variable
 }
 
-const datatypeByPredicate = (finalQuads) => {
+export const datatypeByPredicate = (finalQuads) => {
     const datatypes = new Map()
     for (const quad of finalQuads) {
         if (quad.object.termType !== "Literal") continue
@@ -108,13 +108,12 @@ const buildProperty = ({ id, predicate, label, order, rangeClass, datatype, labe
 ${valueShape}${labelRole ? " ;\n    dash:propertyRole dash:LabelRole" : ""} .`
 }
 
-export function buildSparnaturalConfig(federationTtl, finalTtl = "") {
+export function buildSparnaturalConfig(federationTtl, finalTtl = "", datatypeHints) {
     if (!federationTtl) return ""
     const quads = parseTtl(federationTtl)
-    const finalQuads = parseTtl(finalTtl)
     const schemas = valuesOf(quads, `${CDP}federation`, `${CDP}hasTargetSchema`)
     const ranges = relationshipRanges(quads)
-    const datatypes = datatypeByPredicate(finalQuads)
+    const datatypes = datatypeHints ? new Map(Object.entries(datatypeHints)) : datatypeByPredicate(parseTtl(finalTtl))
     const schemaLabels = new Map(schemas.map((schema) => {
         const targetClass = firstValue(quads, schema, `${CDP}targetClass`) ?? schema
         return [schema, labelOf(quads, schema, targetClass)]
